@@ -1,0 +1,378 @@
+BO049	okay
+BO051	cia:o,
+BO049	cia:o
+BO051	daniele
+BO049	ciao
+BO051	e:: come stai?
+BO049	bene, grazie
+BO049	((ride))
+BO049	bene
+BO049	allora,
+BO051	per prima cosa:: ti vorrei chiedere intanto cosa fai nella vita
+BO051	va bene,
+BO051	e:::
+BO051	sono::
+BO051	u:::n incomincerò a fare il ricercatore: (.) universitario,
+BO049	tra un me:se
+BO051	o[kay]
+BO049	[e::] suono la chitarra.
+BO049	e suoni la chitarra.
+BO051	e precedentemente che studi hai fatto?
+BO051	e::hm ho studiato:
+BO049	((ride)) mi imbarazzo
+BO051	((ride))
+BO049	((ride))
+BO051	perché?
+BO051	no
+BO051	ho studiato:::
+BO049	ho studiato:: (.) l~ lettere::, (.) il programma triennale all'universitá di bologna
+BO051	okay
+BO051	e::: e: dopo di che sempre nella stessa università:
+BO049	e:::hm:::, sono passato alla facoltá di lingue e letterature moderne
+BO051	mh
+BO051	e:::
+BO049	mi [sono occupato di letter]ature comparate
+BO049	[io non lo sapevo questo]
+BO049	bene
+BO049	e:: quindi: in questo momento sei un attimo in pausa,
+BO049	stai lavora:ndo?
+BO051	prima di iniziare: il: dottora:to o [cosa]
+BO049	[ho la]vorato nel corso di questo: ultimo anno,
+BO051	[cercavi]?
+BO051	[e::]:m::
+BO049	ora:: mi sto preparando studiand[o:] a questo: a questo percorso di dottorato.
+BO049	[ah]
+BO049	bene bene.
+BO051	e attualmente dove vivi?
+BO049	attualmente vivo con i miei genitori.
+BO051	[okay]
+BO049	[mia madre è] a @nomepaese
+BO051	okay e il luogo dove non so vivi in un palazzo [in una villa]
+BO049	[sí, abit]iamo al primo piano di un condominio:
+BO051	okay
+BO049	e: in un appartamento di circa: un centinaio metri quadrati
+BO051	mhmh
+BO051	e:::::hm:: due stanze da letto::, (.) un bagno::,
+BO049	una cucina ampia:, (.) e una sala
+BO049	okay quindi tu vivi con tua madre,
+BO051	sei in camera da solo,
+BO049	si si si si. sì. assolutamente.
+BO049	dovrebbe essere morto
+BO051	sei in camera da solo perché sei figlio unico?
+BO049	si, sono figlio unico.
+???	figlio unico.
+BO049	ah, solite interviste?
+BO049	sí, sí.
+BO049	continuano.
+BO049	((ride))
+BO049	e::::hm:
+BO051	hai sempre vissuto in quella casa:? é la casa della tua infanzia oppur[e::? xx]
+BO051	[m:: non esa]ttamente
+BO049	[perché]:: ci siamo trasferiti lí:::
+BO051	[okay]
+BO051	ehm con anche mio padre nel: novantasette.
+BO051	e: prima abitavamo:
+BO049	in una casa piú ampia::, in centro, in aff[itto].
+BO049	[okay]
+BO051	te la ricord[i:] puoi descrivela?
+BO051	[sì]
+BO051	sí sí certo e::hm
+BO051	c'era::::: (.) una::: (.) grande sala:,
+BO051	col pavimento:: di marmo,
+BO051	e::::::: eh mi ricordo questo.
+BO051	la cucina invece era piú piccola
+BO051	e::::hm
+BO051	e:: invece: la zona notte c'era: (.) un piccolo bagno tra:: la mia sta:nza e::
+BO049	e quella dei:: miei genito:ri.
+BO049	okay. bene bene.
+BO049	e come quartiere:: preferisci quello in cui vivi adesso oppure:::
+BO051	non so se ti trovavi meglio in centro peró é troppo piccolo mag[a:ri]
+BO051	[beh] forse ero troppo piccolo per apprezzarlo peró:: (.) quel quartiere:::,
+BO051	il quartiere dove vi~ dove ho vissuto per la maggior parte della mia vita cioé quello dove vivo tutt'ora::,
+BO049	é::: un quartiere residenziale quindi:: devo spostarmi
+BO051	ok[ay]
+BO049	praticamente non: non copro nessuna distanza a piedi.
+BO051	mh, okay quind[i:::]
+BO049	[tranne] quando voglio uscire per be:re. ((ride))
+BO049	okay allora ti conviene, andare a piedi in ogni ca:so
+BO051	quindi ti piacerebbe spostarti non vorresti rimanere in quel quartiere:?
+BO051	e:::hm sí:. (.) sto pianificando di::: andare a convivere.
+BO049	[quindi:: di] certo:::: mi piacerebbe::: e::h spostarmi in centro di nuovo, perché mi piacciono le case storiche.
+BO049	[ah okay, perfetto].
+BO051	okay ti piaccione le case [sto]riche: vorresti spostarti in centro cosa:: perché cosa ti offre il centro? cosa: cos'é che ti piace?
+BO051	[sí]
+BO049	sim~ solamente la praticitá di spostarmi:: a piedi:: e::hm senza dover per forza prender la macchina
+BO051	bene:: con chi andresti a convivere?
+BO049	co::n la mia morosa.
+BO051	giustamente. ma:: avete giá iniziato a guardare ca::s[e, sta]te [facendo]:
+BO051	[sí].
+BO049	[sí, sí].
+BO049	be:ne.
+BO049	((ride))
+BO051	e::: che quindi vi piacerebbe una ca:sa::: di che tipo grande: piccolo appartament[o: vorreste essere solo voi o::]?
+BO049	[no:: no:: l'im~ l'importante] é che sia piccola:: ma che:: abbia: quel minimo di spazio:: vitale:: per poter rimanere:: anche:::: [da so]:li in ca:sa:: contemporaneamente.
+BO049	[da s~] ((ride))
+BO049	be:ne, bene, bene.
+BO049	e come:: e come: la voresti:: arreda:re?
+BO051	hai uno stile particolare oppu[re:]?
+BO049	[no:] mi piacciono molto le luci.
+BO051	((ride))
+BO049	e::::h l'importante é che le luci siano calde [poi]::: non sono un grande amante dell'arredamento quindi:: mi: mi interessa piú che altro che la luce sia accogliente
+BO049	[okay]
+BO049	okay perfetto
+BO049	e nella casa in cui abiti adesso invece?
+BO051	c'è una stanza che preferisci rispetto alle altre o, in cui passi piú te:[mpo]?
+BO049	[la mi]a?
+BO051	la tua: giustament[e]
+BO049	[s]í.
+BO049	sí. bene, bene.
+BO051	ci passi molto tempo da so:lo::, st[u:di, cosa fai]?
+BO049	[beh s~ no]: é dove: é dove leggo e guardo:: serie televisive.
+BO049	okay.
+BO051	per studiare invece ti rechi magari in biblioteca.
+BO049	magari sí.
+BO051	magari sí.
+BO049	((ride))
+BO051	che é grosso m~
+BO049	sí: mi piace separare il luogo del lavoro: dal luogo del ripo:so.
+BO049	ci sta.
+BO051	e:::hm e la biblioteca:, dove va:i, (.) com'é?
+BO051	beh e:::h non si puó dire che sia ben fornita.
+BO049	e::h tranne che di:: amici, [e:::]
+BO051	[é] giá qualcosa.
+BO049	e:: che abbia un ambiente molto confortevole.
+BO051	m:h
+BO051	quindi:: é quello che serve poi i libri me li posso procurare altrove.
+BO049	tranquillamente, questo é solo il luogo di lavoro.
+BO049	va bene, va bene.
+BO051	e::hm: ti sei mai trasferito:: a vivere: in uno studenta:to, o magari in un appartamento da so:lo, [per~]
+BO051	[sí]
+BO049	sia in studentato:, sia:::: sia in appartamento.
+BO051	hai vissuto a bologna [maga]ri?
+BO051	[sí].
+BO049	[sí].
+BO051	[ah] puoi descrivermi questa tua esperienza:: [di vita] a bologna::
+BO051	[sí].
+BO051	sí, beh la~ la mia:: m vita a bologna é stata semplicemente dettata da necessitá di:: essenzialmente di lim~ di limitare: gli spostamenti e:: e non é stata:: continua.
+BO049	quindi:::: e::h capitava che:: rientrassi anche:: di frequente che essenzialmente lo utilizzassi solo come pied à terre [pe::r] per per limitare: per ridurre gli spostamenti in tr[eno, essenzialmente].
+BO049	[ah].
+BO051	[sí quindi:] durante la settimana nei periodi di lezione principal[mente, quindi penso],
+BO051	[sí, sí. sí. sí]. sí. sí.
+BO049	poi avendo anche altri impegni la se:ra:: qui suonando:: e::h spesso ero costretto anche a d~ a dover (.) a dover interrompere:: la continuitá dei miei periodi a bologna, insomma per, [per altri]: per altri impegni.
+BO051	[mh].
+BO049	invece in studentato:::, no. é stato un periodo continuativo, [di un anno],
+BO051	[perché] sei andato in erasmus, cosa hai fatto?
+BO051	perché sono stato in erasmus,
+BO049	e:::h nell'anno:: e:h nel duemila: e undici:, a cavalo tra il duemila e undici e il duemila e [dodici],
+BO051	[okay]
+BO049	e:::: lí sí, ero in studentato e:: di sicuro quello che mi é piaciuto:: di piú dell'esperienza in studentato era il fatto di avere: uno spazio solo per me, cioé la stanza
+BO051	okay
+BO049	e:: po:i in realtá di poter usufruire di: momenti di vita comune:: costantemente e a piacimento, quindi::.
+BO051	perfetto. e:: quest'erasmus dove l'hai fatto?
+BO049	a parigi.
+BO051	a par[igi].
+BO049	[a:]::: parigi quattro, la sorbona.
+BO049	ah okay.
+BO051	e sei stato via quanto te:mpo?
+BO051	sono stato via::: quasi un anno.
+BO049	quasi un anno perché sono partito a settembre del duemila e undici (.) e sono torna:to, a luglio inoltrato del duemila::: e dodici.
+BO049	okay.
+BO051	e co::me, come é stata questa esperienza? ti é piaciuta:::ln é un an[no cosí],
+BO049	[meraviglioso]
+BO051	[la cons]iglieresti:?
+BO051	assolutamente sí, assolutamente sí.
+BO049	un'esperienza::: meravigliosa sotto tutti i punti di vi[sta].
+BO051	[s]í.
+BO049	direi, sí.
+BO051	ti ha:: c'é q~ c'é q~ u::n qualche episodio in particolare: m: magari:: divertente: che puoi raccontare o::
+BO049	beh [e::]
+BO051	[a]nche qualcosa di imbarazzante va bene.
+BO051	((ride))
+BO051	e::: ma no: diciamo che:::
+BO051	diciamo che:: l~ l~ quello che ha premia:to di quell'esperienza é stato:: in realtá:
+BO051	e::h la grande libertá: che si gode e::h la totale indipendenza che si gode d~ m: da molto giovani, quindi so' stato::, in realtá tutto una grande sorpresa, una grande:: e::h novitá.
+BO049	la grande conquista é stato:: é stata: essenzialmente riuscire a fare una vita::: quotidiana: appagant[e::] senza:: il sostegno di nessuno.
+BO049	[sí].
+BO051	mh. e:: in casa come:: come sei di solito anche come com'eri, in erasmus? sei ordinato, pulisci, cucini, oppure,
+BO049	piú che pulire riordino.
+BO051	riordini.
+BO049	((ride))
+BO051	il disordine che tu hai creato.
+BO051	sí, sí, sí, e::h peró::::
+BO051	come dire::,
+BO051	m:::::::
+BO049	ehm sono molto solitario in casa,
+BO051	oka[y]
+BO051	[non] mi piace avere contatto con le altre persone.
+BO049	in caso preferisco stare:::: per i conti mie~ evito il piú possibile il contatto co::n con gli altri, in particolare con mia madre, ab~ abitando insieme, preferisco:: vivere il mio, la mia vita sociale f~ fuori.
+BO051	beh e invece vivendo a bologna: o a parigi, avevi dei coinquilini con cui passavi del tempo? oppure:::,
+BO049	sí, peró anche lí:: ho mantenuto lo stesso regime direi.
+BO051	sí?
+BO049	sí, grosso modo [sí].
+BO051	[lu]po solitario.
+BO049	sí in casa sí, in casa sí.
+BO049	bene.
+BO049	e::::hm::: vediamo:.
+BO049	puoi parlarmi un po'::: del dei posti che frequenti nella tua cittá::?
+BO051	qual~ magari di sera o:: non so, se c'é qualcosa di particolare che puó interessar[e::]
+BO049	[i] bar brutti?
+BO051	bar brutti, quello che vuoi.
+BO049	sí soprattutto bar brut[ti].
+BO051	[s]í?
+BO049	no beh, in realtá di sera::, soprattutto, andando per concert[i::]
+BO051	[ah].
+BO051	preferisco spostarmi.
+BO051	e:::::h in realtà:: in realtá poi, dopo una giornata:: impegnativa,
+BO051	anche un bar di campagna, qualche amico:, sono piú che sufficenti.
+BO049	diaciamo a meno che non ci siano eventi particolari che che mi spingano: a spostarmi::, va bene cosí.
+BO049	okay
+BO051	e::hm parlami un po' del:: del gruppo in cui suoni, che musica fate, quanto spesso vi vede:te,
+BO049	e::h okay, e:::il gruppo si chiama ((nome_gruppo)) e:::: io sono il piú giovane di tutti.
+BO051	sí.
+BO051	sí.
+BO051	ora non piú in realtá perché: abbiamo un nuovo membro, (.) da (.) neanche un paio di prove, e:h che ha un paio di anni in meno prima di me, ma prima che questo succedesse io avevo una buona decina di anni in meno degli altri.
+BO051	e:::::hm::::
+BO051	e niente facciamo:::: facciamo un bel punkaccio:: teso,
+BO051	e:::::: molto corposo
+BO051	e cosa dire?
+BO049	[m::::]
+BO051	[vi] trovate spesso per suona:re? per e::
+BO049	almeno una [volta a settimana].
+BO051	[volta alla. almeno una vol]ta, e dove vi vedete?
+BO051	mah, soprattutto in sala prove.
+BO051	poi in realtá: avendo anche::
+BO051	e:h avendo morose che sono: amiche tra di loro::
+BO049	capita: capita a volte non di vedersi non per non per uscite di coppia, diciamo che l'ambiente fe:sta cosí:: insomma capita che ci vediamo in questi contesti.
+BO049	bene.
+BO051	e la sala in cui fate le prove dove si trova?
+BO051	m.
+BO051	é un:n casolare, in campagna, e::h fuori @nomepaese, quindi nella campagna:: corregese.
+BO049	[e::]
+BO051	[ma é] in una stanza piccola? é in uno studio di piú sale::?
+BO051	no é una grande sala prova.
+BO051	é una grande sala prove in cui siamo: (.) in realtá in: quattro cinque gruppi e:
+BO051	é abbastanza grande per tenere tutte le batterie montate contemporaneamente quindi::
+BO049	ogni gruppo ha il proprio:: angolo diciamo é un salone::: abbastanza grande con delle colonne:: di pietra:: proprio é un na na una vecchia un vecchio granaio di campagna.
+BO051	bene. quindi non ci sono vicini che si lamenta[no:] del rumore.
+BO051	[no].
+BO049	[no:, asso]lutamente.
+BO049	[okay].
+BO049	bene.
+BO051	e:: e come vi siete conosciuti col gruppo, com'é che avete deciso di suonare insieme?
+BO051	mah, io sono stato arruolato.
+BO049	[e::::]
+BO051	[quindi] era un gruppo che:: esisteva giá prima.
+BO051	no era un progetto solista,
+BO051	e:::hm
+BO051	per il quale si cercava di formare una band, che accompagnasse: (.) 'sto cantante, con la chitarra acustica,
+BO051	e::: e quindi insomma gravitando un po' nella scena:::
+BO051	gravitando un po' nella scena musicale insomma la voce::: circola e quando quando si sa che qualcuno ha bisogno, insomma é facile proporsi o essere contattati per e::: per partecipare a un progetto nuovo.
+BO049	essenzialmente c~ ci sono giá quei legami di fiducia preesistenti. e quindi:: insomma si si se ci si trova: bene si conmincia a lavorare insieme con continuitá.
+BO051	quindi sei contento di questo progetto::
+BO051	a faccia ru cazz'
+BO049	((ride))
+BO049	perfetto
+BO051	hai suonato anche in altri gruppi oppure::
+BO049	sí. sí sí ho avuto un gruppo:: ho avuto un: gruppo prima, con cui ho suonato in realtá per la maggiorparte del della mia, aperte virgolette, carriera,
+BO051	ok[ay]
+BO051	[chi]use mh virgolette, ((ride))
+BO049	e::hm come, come musicista (.) e: peró si dop~ dopo quello: ho avuto ruoli, insomma, minori in altre, in altre band ecco. diciamo, vedi questa.
+BO051	e quindi questo: >cioè< la musica ti porta via:: gran parte del tuo tempo immagino:
+BO049	non é che me lo porta via. me lo porta:: in casa, é [tempo] mio. sì. sì.
+BO049	[si].
+BO051	[okay].
+BO049	[beh sì] si prende una bella fetta di tempo.
+BO051	bene bene. però: (.) è una cosa bella insomma.
+BO049	sì certo.
+BO051	e::hm (.) quindi hai una morosa con cui hai vuoi andare a vivere.
+BO049	sì.
+BO049	giusto?
+BO051	lei cosa fa?
+BO051	lei::: si occupa di:: didattica dell'arte,
+BO049	>essenzialmente< laboratori didattici::: (.) mh ai musei:: (.) ai musei civici di modena.
+BO051	ok[ay].
+BO049	[e:]:: nei pomeriggi: si occupa di di::: bambini ragazzi con con disturbi dell'apprendimento.
+BO049	okay.
+BO051	vi siete conosciuti:: tramite amici::, co[me:: >vi siete<, tra]mite amici?
+BO051	[sì tramite amici].
+BO049	tramite amici, sì.
+BO051	giuro che non lo sapevo ((ride))
+BO049	sì sì tramite amic[i].
+BO051	[è] da tanto che state insiem[e:::]
+BO049	[è] un annetto.
+BO051	è un annet[to].
+BO049	[è un] annetto
+BO051	e come ti trovi? sei contento?
+BO049	ah molto.
+BO051	((ride))
+BO049	sì molto molto mol[to]. (.) con alti e bassi chiaramente [come] tutte le relazioni. peró:: molto bene.
+BO049	[bene].
+BO049	[eh sì].
+BO051	e siete stati in ferie per caso [quest'estate], (.) vuoi raccontarmi un po' delle tue vacanze [allora]? ((ride)) grazie. ((ride))
+BO051	[sì::::::].
+BO051	[sì certo].
+BO051	e:: quest'anno sono stato in cambogia.
+BO049	e=il sud del vietnam. e:: (.) è stato un esperienza molto lunga perché ha preso quasi un mese. [s]i parla di tre settimane e=mmezzo circa.
+BO051	[eh].
+BO049	e:: è successo che::::: abbiamo attraversato un po':: (.) tutto il paese. >per questo< per quello che riguarda la cambogia, poi
+BO051	okay.
+BO051	gli ultimi giorni abbiamo sconfinato e e (.) abbiamo (.) visitato::, grosso modo tutto il vietnam del sud.
+BO049	che però ci è piaciuto men[o::] della [cambogia]. sì.
+BO051	[ah], meno. [come mai]?
+BO049	mah, direi:::, forse anche la stanchezza [dopo]: dopo tanto tempo in viaggio.
+BO051	[ah].
+BO049	e anche perché::: (.) diciamo che le persone:: (.) i:n vietnam hanno:: non so questa: quest'atteggiamento un po'::: aggressivo. [nei confronti degli altri].
+BO051	[in che senso aggressivo]?
+BO051	mah m sono persone:: molto:::: (.) molto orgogliose,
+BO051	e:::::::: che tendono:: a imporsi sugli altri. quindi::: diciamo che:: sì, dal punto di vista umano dell'accoglienza:: è stato: meno gradevole che: in cambogia però diciamo un paese bellissimo. ugualmente.
+BO049	più più difficile perché si sente meno l~ forse l'appoggio del della della popolazione locale. ecco che: che un po' insomma (.) ha un certo tono di:: alterigia no? nei confronti dei dei turisti sì sì. Sono un po' alteri ecco.
+BO051	e per quanto ri[guarda il cibo]? cosa::
+BO051	[altezzosi].
+BO049	mah a me la cucina cambogiana: è piaciuta molto.
+BO051	cosa si mangia?
+BO051	è::: (.) beh, è una cucina diversa dalle altre cucine del sudest asiatico perché e:::=m:
+BO049	e::: non ha una base di di (.) di verdura così forte come: altrove. è una cucina d~ e:=essenzialmente di di terra, quindi s~ c'è tanto maiale,
+BO051	si?
+BO051	ad esempio.
+BO049	e:::: molto gustosa: e:=m:::: insomma >è un p~ è< è grassa. un po' come le cucine: [un po'] come le cucine del nord italia cui sono:: affezionato ecco. quindi non c'è stato un grande:: shock e:: culturale. [diciamo dai. da quel] punto di vista.
+BO049	[okay].
+BO049	[va bene]
+BO051	niente insetti o cose strane?
+BO049	mah sì. io in realtà avevo l'ossessione di queste zanzarine:: (.) che trasmettono:: che possono trasmettere:: malattie anche gravi.
+BO051	ah.
+BO049	[e:::::]
+BO051	[ma] avete dovuto far dei vaccini::
+BO051	sì. sì sì sì sì sì. sì abbiamo fatto quello per l'epatite a, (.) e:: poi
+BO049	e poi un trivalente, (.) però non ricordo::: (.) non ricordo per cosa. difterite tef~ tetano, e poi:: non ricordo la terza.
+BO051	ma boia:. ah bene bene però almeno:: eravate sicuri. ((ride))
+BO049	[sì però la cosa divertente] è che le malattie veramente gravi non sono coperte d[a::] (.) dalla copertura vaccinale. quindi:
+BO049	[(ah quelle importanti)]
+BO051	beh siete tornati sani e salvi: è già qual[cosa]. ((ride))
+BO049	[sì sì] sì sì non ci è successo [niente].
+BO051	[come mai avete deciso] questo:: di fare questo viaggio? (.) era::,
+BO051	no m (.) venivamo tutti da un perio~ tutti e due da un periodo impegnativo,
+BO051	e:::::m sapevamo che avremmo avuto:: molto tempo: a disposizione
+BO051	e un paio di soldini da parte. perché avendo lavorato quest'anno poi lei questi problemi non ce li ha.
+BO049	[chiaramente] perché (.) lavorando molto possiamo (.) >quindi< avevamo tempo:: (.) avevamo un po' di denaro da parte=e: abbiamo deciso di (.) premiarci: per l'anno passato e: e viverla in questa maniera.
+BO049	[okay]
+BO051	bene. siete soddifatti:: [della va~ (.) sì]?
+BO049	[moltissimo]. andrei via subito di nuovo.
+BO051	avete progettato altre:: vacanze: [da fare? (.) sì]?
+BO049	[sì. sì sì]. ma ne abbiam progettate giá altre nel passato adesso, c'è nel passato ne:: (.) nei mesi precedenti e: (.) e fra due settimane: andiamo a Budapest.
+BO051	ecco. (.) [] bravi. e come mai budapest?
+BO051	[(così)].
+BO049	mah perche io rompevo: la palle.
+BO051	io son stata è molto bello.
+BO049	eh infa~ io [rompevo le] (.) rompevo le palle per andarci, e::: (.) e lei come regalo di compleanno m'(ha regalato: (.) i biglietti.
+BO049	[bella bella].
+BO051	eh ma che bello
+BO051	sì sì.
+BO049	[>per me e per lei<]sì].
+BO049	[bello].
+BO051	be[ne]. dai
+BO049	[sì].
+BO051	dai io direi:: (.) siamo a posto così. non ti disturbo=oltre,
+BO049	okay.
+BO049	ti ringrazio,
+BO051	buona giorna[ta].
+BO051	[buo]na giornata.
