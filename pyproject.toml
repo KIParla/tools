@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kiparla-tools-scripts"
+version = "0.1.0"
+description = "Standalone utility scripts and tests for KIParla data transformations."
+requires-python = ">=3.9"
+dependencies = [
+    "pandas",
+    "pympi-ling",
+    "pyyaml",
+    "regex",
+    "num2words",
+    "speach",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8",
+]
+
+[tool.setuptools]
+py-modules = ["eaf2csv", "make_patch", "merge_metadata", "tsv2eaf", "tsv2formats"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = "-q"
