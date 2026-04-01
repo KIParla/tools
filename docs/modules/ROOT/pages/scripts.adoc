@@ -1,0 +1,213 @@
+= Scripts
+
+This page documents the standalone scripts currently maintained in the `tools` repository.
+
+[[eaf2csv]]
+== `eaf2csv.py`
+
+Converts ELAN `.eaf` files into tab-separated transcript CSV files.
+
+Typical use cases:
+
+* export time-aligned annotations into a simpler tabular format
+* remap annotation IDs used by per-file YAML overlap exceptions
+
+Key behaviors:
+
+* rows are sorted by start time
+* `id:N ` prefixes in annotation text are stripped from the exported `text`
+* `ignore` pairs in YAML annotations are remapped to the new sequential `tu_id`
+
+Example:
+
+[source,bash]
+----
+python eaf2csv.py \
+  --input-dir data/eaf \
+  --annotations-dir data/annotations \
+  -o data/csv
+----
+
+You can also convert explicit files:
+
+[source,bash]
+----
+python eaf2csv.py \
+  --input-files data/eaf/CONV001.eaf data/eaf/CONV002.eaf \
+  -o data/csv
+----
+
+Output columns:
+
+* `tu_id`
+* `speaker`
+* `start`
+* `end`
+* `duration`
+* `text`
+
+== `tsv2eaf.py`
+
+Rebuilds `.eaf` files from corpus `.vert.tsv` exports.
+
+Key behaviors:
+
+* reads `Begin=` and `End=` values from the `align` column
+* reconstructs Jefferson-style TU text by joining token spans and prosodic links
+* exits with an error if a transcription unit is missing `Begin=` or `End=`
+
+Process a single file:
+
+[source,bash]
+----
+python tsv2eaf.py -i tsv/BOA1007.vert.tsv -o eaf/
+----
+
+Process a whole directory:
+
+[source,bash]
+----
+python tsv2eaf.py -i tsv/ -o eaf/
+----
+
+Output goes to `eaf/` by default.
+One `.eaf` is written per input file, named after the file stem (e.g. `BOA1007.eaf`).
+
+This script is also invoked automatically by the `regenerate-derived` workflow
+whenever TSV files are pushed to `dev`.
+See xref:workflows.adoc#auto-regen[Automatic regeneration on TSV push].
+
+== `tsv2formats.py`
+
+Generates two linear text outputs from `.vert.tsv` files:
+
+* Jefferson-style linear transcription
+* orthographic linear transcription
+
+These outputs are used in downstream publication and maintenance workflows.
+
+Example for a whole folder:
+
+[source,bash]
+----
+python tsv2formats.py \
+  --input tsv \
+  --out_jefferson linear-jefferson \
+  --out_orthographic linear-orthographic
+----
+
+Example for a single file:
+
+[source,bash]
+----
+python tsv2formats.py --input tsv/CONV001.vert.tsv
+----
+
+Output shape:
+
+* one `.txt` file per input `.vert.tsv`
+* one transcription unit per line
+* two columns per line: speaker code and linearized transcription
+
+Important details:
+
+* the Jefferson output keeps Jefferson spans, pauses, and error token punctuation
+* the orthographic output strips non-alphabetic material from `error` tokens
+* `unknown` tokens are rendered as repeated `x` characters in the orthographic output
+
+This script is also invoked automatically by the `regenerate-derived` workflow
+whenever TSV files are pushed to `dev`.
+See xref:workflows.adoc#auto-regen[Automatic regeneration on TSV push].
+
+== `merge_metadata.py`
+
+Merges participant and conversation metadata from module repositories into the collection-level metadata tables.
+
+Key behaviors:
+
+* normalizes columns before merging
+* fills missing target columns with empty values
+* deduplicates by `code`, keeping the first occurrence
+
+Example:
+
+[source,bash]
+----
+python merge_metadata.py \
+  --modules ../KIP ../KIPasti ../ParlaBO ../ParlaTO \
+  --output-dir ../KIParla-collection/metadata
+----
+
+Expected module layout:
+
+* each module path must contain `metadata/participants.tsv`
+* each module path must contain `metadata/conversations.tsv`
+
+Normalization currently handled by the script:
+
+* in `KIP`, `school-region` is renamed to `birth-region`
+* extra columns are dropped
+* missing target columns are added as empty strings
+
+== `make_patch.py`
+
+Generates a unified diff `.patch` file from a lemmatization CSV, capturing transcription-level corrections to be applied back to a corpus `.vert.tsv`.
+
+Typical use case: during lemmatization work, errors in the original transcription are spotted (wrong form, wrong Jefferson notation, wrong tokenisation).
+This script extracts those corrections from the CSV and produces a patch that can be applied with `git apply` on the corpus module's `dev` branch.
+
+What is patched:
+
+* `span`, `form`, `jefferson_feats` — values are stripped of leading/trailing whitespace before comparison
+* Token deletions — TSV tokens absent from the CSV are removed (e.g. the second half of a merged token); `Begin=`/`End=` alignment is transferred automatically to the neighboring token
+
+What is not patched:
+
+* `lemma`, `upos` — annotation-only, not in source TSV
+* `align`, `prolongations`, `pace`, `guesses`, `overlaps` — TSV-only columns; preserved from the original except for the automatic alignment transfer
+* Sub-token rows (token_id ending in a letter, e.g. `4-7a`)
+
+Example:
+
+[source,bash]
+----
+python make_patch.py \
+  ../lemmatization-project/wip/KIP/BOA1007.csv \
+  ../KIP/tsv/BOA1007.vert.tsv
+----
+
+Output:
+
+[source]
+----
+Patch written: ../lemmatization-project/patches/KIP/BOA1007.vert.tsv.patch  (+6 / -9 lines)
+Recap written: ../lemmatization-project/patches/KIP/BOA1007.vert.tsv.recap.md  (3 items)
+----
+
+The output paths are inferred automatically from the CSV location (`wip/CORPUS/FILE.csv` → `patches/CORPUS/FILE.vert.tsv.patch`).
+A custom output path can be passed as a third argument.
+
+The `.recap.md` file lists every structural change (drops, alignment transfers, columns needing manual attention).
+Check it before applying the patch.
+
+To apply:
+
+[source,bash]
+----
+cd /path/to/KIP
+git checkout dev
+git apply --check ../lemmatization-project/patches/KIP/BOA1007.vert.tsv.patch
+git apply ../lemmatization-project/patches/KIP/BOA1007.vert.tsv.patch
+git add tsv/BOA1007.vert.tsv
+git commit -m "fix: transcription corrections from lemmatization of BOA1007"
+----
+
+See the lemmatization-project documentation for the full workflow, including how to handle recap warnings.
+
+== Design note
+
+These scripts are intentionally lightweight and file-oriented.
+When behavior becomes complex enough to need a richer data model or reusable pipeline code, it lives in a dedicated module instead.
+
+`normalize.py` is the first such module in this repository: it provides the validation and normalization pipeline for transcription unit text.
+See xref:normalize.adoc[Normalization pipeline] for details.

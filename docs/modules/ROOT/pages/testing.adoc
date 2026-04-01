@@ -1,0 +1,44 @@
+= Testing
+
+The `tools` repository includes unit tests for the importable logic in the standalone scripts.
+
+== Setup
+
+From the repository root:
+
+[source,bash]
+----
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e '.[test]'
+----
+
+== Run the full suite
+
+[source,bash]
+----
+python -m pytest
+----
+
+== Run a single test file
+
+[source,bash]
+----
+python -m pytest tests/test_tsv2eaf.py
+----
+
+== Current coverage
+
+The current tests focus on:
+
+* `eaf2csv.convert`
+* `merge_metadata.normalise`
+* `merge_metadata.merge`
+* `tsv2formats.tsv2linear`
+* `tsv2eaf.parse_begin`
+* `tsv2eaf.parse_end`
+* `tsv2eaf.extract_annotations`
+* `normalize.validate_and_normalize` — pipeline infrastructure (rule ordering, config enable/disable, warning accumulation)
+* `normalize` — all individual normalization and validation functions
+
+The tests mostly cover function behavior rather than shell-level CLI integration.

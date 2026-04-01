@@ -1,0 +1,37 @@
+= KIParla tools
+
+The `tools` repository contains standalone utility scripts used to transform and maintain KIParla data outside the main packaged pipelines.
+
+These scripts are intentionally small and operational:
+
+* convert ELAN annotations to tabular formats
+* rebuild derived linear formats from vertical TSV data
+* merge metadata tables across KIParla modules
+* regenerate ELAN files from token-level TSV exports
+
+== Repository scope
+
+This repository is useful when you need task-focused data maintenance scripts rather than the full Python package workflow used elsewhere in KIParla.
+
+The current scripts are:
+
+* `eaf2csv.py`
+* `tsv2eaf.py`
+* `tsv2formats.py`
+* `merge_metadata.py`
+
+See xref:scripts.adoc[Scripts] for command-level details.
+
+== Relationship to the rest of KIParla
+
+The scripts in this repository are used by other KIParla maintenance workflows, including the collection rebuild process documented in xref:portal::collection-automation.adoc[Collection automation].
+
+They complement, rather than replace, the more structured processing code in other repositories.
+
+== Local development
+
+The repository includes a `pytest` suite for the importable script functions.
+
+See xref:testing.adoc[Testing] for setup and execution instructions.
+
+For the role of these scripts in KIParla maintenance and release operations, see xref:workflows.adoc[Workflows].

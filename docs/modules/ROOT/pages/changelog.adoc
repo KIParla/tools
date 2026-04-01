@@ -1,0 +1,11 @@
+= Changelog
+
+This page tracks notable documentation and maintenance changes for the `tools` repository.
+
+== Unreleased
+
+* added an Antora documentation component for `tools`
+* documented the standalone scripts with concrete command examples
+* documented the test workflow
+* added unit tests for the importable script logic
+* refactored `tsv2eaf.py` so it can be imported and tested safely

@@ -1,0 +1,5 @@
+name: tools
+title: KIParla tools
+version: 'dev'
+nav:
+  - modules/ROOT/nav.adoc

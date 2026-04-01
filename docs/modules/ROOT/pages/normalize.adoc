@@ -1,0 +1,201 @@
+= Normalization pipeline (`normalize.py`)
+
+`normalize.py` is a library module (no CLI) that validates and normalizes the annotation text of transcription units before further processing.
+
+It replaces the hardcoded validation logic that previously lived inside `kiparla_tools.TranscriptionUnit.__post_init__`, making rules explicit, independently testable, and easy to extend.
+
+== Architecture
+
+The pipeline is built around a simple registry pattern.
+
+=== `ValidationRule`
+
+Each rule is a `ValidationRule` dataclass with three fields:
+
+[source,python]
+----
+@dataclass
+class ValidationRule:
+    name: str                    # used in warnings/errors output and config
+    function: Callable           # the function that implements the rule
+    enabled_by_default: bool     # whether the rule is active without explicit config
+----
+
+=== Two registries
+
+Rules are organized into two ordered lists:
+
+`WARNING_RULES`::
+  Auto-fix rules. Each function has signature `(str) -> tuple[int, str]`, returning the number of substitutions made and the modified annotation. Rules are applied in order — each one receives the output of the previous.
+
+`ERROR_RULES`::
+  Check-only rules. Each function has signature `(str) -> bool`, returning `True` if the annotation is valid and `False` if a problem is detected. Error rules run after all warning rules, on the final normalized text.
+
+=== `validate_and_normalize`
+
+[source,python]
+----
+validate_and_normalize(
+    annotation: str,
+    config: dict[str, bool] | None = None,
+) -> tuple[str, dict[str, int], dict[str, bool]]
+----
+
+Runs all enabled rules on `annotation` and returns:
+
+* `normalized` — the (possibly modified) annotation string
+* `warnings` — `{rule_name: substitution_count}` for every warning rule that made changes
+* `errors` — `{rule_name: True}` for every error rule that detected a problem
+
+If `config` is `None` or a key is absent, each rule falls back to its `enabled_by_default` value.
+
+== Rule reference
+
+=== Warning rules (applied in order)
+
+[cols="2,4,1",options="header"]
+|===
+|Name |What it fixes |On by default
+
+|`SYMBOL_NOT_ALLOWED`
+|Removes characters outside the Jefferson transcription alphabet
+|yes
+
+|`META_TAG`
+|Converts `((…))` → `{…}` and `(.)` → `{P}`
+|yes
+
+|`UNEVEN_SPACES`
+|Fixes spacing around brackets and punctuation; removes stray spaces inside `°…°` and `<…>` markers; removes spaces around `=` prosodic-link markers
+|yes
+
+|`TRIM_PAUSES`
+|Strips leading and trailing `{P}` pause markers
+|yes
+
+|`TRIM_PROSODICLINKS`
+|Strips leading and trailing `=` prosodic-link markers
+|yes
+
+|`OVERLAP_PROLONGATION`
+|Fixes malformed overlap+prolongation sequences (`word:[: → [word::`)
+|yes
+
+|`MULTIPLE_SPACES`
+|Collapses tabs, newlines, and repeated spaces into a single space
+|yes
+
+|`ACCENTS`
+|Normalizes Italian accent errors: `-chè` → `-ché` family, `pò` → `po'`, `però'` → `però`, `può'` → `può`
+|yes
+
+|`NUMBERS`
+|Converts digit sequences to Italian words (`2` → `due`, `23` → `ventitré`)
+|yes
+
+|`SWITCHES`
+|Moves intonation markers (`. , ?`) before prosodic/interruption symbols (`: - ~`) when they appear in the wrong order; moves NVB tags `{x}` outside bracket spans
+|yes
+|===
+
+=== Error rules (checked after normalization)
+
+[cols="2,4,1",options="header"]
+|===
+|Name |What it checks |On by default
+
+|`UNBALANCED_DOTS`
+|`°` count is even (all low-volume spans are closed)
+|yes
+
+|`UNBALANCED_PACE`
+|`<…>` and `>…<` pace markers are balanced and non-nested
+|yes
+
+|`UNBALANCED_GUESS`
+|`(…)` uncertain-transcription markers are balanced and non-nested
+|yes
+
+|`UNBALANCED_OVERLAP`
+|`[…]` overlap markers are balanced and non-nested
+|yes
+|===
+
+== NVB tags and bracket spans
+
+Non-verbal behaviour tags (`{laugh}`, `{ride}`, `{toss}`, …) must appear _outside_ bracket spans, not inside them.
+The `SWITCHES` warning rule enforces this automatically by relocating any NVB tag found immediately after an opening bracket or immediately before a closing bracket.
+
+**Exception:** `{P}` (short pause) inside overlap brackets `[…]` is left in place.
+A pause that coincides with an overlap is transcriptionally significant and must be preserved.
+
+[source]
+----
+[{P}]        ← valid, no change
+[{laugh}]    ← becomes {laugh} []
+({P})        ← becomes {P} ()   (exception applies only to [ ])
+----
+
+== Accent maps
+
+The substitution tables used by the accent normalization rules are defined as module-level constants:
+
+`ACCENT_CHE_MAP`::
+  Words where `-chè` should become `-ché` (e.g. `perchè` → `perché`, `nè` → `né`).
+  The patterns tolerate Jefferson markers interspersed between letters (e.g. `per[chè` → `per[ché`).
+
+`ACCENT_PERO_MAP`::
+  Words where a trailing apostrophe-accent should become the proper accent (e.g. `però'` → `però`, `può'` → `può`).
+
+Both maps are plain Python dictionaries and can be replaced or extended when xref:normalize.adoc#yaml-config[YAML configuration] is added (planned).
+
+[#yaml-config]
+== Planned: YAML configuration
+
+Rule enable/disable and accent map overrides will be driven by a YAML config file in a future step.
+For now, all rules are controlled via the `config` dict argument to `validate_and_normalize`.
+
+== Adding a new rule
+
+. Write the function in `normalize.py`, following the appropriate signature:
++
+[source,python]
+----
+# Warning rule
+def check_ends_with_symbol(annotation: str) -> tuple[int, str]:
+    ...
+
+# Error rule
+def check_ends_with_symbol(annotation: str) -> bool:
+    ...
+----
+
+. Append a `ValidationRule` entry to the appropriate registry.
+  For warning rules, position in the list matters — place it where it fits logically in the normalization sequence:
++
+[source,python]
+----
+WARNING_RULES.append(
+    ValidationRule("ENDS_WITH_SYMBOL", check_ends_with_symbol, enabled_by_default=False)
+)
+# or for error rules:
+ERROR_RULES.append(
+    ValidationRule("ENDS_WITH_SYMBOL", check_ends_with_symbol, enabled_by_default=False)
+)
+----
+
+. Add tests in `tests/test_normalize.py`, then update this page with a row in the rule reference table.
+
+That is the complete change surface. No other code needs to be modified.
+
+== Tests
+
+The full test suite for this module lives in `tests/test_normalize.py`.
+See xref:testing.adoc[Testing] for setup and how to run tests.
+
+The tests cover:
+
+* pipeline infrastructure (empty registries, config enable/disable, rule ordering, warning count accumulation)
+* each normalization and validation function individually
+* the `{P}`-in-overlap exception for `switch_NVB`
+* the "space moves to the correct side" behaviour of `check_spaces`

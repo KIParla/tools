@@ -1,0 +1,6 @@
+* xref:index.adoc[Home]
+* xref:scripts.adoc[Scripts]
+* xref:normalize.adoc[Normalization pipeline]
+* xref:testing.adoc[Testing]
+* xref:workflows.adoc[Workflows]
+* xref:changelog.adoc[Changelog]

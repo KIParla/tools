@@ -1,0 +1,186 @@
+= Workflows
+
+This page explains where the standalone `tools` scripts fit in the broader KIParla maintenance workflow.
+
+== Why this repository exists
+
+The `tools` repository contains small, file-oriented utilities that are useful in operational workflows:
+
+* converting between ELAN and tabular formats
+* regenerating publication-friendly linear text files
+* rebuilding metadata tables for the collection
+
+These scripts are intentionally simpler than the full processing logic used in packaged repositories.
+
+== Collection rebuild workflow
+
+The main cross-repository use of `tools` is the collection rebuild process.
+
+In the KIParla release workflow:
+
+. one or more module repositories publish a new release
+. the collection repository rebuilds its derived artifacts
+. the `tools` scripts regenerate linear outputs and merge metadata
+
+In practice, the most relevant scripts for this workflow are:
+
+* `tsv2formats.py`
+* `merge_metadata.py`
+
+This is the same collection rebuild process described in xref:portal::collection-automation.adoc[Collection automation].
+
+== Typical maintenance scenarios
+
+=== Export ELAN data to CSV
+
+Use `eaf2csv.py` when you need a simpler tabular representation of annotated ELAN data for inspection or further processing.
+To also normalize and validate the annotation text after export, see <<processing-pipeline>>.
+
+=== Rebuild ELAN from TSV
+
+Use `tsv2eaf.py` when a TSV export still contains TU-level alignment information and you need to reconstruct an `.eaf` file.
+
+=== Regenerate linear publication formats
+
+Use `tsv2formats.py` when `.vert.tsv` files have changed and the corresponding linear Jefferson or orthographic files must be regenerated.
+
+In normal development this happens automatically (see <<auto-regen>> below).
+Run it manually when you need to regenerate files outside of CI, for example to verify the output locally before pushing:
+
+[source,bash]
+----
+python tsv2formats.py -i tsv/ --out_jefferson linear-jefferson/ --out_orthographic linear-orthographic/
+----
+
+=== Rebuild EAF files from TSV
+
+Use `tsv2eaf.py` when `.vert.tsv` files have changed and the corresponding ELAN `.eaf` files must be regenerated.
+
+In normal development this also happens automatically (see <<auto-regen>> below).
+To run manually:
+
+[source,bash]
+----
+python tsv2eaf.py -i tsv/ -o eaf/
+----
+
+=== Rebuild collection metadata
+
+Use `merge_metadata.py` when participant and conversation metadata from module repositories must be consolidated into collection-level tables.
+
+[[auto-regen]]
+== Automatic regeneration on TSV push
+
+Each corpus module (KIP, KIPasti, ParlaBO, ParlaTO) has a GitHub Actions workflow
+(`regenerate-derived.yml`) that automatically keeps the derived files in sync whenever
+TSV files are updated on the `dev` branch.
+
+=== When it runs
+
+The workflow triggers on every push to `dev` that modifies at least one file under `tsv/`.
+Commits that only touch `linear-jefferson/`, `linear-orthographic/`, or `eaf/` do not
+re-trigger it, so there is no feedback loop.
+
+=== What it does
+
+. Checks out the module repository at `dev`.
+. Checks out `KIParla/tools` into a temporary `_tools/` subdirectory.
+. Installs `pympi-ling`.
+. Runs `tsv2formats.py` over the entire `tsv/` directory, writing to `linear-jefferson/`
+  and `linear-orthographic/`.
+. Runs `tsv2eaf.py` over the entire `tsv/` directory, writing to `eaf/`.
+. Commits the regenerated files back to `dev` (only if any file actually changed).
+
+The commit message is always:
+----
+chore: regenerate derived files from updated TSVs
+----
+
+=== Typical use
+
+The normal workflow for correcting a transcription error is:
+
+. Generate a patch from the lemmatization project and apply it to `dev`
+  (see the lemmatization-project documentation for details).
+. Push to `dev` — the workflow runs automatically within a few minutes.
+. The regenerated linear and EAF files appear in the same branch, ready for the next release.
+
+=== If the workflow fails
+
+The most common cause is a TSV missing a `Begin=` or `End=` alignment value for a
+transcription unit. `tsv2eaf.py` exits with an error and prints the offending file and TU
+to the Actions log. Fix the alignment in the TSV, push again, and the workflow will retry.
+
+[[processing-pipeline]]
+== Processing pipeline
+
+The processing pipeline takes raw ELAN files and produces normalized, validated transcription unit text.
+It currently has two steps.
+
+=== Step 1 — EAF to CSV (`eaf2csv.py`)
+
+Convert one or more ELAN files to tabular CSV:
+
+[source,bash]
+----
+python eaf2csv.py \
+  --input-dir data/eaf \
+  --annotations-dir data/annotations \   # optional: YAML overlap exceptions
+  -o data/csv
+----
+
+Each output CSV has one row per transcription unit with columns `tu_id`, `speaker`, `start`, `end`, `duration`, and `text`.
+
+See xref:scripts.adoc#eaf2csv[`eaf2csv.py`] for full options.
+
+=== Step 2 — Normalize (`normalize.py`)
+
+`normalize.py` is a library module.
+It does not have a standalone CLI yet — a `process.py` script that reads CSV output and runs the pipeline is in development.
+
+In the meantime, you can call it directly from Python:
+
+[source,python]
+----
+import csv
+import normalize
+
+with open("data/csv/CONV001.csv", newline="", encoding="utf-8-sig") as f:
+    reader = csv.DictReader(f, delimiter="\t")
+    for row in reader:
+        normalized, warnings, errors = normalize.validate_and_normalize(row["text"])
+        if errors:
+            print(f"TU {row['tu_id']}: errors {list(errors)}")
+        if warnings:
+            print(f"TU {row['tu_id']}: {warnings}")
+        # normalized now contains the cleaned annotation text
+----
+
+`validate_and_normalize` returns three values:
+
+* `normalized` — the cleaned annotation string, ready for tokenization
+* `warnings` — `{rule_name: count}` for every auto-fix that fired
+* `errors` — `{rule_name: True}` for every structural problem found
+
+See xref:normalize.adoc[Normalization pipeline] for the full rule reference and how to add new rules.
+
+=== What comes next
+
+Once `process.py` is available, the full pipeline will be runnable as:
+
+[source,bash]
+----
+python eaf2csv.py --input-dir data/eaf -o data/csv
+python process.py --input-dir data/csv -o data/output --config normalize.yml
+----
+
+== Scope boundary
+
+If a task needs:
+
+* a richer internal data model
+* token-level linguistic processing
+* reusable pipeline code
+* more than lightweight file transformations
+
+it probably belongs in a packaged repository rather than here.
