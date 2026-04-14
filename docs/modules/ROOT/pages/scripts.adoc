@@ -77,6 +77,40 @@ This script is also invoked automatically by the `regenerate-derived` workflow
 whenever TSV files are pushed to `dev`.
 See xref:workflows.adoc#auto-regen[Automatic regeneration on TSV push].
 
+== `linear2html.py`
+
+Generates publication HTML pages and transcript PDFs from linearized transcript files.
+
+Typical use case:
+
+* write directly into the `KIParla-artifacts` repository layout
+* keep shared `css/` and `js/` at repo root
+* write per-module HTML pages to `MODULE/html/`
+* write per-module PDFs to `MODULE/pdf/`
+
+Example for `KIParla-artifacts`:
+
+[source,bash]
+----
+python linear2html.py \
+  --orthographic ../ParlaTO/linear-orthographic/PTA005.txt \
+  --jefferson ../ParlaTO/linear-jefferson/PTA005.txt \
+  --tsv ../ParlaTO/tsv/PTA005.vert.tsv \
+  --conversations ../ParlaTO/metadata/conversations.tsv \
+  --participants ../ParlaTO/metadata/participants.tsv \
+  --artifacts-root ../KIParla-artifacts \
+  --module ParlaTO
+----
+
+This writes:
+
+* `../KIParla-artifacts/ParlaTO/html/PTA005.html`
+* `../KIParla-artifacts/ParlaTO/pdf/PTA005-orthographic.pdf`
+* `../KIParla-artifacts/ParlaTO/pdf/PTA005-jefferson.pdf`
+* shared assets under `../KIParla-artifacts/css/` and `../KIParla-artifacts/js/`
+
+You can still pass `--output` explicitly if you want a custom HTML destination.
+
 == `tsv2formats.py`
 
 Generates two linear text outputs from `.vert.tsv` files:
@@ -159,13 +193,19 @@ This script extracts those corrections from the CSV and produces a patch that ca
 What is patched:
 
 * `span`, `form`, `jefferson_feats` — values are stripped of leading/trailing whitespace before comparison
+* missing `speaker` / `tu_id` values are auto-filled when they can be inferred safely from CSV or neighboring tokens
 * Token deletions — TSV tokens absent from the CSV are removed (e.g. the second half of a merged token); `Begin=`/`End=` alignment is transferred automatically to the neighboring token
+* The recap is printed in row order and marks each change as `aggiunta`, `modifica`, or `eliminazione`
 
 What is not patched:
 
 * `lemma`, `upos` — annotation-only, not in source TSV
 * `align`, `prolongations`, `pace`, `guesses`, `overlaps` — TSV-only columns; preserved from the original except for the automatic alignment transfer
-* Sub-token rows (token_id ending in a letter, e.g. `4-7a`)
+* Annotation sub-token rows (numeric token id plus a letter suffix, e.g. `4-7a`)
+
+Validation:
+
+* every token must have non-empty `span` and `form` values in both CSV and TSV
 
 Example:
 
@@ -174,6 +214,22 @@ Example:
 python make_patch.py \
   ../lemmatization-project/wip/KIP/BOA1007.csv \
   ../KIP/tsv/BOA1007.vert.tsv
+----
+
+Batch mode on a whole `wip` subfolder:
+
+[source,bash]
+----
+python make_patch.py --batch ../lemmatization-project/wip/KIP
+----
+
+This scans all `*.csv` files in the folder and looks for the matching TSV in
+`../KIP/tsv/<FILE>.vert.tsv`.
+If the corpus repositories live elsewhere, pass the source root explicitly:
+
+[source,bash]
+----
+python make_patch.py --batch ../lemmatization-project/wip/KIP /path/to/corpora-root
 ----
 
 Output:
