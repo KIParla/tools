@@ -12,7 +12,10 @@ Each module directory must contain a metadata/ subdirectory with
 participants.tsv and conversations.tsv.
 
 Column normalisation applied before merging:
-  - participants: KIP uses 'school-region' → renamed to 'birth-region'
+  - participants: modules without 'birth-region' fall back to 'school-region'.
+  - colon-qualified values are stripped to top level: 'type' (e.g.
+    'free-conversation:meal' → 'free-conversation') and 'birth-region' (e.g.
+    'trentino-alto-adige:alto-adige' → 'trentino-alto-adige').
   - Missing target columns are filled with an empty string.
   - Extra columns not in the target set are dropped.
   - Duplicate codes (same speaker/conversation across modules) are deduplicated,
@@ -51,11 +54,7 @@ CONVERSATIONS_COLS = [
 
 # Per-module column renames applied before selecting target columns.
 # Keys are module directory basenames (case-insensitive).
-COLUMN_RENAMES = {
-    "kip": {
-        "school-region": "birth-region",
-    },
-}
+COLUMN_RENAMES: dict[str, dict[str, str]] = {}
 
 
 def load_tsv(path: str) -> pd.DataFrame:
@@ -70,12 +69,23 @@ def normalise(df: pd.DataFrame, module_name: str, target_cols: list[str]) -> pd.
     renames = COLUMN_RENAMES.get(module_name.lower(), {})
     df = df.rename(columns=renames)
 
+    # General fallback: use school-region when birth-region is absent
+    if "birth-region" in target_cols and "birth-region" not in df.columns and "school-region" in df.columns:
+        df = df.rename(columns={"school-region": "birth-region"})
+
     # Add missing target columns as empty strings
     for col in target_cols:
         if col not in df.columns:
             df[col] = ""
 
-    return df[target_cols]
+    df = df[target_cols].copy()
+
+    # Strip subcategory from colon-qualified values, keeping only top level
+    for col in ("type", "birth-region"):
+        if col in df.columns:
+            df[col] = df[col].str.split(":").str[0]
+
+    return df
 
 
 def merge(module_dirs: list[str], filename: str, target_cols: list[str]) -> pd.DataFrame:
