@@ -1,0 +1,37 @@
+{
+  "transcript": "BOA1001",
+  "speakers": {
+    "BO026": {
+      "TUs": 55,
+      "time": 107.28300000000003,
+      "tokens": 307,
+      "tokens-ling": 305,
+      "tokens-unk": 0,
+      "tokens-anonym": 0,
+      "tokens-nvb": 0,
+      "tokens-pause": 2,
+      "tokens-err": 0,
+      "code-switching": 0
+    },
+    "BO020": {
+      "TUs": 79,
+      "time": 198.62199999999996,
+      "tokens": 526,
+      "tokens-ling": 522,
+      "tokens-unk": 1,
+      "tokens-anonym": 0,
+      "tokens-nvb": 0,
+      "tokens-pause": 3,
+      "tokens-err": 0,
+      "code-switching": 0
+    }
+  },
+  "TUs": 134,
+  "removed_TUs": 0,
+  "overlaps": 51,
+  "WARNINGS": {
+    "MISMATCHING_OVERLAPS": 10,
+    "META_TAGS": 5
+  },
+  "ERRORS": {}
+}
