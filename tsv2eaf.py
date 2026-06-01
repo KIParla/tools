@@ -9,10 +9,10 @@ from pympi import Elan as EL
 # --- regexes to read Begin/End from the 'align' column ---
 BEGIN_RE = re.compile(r"\bBegin\s*=\s*([0-9]+(?:\.[0-9]+)?)")
 END_RE   = re.compile(r"\bEnd\s*=\s*([0-9]+(?:\.[0-9]+)?)")
-_FIELD = "tu_id"
-_ALIGN_FIELD = "align"
-# _FIELD = "iu_id"
-# _ALIGN_FIELD = "iu_align"
+# _FIELD = "tu_id"
+# _ALIGN_FIELD = "align"
+_FIELD = "iu_id"
+_ALIGN_FIELD = "iu_align"
 
 def parse_begin(text):
 	"""Return float or None from an align string."""
@@ -112,10 +112,10 @@ def convert_tsv_to_eaf(input_path, output_dir="eaf"):
 		end = int(float(annotation[2]) * 1000)
 		if end - start < 0:
 			print(
-				f"[WARN] {input_path.stem} Negative duration for {annotation[0]} {start} {end} {value}",
+				f"[WARN] {input_path.stem} Negative duration for {annotation[0]} {start} {end} {value} — skipping",
 				file=sys.stderr,
 			)
-			raise SystemExit(1)
+			continue
 
 		doc.add_annotation(
 			id_tier=annotation[0],

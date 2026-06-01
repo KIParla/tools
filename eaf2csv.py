@@ -51,7 +51,10 @@ def convert(input_path, output_path, annotations=None, sep="\t"):
         annotations = {}
 
     rows = []
+
+    print(input_path, output_path)
     doc = elan.read_eaf(input_path)
+    # doc = elan.parse_eaf(input_path)
 
     for tier in doc:
         for anno in tier.annotations:

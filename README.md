@@ -6,8 +6,10 @@ Standalone scripts to handle and transform KIParla data.
 
 - `eaf2csv.py`: convert ELAN `.eaf` files into tab-separated transcript CSV.
 - `make_patch.py`: generate a `.patch` file from a lemmatization CSV to fix transcription errors in a corpus `.vert.tsv`.
+  It also supports `--batch <wip_subdir>` to process every CSV in a corpus folder.
 - `tsv2eaf.py`: rebuild `.eaf` files from pipeline TSV output.
 - `tsv2formats.py`: generate linear Jefferson and orthographic text files from `.vert.tsv`.
+- `linear2html.py`: generate publication HTML and PDF artifacts in the `KIParla-artifacts` layout.
 - `merge_metadata.py`: merge metadata tables from module repositories.
 
 ## Tests

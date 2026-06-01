@@ -13,7 +13,10 @@ Error rule functions must have signature:    (str) -> bool
   returning True if the annotation is valid, False if an error is detected.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
+from functools import partial
 from typing import Callable
 import regex as re
 import num2words as _num2words
@@ -414,3 +417,85 @@ def check_angular_parentheses(annotation: str) -> bool:
             else:
                 return False  # nested fast
     return not fast and not slow
+
+
+# ---------------------------------------------------------------------------
+# Post-normalization functions
+# ---------------------------------------------------------------------------
+
+def remove_empty_spans(annotation: str) -> tuple[int, str]:
+    """Remove empty bracket spans left behind by earlier rules.
+
+    Handles: [], (), <>, ><, °° — all with optional internal whitespace.
+    Double spaces created by the removal are collapsed.
+    """
+    annotation, n = re.subn(r"\[\s*\]|\(\s*\)|<\s*>|>\s*<|°\s*°", "", annotation)
+    annotation = re.sub(r" {2,}", " ", annotation)
+    return n, annotation.strip()
+
+
+def flag_empty_unit(annotation: str) -> tuple[int, str]:
+    """Return (1, '') when the annotation has no transcription content.
+
+    An annotation is empty when every character is a structural marker or
+    whitespace — nothing that could be a word, pause token, or NVB tag.
+    The caller should treat a normalized result of '' as a unit to exclude.
+    """
+    content = re.sub(r"[\[\]()<>°\-'#\s]", "", annotation)
+    if len(content) == 0:
+        return 1, ""
+    return 0, annotation
+
+
+# ---------------------------------------------------------------------------
+# Rule registry
+#
+# WARNING_RULES are applied in order — order is load-bearing.
+# See normalize.adoc for the rationale behind each position.
+# ---------------------------------------------------------------------------
+
+WARNING_RULES.extend([
+    # Remove illegal symbols first so later rules see clean input.
+    ValidationRule("SYMBOL_NOT_ALLOWED",   clean_non_jefferson_symbols),
+    # Convert Jefferson double-parenthesis notation before trimming pauses,
+    # because meta_tag is what creates {P} from (.).
+    ValidationRule("META_TAGS",            meta_tag),
+    # Fix bracket/punctuation spacing before trimming leading/trailing markers,
+    # so the trim patterns see normalized whitespace.
+    ValidationRule("UNEVEN_SPACES",        check_spaces),
+    ValidationRule("TRIM_PAUSES",          remove_pauses),
+    ValidationRule("TRIM_PROSODICLINKS",   remove_prosodiclinks),
+    ValidationRule("UNEVEN_SPACES",        space_prosodiclink),
+    ValidationRule("OVERLAP_PROLONGATION", overlap_prolongations),
+    ValidationRule("MULTIPLE_SPACES",      remove_spaces),
+    # Accent normalization runs after structural cleanup.
+    ValidationRule("ACCENTS",              replace_che),
+    ValidationRule("ACCENTS",              replace_po),
+    ValidationRule("ACCENTS",              replace_pero),
+    ValidationRule("NUMBERS",              check_numbers),
+    # Span-internal spacing fixed after the annotation is otherwise clean.
+    ValidationRule("UNEVEN_SPACES",        check_spaces_dots),
+    ValidationRule("UNEVEN_SPACES",        check_spaces_angular),
+    # Symbol-order corrections run last, after all content is in final form.
+    ValidationRule("SWITCHES",             switch_symbols),
+    ValidationRule("SWITCHES",             switch_NVB),
+    # Re-run space normalization after switch_NVB, because moving an NVB tag
+    # out of a bracket can leave a stray space inside it.
+    ValidationRule("UNEVEN_SPACES",        check_spaces),
+    # Remove empty bracket spans created by earlier rules (e.g. [{P}] → []).
+    ValidationRule("EMPTY_SPANS",          remove_empty_spans),
+    # Flag annotation-level units that have no content left after normalization.
+    # Callers should exclude any TU whose normalized result is ''.
+    ValidationRule("EMPTY_UNIT",           flag_empty_unit),
+])
+
+ERROR_RULES.extend([
+    ValidationRule("UNBALANCED_DOTS",
+                   check_even_dots),
+    ValidationRule("UNBALANCED_PACE",
+                   check_angular_parentheses),
+    ValidationRule("UNBALANCED_GUESS",
+                   partial(check_normal_parentheses, open_char="(", close_char=")")),
+    ValidationRule("UNBALANCED_OVERLAP",
+                   partial(check_normal_parentheses, open_char="[", close_char="]")),
+])
