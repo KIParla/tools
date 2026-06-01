@@ -509,3 +509,213 @@ def test_check_angular_nested_invalid():
 def test_check_angular_mixed_balanced():
     assert normalize.check_angular_parentheses("bla <slow> followed by >fast<") is True
     assert normalize.check_angular_parentheses("bla >fast< followed by <slow>") is True
+
+
+# ---------------------------------------------------------------------------
+# remove_empty_spans
+# ---------------------------------------------------------------------------
+
+def test_remove_empty_spans_overlap():
+    assert normalize.remove_empty_spans("[]") == (1, "")
+
+def test_remove_empty_spans_guess():
+    assert normalize.remove_empty_spans("()") == (1, "")
+
+def test_remove_empty_spans_slow_pace():
+    assert normalize.remove_empty_spans("<>") == (1, "")
+
+def test_remove_empty_spans_fast_pace():
+    assert normalize.remove_empty_spans("><") == (1, "")
+
+def test_remove_empty_spans_volume():
+    assert normalize.remove_empty_spans("°°") == (1, "")
+
+def test_remove_empty_spans_with_whitespace_inside():
+    assert normalize.remove_empty_spans("[ ]") == (1, "")
+
+def test_remove_empty_spans_non_empty_span_unchanged():
+    assert normalize.remove_empty_spans("[ciao]") == (0, "[ciao]")
+
+def test_remove_empty_spans_collapses_double_space():
+    n, result = normalize.remove_empty_spans("ciao [] bla")
+    assert n == 1
+    assert result == "ciao bla"
+
+def test_remove_empty_spans_multiple():
+    n, result = normalize.remove_empty_spans("[] ()")
+    assert n == 2
+    assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# flag_empty_unit
+# ---------------------------------------------------------------------------
+
+def test_flag_empty_unit_empty_string():
+    assert normalize.flag_empty_unit("") == (1, "")
+
+def test_flag_empty_unit_only_brackets():
+    assert normalize.flag_empty_unit("[]") == (1, "")
+
+def test_flag_empty_unit_only_structural():
+    assert normalize.flag_empty_unit("[ ] ( ) - #") == (1, "")
+
+def test_flag_empty_unit_with_content():
+    assert normalize.flag_empty_unit("ciao") == (0, "ciao")
+
+def test_flag_empty_unit_nvb_counts_as_content():
+    # {ride} contains word chars after stripping structural chars
+    assert normalize.flag_empty_unit("{ride}") == (0, "{ride}")
+
+def test_flag_empty_unit_pause_alone_is_content():
+    # {P} contains "P" — a word char — so it counts as content
+    assert normalize.flag_empty_unit("{P}") == (0, "{P}")
+
+
+# ===========================================================================
+# Integration tests — full populated pipeline
+# ===========================================================================
+# These tests exercise validate_and_normalize with the real registries.
+# They verify multi-rule sequencing and realistic transcription inputs.
+# ===========================================================================
+
+def test_integration_clean_annotation_unchanged():
+    """A well-formed annotation produces no warnings and no errors."""
+    text = "ciao come stai"
+    normalized, warnings, errors = normalize.validate_and_normalize(text)
+    assert normalized == text
+    assert warnings == {}
+    assert errors == {}
+
+
+def test_integration_meta_tag_conversion():
+    """(.) is converted to {P}; the leading {P} is then stripped by TRIM_PAUSES."""
+    normalized, warnings, errors = normalize.validate_and_normalize("(.) ciao ((ride))")
+    assert normalized == "ciao {ride}"
+    assert warnings.get("META_TAGS", 0) >= 2
+    assert "TRIM_PAUSES" in warnings
+    assert errors == {}
+
+
+def test_integration_leading_pause_stripped():
+    """{P} at the start is removed by TRIM_PAUSES (after META_TAGS creates it)."""
+    normalized, warnings, _ = normalize.validate_and_normalize("(.) ciao")
+    assert normalized == "ciao"
+    assert "META_TAGS" in warnings
+    assert "TRIM_PAUSES" in warnings
+
+
+def test_integration_accent_normalization():
+    normalized, warnings, errors = normalize.validate_and_normalize("perchè nè pò")
+    assert normalized == "perché né po'"
+    assert warnings.get("ACCENTS", 0) >= 2
+    assert errors == {}
+
+
+def test_integration_number_conversion():
+    normalized, warnings, _ = normalize.validate_and_normalize("ho 2 gatti e 3 cani")
+    assert "due" in normalized
+    assert "tre" in normalized   # 3 → "tre"; accent only added for e.g. "ventitré"
+    assert warnings.get("NUMBERS", 0) == 2
+
+
+def test_integration_multi_rule_sequence():
+    """(.) + accent + number all fire in sequence."""
+    normalized, warnings, errors = normalize.validate_and_normalize("(.) perchè 2")
+    # meta_tag: (.) → {P}; trim_pauses strips it; replace_che fixes accent; check_numbers converts
+    assert normalized == "perché due"
+    assert "META_TAGS" in warnings
+    assert "TRIM_PAUSES" in warnings
+    assert "ACCENTS" in warnings
+    assert "NUMBERS" in warnings
+    assert errors == {}
+
+
+def test_integration_overlap_pause_results_in_empty_unit():
+    """{P} at span boundary is stripped by TRIM_PAUSES; the resulting []
+    is removed by EMPTY_SPANS; flag_empty_unit then marks the TU for exclusion.
+    """
+    normalized, warnings, _ = normalize.validate_and_normalize("[{P}]")
+    assert normalized == ""
+    assert "SWITCHES" not in warnings   # switch_NVB correctly left {P} alone
+    assert "TRIM_PAUSES" in warnings
+    assert "EMPTY_SPANS" in warnings
+    assert "EMPTY_UNIT" in warnings
+
+
+def test_integration_nvb_moved_outside_overlap():
+    """A non-pause NVB immediately after [ is relocated outside the span.
+    The trailing space check_spaces pass (after switch_NVB) cleans the stray
+    space that moving the tag leaves inside the bracket.
+    """
+    normalized, warnings, _ = normalize.validate_and_normalize("[{ride} ciao]")
+    assert normalized == "{ride} [ciao]"
+    assert "SWITCHES" in warnings
+
+
+def test_integration_unbalanced_dots_error():
+    """An odd number of ° markers is reported as UNBALANCED_DOTS."""
+    _, _, errors = normalize.validate_and_normalize("°ciao")
+    assert errors.get("UNBALANCED_DOTS") is True
+
+
+def test_integration_unbalanced_overlap_error():
+    _, _, errors = normalize.validate_and_normalize("[ciao")
+    assert errors.get("UNBALANCED_OVERLAP") is True
+
+
+def test_integration_unbalanced_guess_error():
+    _, _, errors = normalize.validate_and_normalize("(ciao")
+    assert errors.get("UNBALANCED_GUESS") is True
+
+
+def test_integration_unbalanced_pace_error():
+    _, _, errors = normalize.validate_and_normalize("<ciao")
+    assert errors.get("UNBALANCED_PACE") is True
+
+
+def test_integration_balanced_spans_no_errors():
+    """All span types balanced → no errors."""
+    _, _, errors = normalize.validate_and_normalize("[ciao] (forse) °piano° <lento>")
+    assert errors == {}
+
+
+def test_integration_config_disables_numbers():
+    """Disabling NUMBERS leaves digits in the output."""
+    normalized, warnings, _ = normalize.validate_and_normalize(
+        "ho 2 gatti", config={"NUMBERS": False}
+    )
+    assert "2" in normalized
+    assert "NUMBERS" not in warnings
+
+
+def test_integration_config_disables_accents():
+    normalized, warnings, _ = normalize.validate_and_normalize(
+        "perchè", config={"ACCENTS": False}
+    )
+    assert normalized == "perchè"
+    assert "ACCENTS" not in warnings
+
+
+def test_integration_empty_span_from_nvb_removal():
+    """[{ride}] → switch_NVB moves ride out → [] → removed by EMPTY_SPANS."""
+    normalized, warnings, _ = normalize.validate_and_normalize("[{ride}]")
+    assert normalized == "{ride}"
+    assert "SWITCHES" in warnings
+    assert "EMPTY_SPANS" in warnings
+    assert "EMPTY_UNIT" not in warnings   # {ride} is content
+
+
+def test_integration_empty_unit_excluded():
+    """An annotation that reduces to nothing is flagged with EMPTY_UNIT."""
+    normalized, warnings, _ = normalize.validate_and_normalize("[]")
+    assert normalized == ""
+    assert "EMPTY_SPANS" in warnings
+    assert "EMPTY_UNIT" in warnings
+
+
+def test_integration_warnings_accumulate_across_rules_with_same_label():
+    """UNEVEN_SPACES is shared by multiple rules; counts must sum."""
+    # "[ ciao ]" triggers check_spaces (opening bracket) and check_spaces (closing bracket)
+    _, warnings, _ = normalize.validate_and_normalize("[ ciao ]")
+    assert warnings.get("UNEVEN_SPACES", 0) >= 2
