@@ -1,0 +1,5 @@
+# KIPasti module — process pipeline configuration.
+# Keys not listed here fall back to defaults.yml.
+
+normalization:
+  HASH_PREFIX_SPACE: true  # # at start of unit may lack a space: '#word' → '# word'

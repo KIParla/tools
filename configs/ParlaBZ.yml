@@ -1,0 +1,6 @@
+# ParlaBZ module — process pipeline configuration.
+# Keys not listed here fall back to defaults.yml.
+
+# NVB tiers in ParlaBZ legitimately overlap with speech and must not be pruned.
+overlaps:
+  nvb_participates_in_overlaps: true

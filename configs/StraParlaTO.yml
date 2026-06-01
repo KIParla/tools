@@ -1,0 +1,21 @@
+# StraParlaTO module — process pipeline configuration.
+# Keys not listed here fall back to defaults.yml.
+
+# Token-level variation markers active in this module:
+#   #word  → Variation=Token  (specific token is foreign variety)
+#   $word  → Variation=Emerging  (non-existent in Italian but potentially so)
+#   #*word → Variation=Doubtful  (probably Italian)
+#   #_ at start of TU → Variation=Unit  (all linguistic tokens are foreign variety)
+
+# Traduzione is a child tier here — extract to translations TSV, not ignored.
+tiers_to_ignore: []
+tiers_to_extract:
+  - Traduzione
+
+variation_markers:
+  hash_token: true
+  dollar: true
+  hash_doubtful: true
+
+normalization:
+  HASH_UNIT_SPACE: true  # #_word at start → #_ word

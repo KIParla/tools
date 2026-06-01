@@ -1,0 +1,98 @@
+# Default process pipeline configuration.
+# Per-module configs override only the keys that differ from these defaults.
+#
+# Key reference:
+#   tiers_to_ignore       — speaker tiers skipped entirely
+#   overlaps.*            — overlap graph pruning behaviour
+#   variation_markers.*   — which token-level variation prefixes are active;
+#                           inactive prefixes are stripped by SYMBOL_NOT_ALLOWED
+#   normalization.*       — enable/disable individual normalization rules
+#   allowed_symbols       — characters (beyond word chars and whitespace) that
+#                           SYMBOL_NOT_ALLOWED keeps; anything else is removed
+#   accent_corrections    — list of {wrong, right} pairs applied by ACCENTS
+
+# Speaker tiers whose TUs are skipped entirely.
+tiers_to_ignore:
+  - Traduzione
+
+# Speaker tiers whose TUs bypass the pipeline and are written to a separate
+# translations TSV (no normalization or tokenization). Empty by default.
+tiers_to_extract: []
+
+# Overlap handling
+overlaps:
+  # Minimum overlap duration (seconds). Shorter overlaps without annotated spans
+  # are resolved by nudging TU boundaries rather than being recorded as overlaps.
+  duration_threshold: 0.1
+  # When true: nonverbal-behavior TUs participate in overlaps like any other TU
+  # (edges are kept, NVB-adjacent mismatches are not silently removed).
+  # When false (default): edges where one TU is entirely NVB are pruned, and
+  # NVB-adjacent overlaps are treated as removable when resolving mismatches.
+  nvb_participates_in_overlaps: false
+
+# Token-level variation markers recognised in this module.
+# A marker not listed as true is stripped by SYMBOL_NOT_ALLOWED and its prefix
+# character is not passed to token classification.
+variation_markers:
+  hash_token: false    # #word  → Variation=Token
+  dollar: false        # $word  → Variation=Emerging
+  hash_doubtful: false # #*word → Variation=Doubtful
+
+# Characters (beyond \w and whitespace) that SYMBOL_NOT_ALLOWED keeps.
+# $ is added automatically when variation_markers.dollar is true.
+# Removing a symbol here causes it to be silently stripped from every TU.
+allowed_symbols:
+  - "{"   # NVB / tag open
+  - "}"   # NVB / tag close
+  - "_"   # space replacement inside tags
+  - ","   # weakly rising intonation
+  - "?"   # rising intonation
+  - "."   # falling intonation
+  - ":"   # prolongation
+  - "="   # prosodic link
+  - "°"   # low volume
+  - ">"   # fast-pace start / slow-pace end
+  - "<"   # slow-pace start / fast-pace end
+  - "["   # overlap open
+  - "]"   # overlap close
+  - "("   # guess open
+  - ")"   # guess close
+  - "'"   # apostrophe / truncation
+  - "-"   # interruption / truncation
+  - "~"   # truncation
+  - "#"   # variation / language marker
+  - "@"   # anonymization
+
+# Normalization (warning) rules.
+# Each key maps to a rule that may be toggled per module.
+normalization:
+  SYMBOL_NOT_ALLOWED: true   # remove characters not in allowed_symbols (+ \w, \s, active variation prefixes)
+  META_TAGS: true            # (( → {, )) → }, (.) → {P}; spaces inside {…} → _ (single token)
+  UNEVEN_SPACES: true        # fix spaces around brackets and NVB tags
+  TRIM_PAUSES: true          # remove leading/trailing {P}
+  TRIM_PROSODICLINKS: true   # remove leading/trailing =
+  OVERLAP_PROLONGATION: false # move [ before last char+colons: word:*[: → wor[d:*:
+  MULTIPLE_SPACES: true      # collapse double spaces / tabs / newlines
+  ACCENTS: true              # normalize accent errors (see accent_corrections below)
+  NUMBERS: true              # replace Arabic numerals with Italian words
+  HASH_UNIT_SPACE: false     # ensure #_ at start of unit has a space (StraParlaBO, StraParlaTO)
+  HASH_PREFIX_SPACE: false   # move # to front of unit and add space (KIPasti)
+
+# Word-level accent corrections applied by the ACCENTS rule.
+# Each entry is a {wrong, right} pair; matching is word-boundary-aware.
+# Modules may replace this list entirely or extend it.
+accent_corrections:
+  - {wrong: "perchè",    right: "perché"}
+  - {wrong: "benchè",    right: "benché"}
+  - {wrong: "finchè",    right: "finché"}
+  - {wrong: "poichè",    right: "poiché"}
+  - {wrong: "anzichè",   right: "anziché"}
+  - {wrong: "dopodichè", right: "dopodiché"}
+  - {wrong: "granchè",   right: "granché"}
+  - {wrong: "affinchè",  right: "affinché"}
+  - {wrong: "pressochè", right: "pressoché"}
+  - {wrong: "nè",        right: "né"}
+  - {wrong: "pò",        right: "po'"}
+  - {wrong: "pero'",     right: "però"}
+  - {wrong: "perche'",   right: "perché"}
+  - {wrong: "puo'",      right: "può"}
