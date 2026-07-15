@@ -196,12 +196,36 @@ def render_adoc(module_reports: list[tuple[str, list[dict], bool]]) -> str:
     return "\n".join(lines)
 
 
+DEFAULT_OUTPUT = Path(__file__).parent / "docs/modules/ROOT/pages/validation-report.adoc"
+
+
+def generate_report(modules: list[Path], output: Path = DEFAULT_OUTPUT, verbose: bool = True) -> Path:
+    """Build the validation report for *modules* and write it to *output*.
+
+    Shared by ``main()`` (CLI) and ``sync.py`` (called after a single-file
+    sync, to keep the report current without a full module reprocess).
+    """
+    module_reports = []
+    for module_dir in modules:
+        rows, has_pipeline = build_rows(module_dir)
+        module_reports.append((module_dir.name, rows, has_pipeline))
+        if verbose:
+            n_needs_review = sum(1 for r in rows if r["status"] in ("error", "warn"))
+            print(f"{module_dir.name}: {len(rows)} conversations, {n_needs_review} need review")
+
+    adoc = render_adoc(module_reports)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(adoc, encoding="utf-8")
+    if verbose:
+        print(f"wrote {output}")
+    return output
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--modules", nargs="+", type=Path,
                      help="Paths to module root directories. Default: auto-discover.")
-    ap.add_argument("-o", "--output", type=Path,
-                     default=Path(__file__).parent / "docs/modules/ROOT/pages/validation-report.adoc",
+    ap.add_argument("-o", "--output", type=Path, default=DEFAULT_OUTPUT,
                      help="Output .adoc path.")
     args = ap.parse_args()
 
@@ -209,17 +233,7 @@ def main():
     if not modules:
         raise SystemExit("No modules found.")
 
-    module_reports = []
-    for module_dir in modules:
-        rows, has_pipeline = build_rows(module_dir)
-        module_reports.append((module_dir.name, rows, has_pipeline))
-        n_needs_review = sum(1 for r in rows if r["status"] in ("error", "warn"))
-        print(f"{module_dir.name}: {len(rows)} conversations, {n_needs_review} need review")
-
-    adoc = render_adoc(module_reports)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(adoc, encoding="utf-8")
-    print(f"wrote {args.output}")
+    generate_report(modules, args.output)
 
 
 if __name__ == "__main__":

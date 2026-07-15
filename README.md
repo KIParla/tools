@@ -25,6 +25,20 @@ Standalone scripts to handle and transform KIParla data.
   metadata-consistency results with per-conversation pipeline warnings/errors from
   each module's `tmp/process/json/summary.json`. Run again and commit after
   reprocessing a module to keep the report current.
+- `sync.py`: one-shot, one-directional sync for a single edited file — run manually
+  after opening/saving a `.eaf` in ELAN, or hand-editing a `.vert.tsv`:
+  - `python sync.py --from-eaf <path/to/X.eaf>`: eaf2csv → process (updates
+    `tsv/X.vert.tsv`, `translations/`, `tmp/process/{csv,json}/`, `tmp/process/json/summary.json`)
+    → `tsv2formats` (linear-jefferson/orthographic) → `check_participants` (this module)
+    → `generate_validation_report` (all modules).
+  - `python sync.py --from-vert <path/to/X.vert.tsv>`: `vert2eaf` (overwrites `eaf/X.eaf`
+    in place) → `tsv2formats` → `check_participants` → `generate_validation_report`.
+    Pipeline warnings/errors in the report are *not* refreshed for this file (that would
+    require reprocessing the freshly-written eaf — the reverse direction this command
+    deliberately doesn't auto-trigger, to avoid ping-ponging between the two commands).
+  - Module is inferred from the file's path (`<module>/eaf/X.eaf` or `<module>/tsv/X.vert.tsv`);
+    override with `--module` if a module's directory name doesn't map to its config name
+    (e.g. `Stra-ParlaBO` → `StraParlaBO`) by simply stripping `-`.
 
 ## Tests
 

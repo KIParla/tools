@@ -292,6 +292,23 @@ python generate_validation_report.py
 
 Run it again (and commit the regenerated page) after reprocessing a module, to keep the report current.
 
+[[sync]]
+== `sync.py`
+
+One-shot, one-directional sync for a single edited file. Run manually after opening/saving a `.eaf` in ELAN, or hand-editing a `.vert.tsv`:
+
+[source,bash]
+----
+python sync.py --from-eaf <path/to/X.eaf>
+python sync.py --from-vert <path/to/X.vert.tsv>
+----
+
+`--from-eaf` chains `eaf2csv` → `process` (updates `tsv/`, `translations/`, `tmp/process/`) → `tsv2formats` → `check_participants` → `generate_validation_report`.
+
+`--from-vert` chains `vert2eaf` (overwrites `eaf/X.eaf` in place) → `tsv2formats` → `check_participants` → `generate_validation_report`. Pipeline warnings/errors in the report are not refreshed in this direction — that would mean reprocessing the freshly-written eaf, which is exactly the reverse-direction auto-trigger this command avoids, so the two commands never ping-pong off each other.
+
+Module is inferred from the file's path; pass `--module` to override.
+
 == Design note
 
 These scripts are intentionally lightweight and file-oriented.
