@@ -19,6 +19,12 @@ tiers_to_ignore:
 # translations TSV (no normalization or tokenization). Empty by default.
 tiers_to_extract: []
 
+# Suffixes for tiers_to_extract: any tier whose ID ends with one of these
+# strings is treated as a translation tier, in addition to exact matches in
+# tiers_to_extract. Useful when translation tiers are named per-speaker
+# (e.g. "PSB033_trad") rather than with a single fixed tier name.
+tiers_to_extract_suffixes: []
+
 # Overlap handling
 overlaps:
   # Minimum overlap duration (seconds). Shorter overlaps without annotated spans

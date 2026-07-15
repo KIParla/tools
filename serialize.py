@@ -8,6 +8,8 @@ Public API:
     write_json(t, path)             → writes <name>.json
     write_translations(rows, path)  → writes <name>.translations.tsv
     process(input_path, output_dir, cfg, annotations)  → runs full pipeline
+    csv2eaf(csv_path, ...)          → writes <name>.eaf from a linear CSV
+    vert2eaf(vert_path, ...)        → writes <name>.eaf from a vert.tsv
 """
 
 from __future__ import annotations
@@ -41,6 +43,13 @@ TRANSLATIONS_FIELDNAMES = [
     "tu_id", "speaker", "start", "end", "parent_tu_id", "text",
 ]
 
+# Intonation enum member name -> Intonation= output label.
+_INTONATION_LABELS = {
+    "weakly_rising": "WeaklyRising",
+    "falling":       "Falling",
+    "rising":        "Rising",
+}
+
 
 # ---------------------------------------------------------------------------
 # Step 1 — Read CSV
@@ -53,8 +62,9 @@ def read_csv(
     """Read the eaf2csv output and build a Transcript.
 
     TUs from tiers in ``cfg["tiers_to_ignore"]`` are skipped entirely.
-    TUs from tiers in ``cfg["tiers_to_extract"]`` bypass the pipeline and
-    are collected as translation rows (returned separately).
+    TUs from tiers in ``cfg["tiers_to_extract"]`` (exact match) or whose tier
+    ID ends with one of ``cfg["tiers_to_extract_suffixes"]`` bypass the
+    pipeline and are collected as translation rows (returned separately).
 
     Args:
         path:   path to the tab-separated input CSV.
@@ -69,6 +79,7 @@ def read_csv(
 
     ignore  = set(cfg.get("tiers_to_ignore", []))
     extract = set(cfg.get("tiers_to_extract", []))
+    extract_suffixes = tuple(cfg.get("tiers_to_extract_suffixes", []))
 
     transcript   = Transcript(path.stem)
     translations: list[dict] = []
@@ -81,7 +92,7 @@ def read_csv(
             if speaker in ignore:
                 continue
 
-            if speaker in extract:
+            if speaker in extract or (extract_suffixes and speaker.endswith(extract_suffixes)):
                 translations.append({
                     "tu_id":        row.get("tu_id", ""),
                     "speaker":      speaker,
@@ -125,7 +136,8 @@ def _jefferson_feats(tok) -> str:
     parts = []
 
     if tok.intonation != df.intonation.plain:
-        parts.append(f"Intonation={tok.intonation.name}")
+        label = _INTONATION_LABELS.get(tok.intonation.name, tok.intonation.name)
+        parts.append(f"Intonation={label}")
 
     if tok.interruption:
         parts.append("Interrupted=Yes")
@@ -299,6 +311,22 @@ def write_translations(rows: list[dict], output_path: Path, sep: str = "\t"):
         writer.writerows(rows)
 
 
+def write_translations_json(rows: list[dict], output_path: Path):
+    """Write the translations JSON for extracted tiers (step 8c).
+
+    Each row carries ``parent_tu_id`` (the ``tu_id`` of the TU it is a
+    translation of), so the eaf can be rebuilt by re-attaching each
+    translation as a ref-annotation on its parent's tier (see
+    ``csv2eaf(..., translations_path=...)``).
+    """
+    data = [
+        {field: row.get(field, "_") for field in TRANSLATIONS_FIELDNAMES}
+        for row in rows
+    ]
+    with output_path.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
 # ---------------------------------------------------------------------------
 # Full pipeline (steps 1–8)
 # ---------------------------------------------------------------------------
@@ -308,22 +336,36 @@ def process(
     output_dir: Path,
     cfg: dict | None = None,
     annotations: dict | None = None,
+    return_transcript: bool = False,
+    translations_dir: Path | None = None,
+    reports_dir: Path | None = None,
 ) -> dict:
     """Run the full processing pipeline on one conversation CSV.
 
     Args:
         input_path:  path to the input CSV (eaf2csv output).
-        output_dir:  directory for output files.
+        output_dir:  directory for the vert.tsv output. Should contain only
+            *.vert.tsv files — pass translations_dir/reports_dir below rather
+            than letting other outputs land here too.
         cfg:         pipeline config dict (from load_config).
         annotations: per-file annotation dict (e.g. ``{"ignore": [...]}``).
+        return_transcript: if True, return ``(summary, transcript)`` instead
+            of just ``summary``.
+        translations_dir: directory for <name>.translations.tsv/.json.
+            Defaults to output_dir if not given.
+        reports_dir: directory for the per-file <name>.json summary.
+            Defaults to output_dir if not given.
 
     Returns:
-        The JSON summary dict.
+        The JSON summary dict, or ``(summary, transcript)`` if
+        ``return_transcript`` is True.
     """
     if cfg is None:
         cfg = {}
     if annotations is None:
         annotations = {}
+    translations_dir = translations_dir or output_dir
+    reports_dir = reports_dir or output_dir
 
     overlap_cfg = cfg.get("overlaps", {})
     duration_threshold = overlap_cfg.get("duration_threshold", 0.1)
@@ -365,15 +407,21 @@ def process(
 
     # Step 8 — Serialize.
     output_dir.mkdir(parents=True, exist_ok=True)
+    reports_dir.mkdir(parents=True, exist_ok=True)
     stem = input_path.stem
 
     conversation_to_conll(transcript, output_dir / f"{stem}.vert.tsv")
-    write_json(transcript, output_dir / f"{stem}.json")
+    write_json(transcript, reports_dir / f"{stem}.json")
 
     if translations:
-        write_translations(translations, output_dir / f"{stem}.translations.tsv")
+        translations_dir.mkdir(parents=True, exist_ok=True)
+        write_translations(translations, translations_dir / f"{stem}.translations.tsv")
+        write_translations_json(translations, translations_dir / f"{stem}.translations.json")
 
-    return build_json(transcript)
+    summary = build_json(transcript)
+    if return_transcript:
+        return summary, transcript
+    return summary
 
 
 # ---------------------------------------------------------------------------
@@ -390,7 +438,7 @@ def eaf2csv(input_filename, output_filename, annotations, sep="\t"):
     """Read an ELAN .eaf file and write a CSV with tu_id/speaker/start/end/duration/text."""
     from speach import elan
 
-    fieldnames = ["tu_id", "speaker", "start", "end", "duration", "text"]
+    fieldnames = ["tu_id", "speaker", "start", "end", "duration", "text", "parent_tu_id"]
     full_file = []
 
     eaf_doc = elan.read_eaf(input_filename)
@@ -405,6 +453,8 @@ def eaf2csv(input_filename, output_filename, annotations, sep="\t"):
                 "end": _to_ts,
                 "duration": _duration,
                 "id": None,
+                "eaf_id": anno.ID,
+                "eaf_ref_id": getattr(anno, "ref", None).ID if getattr(anno, "ref", None) is not None else None,
             }
             text_matches = re.split(r"^(id:)([0-9]+) ", anno.value.strip())
             to_write["text"] = text_matches[-1]
@@ -415,12 +465,18 @@ def eaf2csv(input_filename, output_filename, annotations, sep="\t"):
     to_remap = {}
     full_file = sorted(full_file, key=lambda x: float(x["start"]))
 
+    eaf_id_to_tu_id = {}
+    for el_no, to_write in enumerate(full_file):
+        to_write["tu_id"] = el_no
+        to_remap[to_write["id"]] = el_no
+        eaf_id_to_tu_id[to_write["eaf_id"]] = el_no
+
     with open(output_filename, "w", encoding="utf-8", newline="") as fout:
         writer = csv.DictWriter(fout, fieldnames=fieldnames, delimiter=sep, extrasaction="ignore")
         writer.writeheader()
-        for el_no, to_write in enumerate(full_file):
-            to_write["tu_id"] = el_no
-            to_remap[to_write["id"]] = el_no
+        for to_write in full_file:
+            ref_id = to_write.get("eaf_ref_id")
+            to_write["parent_tu_id"] = eaf_id_to_tu_id.get(ref_id, "_") if ref_id else "_"
             writer.writerow(to_write)
 
     if "ignore" in annotations:
@@ -433,19 +489,144 @@ def eaf2csv(input_filename, output_filename, annotations, sep="\t"):
             annotations["ignore"][pos] = " ".join(new_list)
 
 
-def csv2eaf(input_filename, linked_file, output_filename,
-            sep="\t", multiplier=1000, include_ids=False):
-    """Read a pipeline CSV and write an ELAN .eaf file."""
-    from pympi import Elan as EL
+_BEGIN_RE = re.compile(r"\bBegin\s*=\s*([0-9]+(?:\.[0-9]+)?)")
+_END_RE = re.compile(r"\bEnd\s*=\s*([0-9]+(?:\.[0-9]+)?)")
 
-    tus = []
-    tiers = set()
+
+def vert_to_linear_rows(vert_path) -> list[dict]:
+    """Reconstruct linear TU rows (tu_id/speaker/start/end/text/include) from
+    a vert.tsv, for feeding into ``_csv2eaf_from_rows`` (see ``vert2eaf``).
+
+    Token-level variation markers (``#word``, ``$word``, ``#*word``) need no
+    special handling: they are preserved verbatim in each token's ``span``
+    (stripped only from ``form`` during tokenization, never from ``span``).
+
+    TU-level variation is only reconstructed for ``variation=all`` (prepends
+    ``"#_ "``). ``variation=some`` is deliberately NOT re-prefixed with
+    ``"# "``: vert.tsv cannot distinguish an explicit TU-level ``"# "``
+    marker (used when individual non-Italian tokens aren't decidable) from
+    ``some`` arising purely because individually-marked tokens are present
+    (already correctly reconstructed via their own ``span``). Synthesizing
+    ``"# "`` in the latter case would duplicate the marker; never adding it
+    loses the marker in the former case. This is a documented, tested,
+    accepted limitation — see tests/test_vert2eaf.py.
+    """
+    vert_path = Path(vert_path)
+    rows: list[dict] = []
+
+    with vert_path.open(encoding="utf-8", newline="") as f:
+        for tu_id, tok_rows in units_from_conll(f, source_col="tu_id"):
+            speaker = tok_rows[0]["speaker"]
+            variation = tok_rows[0].get("variation", "none")
+
+            text_parts = []
+            for i, tok in enumerate(tok_rows):
+                text_parts.append(tok.get("span", "") or "")
+                if i == len(tok_rows) - 1:
+                    continue
+                feats = tok.get("jefferson_feats", "") or ""
+                if "SpaceAfter=No" in feats:
+                    continue
+                elif "ProsodicLink=Yes" in feats:
+                    text_parts.append("=")
+                else:
+                    text_parts.append(" ")
+            text = "".join(text_parts)
+
+            if variation == "all":
+                text = "#_ " + text
+
+            m_start = _BEGIN_RE.search(tok_rows[0].get("align", "") or "")
+            m_end = _END_RE.search(tok_rows[-1].get("align", "") or "")
+            if m_start is None or m_end is None:
+                logger.warning("vert_to_linear_rows: TU %s missing Begin=/End= "
+                                "alignment, skipping", tu_id)
+                continue
+
+            rows.append({
+                "tu_id": tu_id,
+                "speaker": speaker,
+                "start": m_start.group(1),
+                "end": m_end.group(1),
+                "text": text,
+                "include": "True",
+            })
+
+    return rows
+
+
+def vert2eaf(vert_path, linked_file, output_filename,
+             multiplier=1000, include_ids=False, translations_path=None):
+    """Rebuild an ELAN .eaf file from a (possibly hand-edited) vert.tsv.
+
+    Args:
+        translations_path: optional path to a ``<name>.translations.json``
+            file, reattached as ``_trad`` ref-annotation tiers exactly like
+            ``csv2eaf``'s ``translations_path`` (same underlying logic).
+
+    See ``vert_to_linear_rows`` for exactly what round-trips and what is a
+    documented, accepted lossy case (TU-level "# " variation marker).
+    """
+    rows = vert_to_linear_rows(vert_path)
+    _csv2eaf_from_rows(rows, linked_file, output_filename,
+                        multiplier=multiplier, include_ids=include_ids,
+                        translations_path=translations_path)
+
+
+def _read_linear_rows(input_filename, sep="\t") -> list[dict]:
+    """Read a pipeline linear CSV (tu_id/speaker/start/end/text/[include]) into rows."""
+    rows = []
     with open(input_filename, encoding="utf-8") as csvfile:
         reader = csv.DictReader(csvfile, delimiter=sep)
         for row in reader:
             if "speaker" in row:
-                tiers.add(row["speaker"])
-                tus.append(row)
+                rows.append(row)
+    return rows
+
+
+def csv2eaf(input_filename, linked_file, output_filename,
+            sep="\t", multiplier=1000, include_ids=False,
+            translations_path=None):
+    """Read a pipeline CSV and write an ELAN .eaf file.
+
+    Args:
+        translations_path: optional path to a ``<name>.translations.json``
+            file (see ``write_translations_json``). Each row's
+            ``parent_tu_id`` is used to look up the parent TU's tier and
+            re-attach the translation as a ref-annotation on a new child
+            tier (``PARENT_REF`` + ``REF_ANNOTATION``), mirroring the
+            original eaf's ``<speaker>_trad`` tier structure.
+    """
+    rows = _read_linear_rows(input_filename, sep=sep)
+    _csv2eaf_from_rows(rows, linked_file, output_filename,
+                        multiplier=multiplier, include_ids=include_ids,
+                        translations_path=translations_path)
+
+
+def _csv2eaf_from_rows(tus, linked_file, output_filename,
+                        multiplier=1000, include_ids=False,
+                        translations_path=None):
+    """Build and write an ELAN .eaf file from linear TU rows.
+
+    ``tus`` is a list of dicts with at least ``tu_id``, ``speaker``,
+    ``start``, ``end``, ``text``, and optionally ``include``. Shared by
+    ``csv2eaf`` (rows read from a CSV file) and ``vert2eaf`` (rows built
+    in-memory from a vert.tsv via ``vert_to_linear_rows``).
+    """
+    from pympi import Elan as EL
+
+    # Preserve first-appearance order (not a plain set): tier creation order
+    # determines ELAN's read-back order for annotations sharing an identical
+    # timestamp (simultaneous/overlapping speech), so a non-deterministic
+    # set iteration order would silently reshuffle those TUs on round-trip.
+    tiers = list(dict.fromkeys(row["speaker"] for row in tus))
+
+    tu_by_id = {}
+    for row in tus:
+        try:
+            tu_by_id[int(row["tu_id"])] = row
+        except (KeyError, ValueError):
+            pass
 
     doc = EL.Eaf(author="automatic_pipeline")
     doc.add_linked_file(linked_file, relpath=linked_file)
@@ -468,6 +649,47 @@ def csv2eaf(input_filename, linked_file, output_filename,
                 end=end,
                 value=value,
             )
+
+    if translations_path is not None:
+        translations_path = Path(translations_path)
+        if translations_path.is_file():
+            with translations_path.open(encoding="utf-8") as jf:
+                translation_rows = json.load(jf)
+
+            trad_ling = "traduzione"
+            if trad_ling not in doc.linguistic_types:
+                doc.add_linguistic_type(trad_ling, constraints="Symbolic_Association")
+
+            created_tiers = set()
+            for row in translation_rows:
+                parent_tu_id = row.get("parent_tu_id")
+                if parent_tu_id in (None, "", "_"):
+                    logger.warning("Translation tu_id=%s has no parent_tu_id, skipping",
+                                   row.get("tu_id"))
+                    continue
+                parent_row = tu_by_id.get(int(parent_tu_id))
+                if parent_row is None:
+                    logger.warning("Translation tu_id=%s references unknown parent_tu_id=%s, skipping",
+                                   row.get("tu_id"), parent_tu_id)
+                    continue
+
+                parent_tier = parent_row["speaker"]
+                child_tier = row["speaker"]
+                if child_tier not in created_tiers:
+                    doc.add_tier(tier_id=child_tier, ling=trad_ling, parent=parent_tier)
+                    created_tiers.add(child_tier)
+
+                start = float(row["start"])
+                end = float(row["end"])
+                mid = int(((start + end) / 2) * multiplier)
+                try:
+                    doc.add_ref_annotation(
+                        id_tier=child_tier, tier2=parent_tier, time=mid,
+                        value=row["text"],
+                    )
+                except ValueError as e:
+                    logger.error("Failed to attach translation tu_id=%s to parent_tu_id=%s: %s",
+                                 row.get("tu_id"), parent_tu_id, e)
 
     doc.to_file(output_filename)
 
@@ -501,7 +723,7 @@ def conversation_to_linear(transcript, output_filename, sep="\t"):
                 variation = tu.non_ita.name
 
             text = tu.annotation.replace("{P}", "(.)").replace("{", "((").replace("}", "))")
-            orthographic = " ".join(str(tok) for _, tok in tu.tokens.items())
+            orthographic = " ".join(tok.form for tok in tu.tokens)
             orthographic = orthographic.replace("{P}", "(.)").replace("{", "((").replace("}", "))")
 
             if df.languagevariation.some in tu.non_ita:
@@ -509,9 +731,9 @@ def conversation_to_linear(transcript, output_filename, sep="\t"):
             if df.languagevariation.all in tu.non_ita:
                 text = "#_ " + text
 
-            errors_str = " ".join(tok.text for _, tok in tu.tokens.items()
+            errors_str = " ".join(tok.form for tok in tu.tokens
                                   if df.tokentype.error in tok.token_type)
-            t_errors = str(sum(df.tokentype.error in tok.token_type for _, tok in tu.tokens.items()))
+            t_errors = str(sum(df.tokentype.error in tok.token_type for tok in tu.tokens))
             if errors_str:
                 t_errors += f", {errors_str}"
 
@@ -549,12 +771,12 @@ def conversation_to_linear(transcript, output_filename, sep="\t"):
                 "E:overlap_time": tu.errors["OVERLAPS:MISSING_TIME"],
                 "E:overlap_duration": overlap_duration_str,
                 "T:shortpauses": sum(df.tokentype.shortpause in tok.token_type
-                                     for _, tok in tu.tokens.items()),
+                                     for tok in tu.tokens),
                 "T:nonverbalbehavior": sum(df.tokentype.nonverbalbehavior in tok.token_type
-                                           for _, tok in tu.tokens.items()),
+                                           for tok in tu.tokens),
                 "T:errors": t_errors,
                 "T:linguistic": sum(df.tokentype.linguistic in tok.token_type
-                                    for _, tok in tu.tokens.items()),
+                                    for tok in tu.tokens),
             }
             writer.writerow(to_write)
 
@@ -674,14 +896,18 @@ def conll2conllu(filename, output_filename):
                     "MISC": "_",
                 }
                 if token["type"] == "shortpause":
-                    conllu_tok["MISC"] = f"Type={token['type']}"
                     metadata["jefferson_text"] += "(.) "
-                    tokens.append(conllu_tok)
+                    if tokens:
+                        prev = tokens[-1]
+                        if prev["MISC"] == "_":
+                            prev["MISC"] = "PauseAfter=Yes"
+                        else:
+                            parts = prev["MISC"].split("|")
+                            parts.append("PauseAfter=Yes")
+                            prev["MISC"] = "|".join(sorted(parts))
                     continue
                 elif token["type"] == "nonverbalbehavior":
-                    conllu_tok["MISC"] = f"Type={token['type']}"
                     metadata["jefferson_text"] += f"{token['span']} "
-                    tokens.append(conllu_tok)
                     continue
 
                 token_added = True

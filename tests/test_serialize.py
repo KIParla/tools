@@ -94,14 +94,14 @@ class TestConversationToConll:
         out = tmp_path / "test.vert.tsv"
         conversation_to_conll(t, out)
         rows = _read_vert(out)
-        assert "Intonation=rising" in rows[0]["jefferson_feats"]
+        assert "Intonation=Rising" in rows[0]["jefferson_feats"]
 
     def test_falling_intonation_serialized(self, tmp_path):
         t = _make_simple_transcript(["capito."])
         out = tmp_path / "test.vert.tsv"
         conversation_to_conll(t, out)
         rows = _read_vert(out)
-        assert "Intonation=falling" in rows[0]["jefferson_feats"]
+        assert "Intonation=Falling" in rows[0]["jefferson_feats"]
 
     def test_no_intonation_is_underscore(self, tmp_path):
         t = _make_simple_transcript(["ciao"])
@@ -305,6 +305,18 @@ class TestReadCsv:
             {"tu_id": 1, "speaker": "Traduzione",   "start": 0, "end": 1, "duration": 1, "text": "hello"},
         ])
         cfg = {"tiers_to_extract": ["Traduzione"]}
+        t, trans = read_csv(p, cfg)
+        assert len(t._tu_by_id) == 1
+        assert len(trans) == 1
+        assert trans[0]["text"] == "hello"
+
+    def test_tiers_to_extract_suffixes_collected(self, tmp_path):
+        p = tmp_path / "conv.tsv"
+        self._write_csv(p, [
+            {"tu_id": 0, "speaker": "PSB033",       "start": 0, "end": 1, "duration": 1, "text": "ciao"},
+            {"tu_id": 1, "speaker": "PSB033_trad",  "start": 0, "end": 1, "duration": 1, "text": "hello"},
+        ])
+        cfg = {"tiers_to_extract_suffixes": ["_trad"]}
         t, trans = read_csv(p, cfg)
         assert len(t._tu_by_id) == 1
         assert len(trans) == 1

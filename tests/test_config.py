@@ -139,7 +139,7 @@ def test_load_config_straparlabo_clears_tiers_to_ignore():
 
 def test_load_config_straparlabo_extracts_traduzione():
     cfg = config.load_config("StraParlaBO", CONFIGS_DIR)
-    assert "Traduzione" in cfg["tiers_to_extract"]
+    assert "_trad" in cfg["tiers_to_extract_suffixes"]
 
 
 def test_load_config_straparlato_matches_straparlabo():
@@ -147,7 +147,7 @@ def test_load_config_straparlato_matches_straparlabo():
     to = config.load_config("StraParlaTO", CONFIGS_DIR)
     assert bo["variation_markers"] == to["variation_markers"]
     assert bo["tiers_to_ignore"] == to["tiers_to_ignore"]
-    assert bo["tiers_to_extract"] == to["tiers_to_extract"]
+    assert bo["tiers_to_extract_suffixes"] == to["tiers_to_extract_suffixes"]
 
 
 def test_load_config_parlabz_nvb_participates_true():

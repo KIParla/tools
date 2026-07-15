@@ -6,12 +6,15 @@ import collections
 import json
 import logging
 import pathlib
+import re
 
 import tqdm
 import yaml
 
 import args_check as ac
+import config as config_mod
 import serialize
+import tsv2tei
 import alignment as align_mod
 from data import Transcript, TranscriptionUnit
 
@@ -57,12 +60,47 @@ def _csv2eaf(args):
         if args.audio_dir:
             audio_fname = args.audio_dir / f"{basename}.wav"
 
+        translations_path = None
+        if args.translations_dir:
+            candidate = pathlib.Path(args.translations_dir) / f"{basename}.translations.json"
+            if candidate.is_file():
+                translations_path = candidate
+
         serialize.csv2eaf(filename, str(audio_fname), output_fname,
-                          args.delimiter, args.multiplier_factor, args.include_ids)
+                          args.delimiter, args.multiplier_factor, args.include_ids,
+                          translations_path=translations_path)
+
+
+def _vert2eaf(args):
+    input_files = list(args.input_dir.glob("*.vert.tsv")) if args.input_dir else list(args.input_files)
+
+    for filename in tqdm.tqdm(input_files, desc="vert2eaf"):
+        basename = filename.stem
+        if basename.endswith(".vert"):
+            basename = basename[:-5]
+
+        suffix = ".ids.eaf" if args.include_ids else ".eaf"
+        output_fname = args.output_dir / f"{basename}{suffix}"
+        audio_fname = f"{basename}.wav"
+        if args.audio_dir:
+            audio_fname = args.audio_dir / f"{basename}.wav"
+
+        translations_path = None
+        if args.translations_dir:
+            candidate = pathlib.Path(args.translations_dir) / f"{basename}.translations.json"
+            if candidate.is_file():
+                translations_path = candidate
+
+        serialize.vert2eaf(filename, str(audio_fname), output_fname,
+                           multiplier=args.multiplier_factor, include_ids=args.include_ids,
+                           translations_path=translations_path)
 
 
 def _process(args):
     input_files = list(args.input_dir.glob("*.csv")) if args.input_dir else list(args.input_files)
+
+    cfg = config_mod.load_config(args.module)
+    cfg.setdefault("overlaps", {})["duration_threshold"] = args.duration_threshold
 
     annotations = collections.defaultdict(dict)
     if args.units_annotations_dir:
@@ -71,25 +109,38 @@ def _process(args):
             if p.is_file():
                 annotations[f.stem] = serialize.load_annotations(p)
 
-    output_json = args.output_dir / "summary.json"
+    # By default, keep args.output_dir (typically <module>/tsv) containing
+    # only *.vert.tsv, and route everything else to sibling folders:
+    #   <module>/translations/          — <name>.translations.tsv/.json
+    #   <module>/tmp/process/json/      — <name>.json + summary.json
+    #   <module>/tmp/process/csv/       — <name>.csv (linear TU summary)
+    module_root = args.output_dir.parent
+    translations_dir = args.translations_dir or (module_root / "translations")
+    reports_dir = args.reports_dir or (module_root / "tmp" / "process" / "json")
+    csv_dir = args.csv_dir or (module_root / "tmp" / "process" / "csv")
+    csv_dir.mkdir(parents=True, exist_ok=True)
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    output_json = reports_dir / "summary.json"
     full_data = []
     transcripts = {}
 
     for filename in tqdm.tqdm(input_files, desc="process"):
         name = filename.stem
-        transcript = _process_transcript(filename, annotations[name],
-                                         duration_threshold=args.duration_threshold)
+        summary, transcript = serialize.process(
+            filename, args.output_dir, cfg=cfg,
+            annotations=annotations[name], return_transcript=True,
+            translations_dir=translations_dir, reports_dir=reports_dir,
+        )
         transcripts[name] = transcript
-
-        serialize.conversation_to_conll(transcript, args.output_dir / f"{name}.vert.tsv")
-        serialize.conversation_to_linear(transcript, args.output_dir / f"{name}.csv")
-        full_data.append(serialize.build_json(transcript))
+        full_data.append(summary)
+        serialize.conversation_to_linear(transcript, csv_dir / f"{name}.csv")
 
     with open(output_json, "w", encoding="utf-8") as jf:
         print(json.dumps(full_data, indent=2, ensure_ascii=False), file=jf)
 
     if args.produce_stats:
-        serialize.print_full_statistics(transcripts, args.output_dir / "stats.csv")
+        serialize.print_full_statistics(transcripts, reports_dir / "stats.csv")
 
 
 def _process_transcript(filename, annotations, duration_threshold=0.1,
@@ -103,10 +154,8 @@ def _process_transcript(filename, annotations, duration_threshold=0.1,
             itertools.combinations([int(x) for x in element.split()], 2)
         )
 
-    transcript = Transcript(filename.stem)
-    for tu_id, speaker, start, end, duration, annotation in serialize.read_csv(filename):
-        if speaker not in tiers_to_ignore:
-            transcript.add(TranscriptionUnit(tu_id, speaker, start, end, duration, annotation))
+    cfg = {"tiers_to_ignore": list(tiers_to_ignore)}
+    transcript, _translations = serialize.read_csv(filename, cfg=cfg)
 
     transcript.sort()
     transcript.find_overlaps(duration_threshold=duration_threshold)
@@ -175,6 +224,18 @@ def _conll2conllu(args):
         serialize.conll2conllu(filename, args.output_dir / filename.name)
 
 
+def _vert2tei(args):
+    input_files = list(args.input_dir.glob("*.vert.tsv")) if args.input_dir else list(args.input_files)
+    for filename in tqdm.tqdm(input_files, desc="vert2tei"):
+        stem = re.sub(r"\.vert$", "", filename.stem)
+        tsv2tei.vert2tei(
+            filename,
+            args.output_dir / f"{stem}.xml",
+            args.media_file,
+            pathlib.Path(args.metadata_dir) if args.metadata_dir else None,
+        )
+
+
 # ---------------------------------------------------------------------------
 # NLP commands (optional — require spacy_udpipe / wtpsplit)
 # ---------------------------------------------------------------------------
@@ -239,15 +300,43 @@ def main():
     p.add_argument("-d", "--delimiter", type=str, default="\t")
     p.add_argument("-m", "--multiplier-factor", type=int, default=1000)
     p.add_argument("--include-ids", action="store_true")
+    p.add_argument("--translations-dir", type=ac.valid_dirpath,
+                   help="directory containing <name>.translations.json files "
+                        "(from process -m <module>) to reattach as ref-annotations")
     _input_group(p)
     p.set_defaults(func=_csv2eaf)
 
+    # vert2eaf
+    p = sub.add_parser("vert2eaf", help="convert vert.tsv to EAF")
+    p.add_argument("-o", "--output-dir", default="output_eaf/", type=ac.valid_dirpath)
+    p.add_argument("-a", "--audio-dir", type=ac.valid_dirpath)
+    p.add_argument("-m", "--multiplier-factor", type=int, default=1000)
+    p.add_argument("--include-ids", action="store_true")
+    p.add_argument("--translations-dir", type=ac.valid_dirpath,
+                   help="directory containing <name>.translations.json files "
+                        "(from process -m <module>) to reattach as ref-annotations")
+    _input_group(p)
+    p.set_defaults(func=_vert2eaf)
+
     # process
     p = sub.add_parser("process", help="run full processing pipeline on transcripts")
-    p.add_argument("-o", "--output-dir", default="output/", type=ac.valid_dirpath)
+    p.add_argument("-o", "--output-dir", default="output/", type=ac.valid_dirpath,
+                   help="directory for *.vert.tsv output only")
+    p.add_argument("-m", "--module", default=None,
+                   help="module name for configs/<module>.yml (e.g. StraParlaBO); "
+                        "defaults to defaults.yml only")
     p.add_argument("-t", "--duration-threshold", type=float, default=0.1)
     p.add_argument("-s", "--produce-stats", action="store_true")
     p.add_argument("--units-annotations-dir", type=ac.valid_dirpath)
+    p.add_argument("--translations-dir", type=ac.valid_dirpath,
+                   help="directory for *.translations.tsv/.json. "
+                        "Default: <output-dir>/../translations")
+    p.add_argument("--reports-dir", type=ac.valid_dirpath,
+                   help="directory for per-file *.json + summary.json. "
+                        "Default: <output-dir>/../tmp/process/json")
+    p.add_argument("--csv-dir", type=ac.valid_dirpath,
+                   help="directory for the linear *.csv TU summary. "
+                        "Default: <output-dir>/../tmp/process/csv")
     _input_group(p)
     p.set_defaults(func=_process)
 
@@ -269,6 +358,16 @@ def main():
     p.add_argument("-o", "--output-dir", required=True, type=ac.valid_dirpath)
     _input_group(p)
     p.set_defaults(func=_conll2conllu)
+
+    # vert2tei
+    p = sub.add_parser("vert2tei", help="convert vert.tsv to TEI P5 XML (SpeechTEI / ISO 24624)")
+    p.add_argument("-o", "--output-dir", required=True, type=ac.valid_dirpath)
+    p.add_argument("--media-file", default=None,
+                   help="media filename for <media> header (default: corpus ID)")
+    p.add_argument("--metadata-dir", default=None,
+                   help="path to module metadata/ directory containing conversations.tsv and participants.tsv")
+    _input_group(p)
+    p.set_defaults(func=_vert2tei)
 
     # segment (optional NLP)
     p = sub.add_parser("segment", help="segment into maximal units (requires wtpsplit)")

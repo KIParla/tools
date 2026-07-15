@@ -314,6 +314,13 @@ def test_clean_non_jefferson_keeps_allowed():
     assert n == 0
     assert result == "ciao [come] {P} stai?"
 
+def test_clean_non_jefferson_keeps_doubtful_marker():
+    # '*' is half of the '#*word' doubtful-variation marker (tokens.py's
+    # hash_doubtful) and must survive normalization like '$'/'#' already do.
+    n, result = normalize.clean_non_jefferson_symbols("ciao #*word dopo")
+    assert n == 0
+    assert result == "ciao #*word dopo"
+
 
 # ---------------------------------------------------------------------------
 # replace_che / replace_po / replace_pero
@@ -441,6 +448,13 @@ def test_check_spaces_dots_trailing_space():
 def test_check_spaces_dots_multiple():
     assert normalize.check_spaces_dots("bla °bla bla ° bla ° bla bla°") == \
                                        (2, "bla °bla bla° bla °bla bla°")
+
+def test_check_spaces_dots_doubled_marker_does_not_crash():
+    # A doubled °° marker leaves an unpaired leading/trailing ° after
+    # re.split — must not be mistaken for a real °...° span (regression
+    # test for IndexError on the stray single-character segment).
+    subs, result = normalize.check_spaces_dots("°°xx  xx°° ciao")
+    assert result == "°°xx  xx°° ciao"
 
 def test_check_spaces_angular_slow_leading():
     assert normalize.check_spaces_angular("< ciao>") == (1, "<ciao>")

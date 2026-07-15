@@ -260,6 +260,38 @@ git commit -m "fix: transcription corrections from lemmatization of BOA1007"
 
 See the lemmatization-project documentation for the full workflow, including how to handle recap warnings.
 
+[[check_participants]]
+== `check_participants.py`
+
+Cross-checks each conversation's `metadata/conversations.tsv` `participants` list against the actual `speaker` values found in its `tsv/<code>.vert.tsv`, flags transcript speakers with no row in `metadata/participants.tsv`, and cross-checks `conversations.tsv` `participants` against `participants.tsv` `conversations` in both directions.
+
+Known non-participant placeholder tiers (`?`/`??`/`???`, `commenti`, `suoni`, `sottofondo`, `gruppo`, `video`, `trad_video`) are excluded so real mismatches aren't buried in noise.
+
+[source,bash]
+----
+python check_participants.py                          # auto-discover all modules
+python check_participants.py --modules ../KIP ../ParlaBO
+----
+
+Pass `--add-unknown-participant-column` to add/refresh an `unknown-participant` column in each module's `conversations.tsv`, `yes`/`no` depending on whether the conversation's transcript contains a placeholder speaker tier:
+
+[source,bash]
+----
+python check_participants.py --add-unknown-participant-column
+----
+
+[[generate_validation_report]]
+== `generate_validation_report.py`
+
+Builds the xref:validation-report.adoc[Validation report] page: combines `check_participants.py`'s metadata-consistency results with per-conversation pipeline warnings/errors (from each module's `tmp/process/json/summary.json`, produced by `cli.py process`) into one AsciiDoc table per module, sorted so files needing attention come first.
+
+[source,bash]
+----
+python generate_validation_report.py
+----
+
+Run it again (and commit the regenerated page) after reprocessing a module, to keep the report current.
+
 == Design note
 
 These scripts are intentionally lightweight and file-oriented.

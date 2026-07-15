@@ -50,6 +50,7 @@ CONVERSATIONS_COLS = [
     "topic",
     "year",
     "collection-point",
+    "unknown-participant",
 ]
 
 # Per-module column renames applied before selecting target columns.

@@ -7,10 +7,11 @@
 #   #*word → Variation=Doubtful  (probably Italian)
 #   #_ at start of TU → Variation=Unit  (all linguistic tokens are foreign variety)
 
-# Traduzione is a child tier here — extract to translations TSV, not ignored.
+# Translation tiers are per-speaker child tiers named "<speaker>_trad"
+# (e.g. "PST133_trad") — extract to translations TSV, not ignored.
 tiers_to_ignore: []
-tiers_to_extract:
-  - Traduzione
+tiers_to_extract_suffixes:
+  - _trad
 
 variation_markers:
   hash_token: true

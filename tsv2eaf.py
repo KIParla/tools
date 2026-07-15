@@ -1,3 +1,10 @@
+# DEPRECATED: superseded by `serialize.vert2eaf` / `cli.py vert2eaf`.
+# This script expects the historical `iu_id`/`iu_align` column names, which
+# no longer exist in the current `.vert.tsv` schema (`tu_id`/`align`), and it
+# has no knowledge of translations/*.translations.json (_trad tiers). It is
+# kept only for reference on old-format files; do not use it on current
+# pipeline output.
+
 import csv
 import sys
 import re

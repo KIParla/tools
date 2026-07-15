@@ -174,9 +174,15 @@ def overlap_prolongations(annotation: str) -> tuple[int, str]:
 
 
 def clean_non_jefferson_symbols(annotation: str) -> tuple[int, str]:
-    """Remove characters that are not part of the Jefferson transcription system."""
+    """Remove characters that are not part of the Jefferson transcription system.
+
+    ``*`` is kept alongside ``$``/``#``/``@`` because it's half of the ``#*word``
+    "doubtful variation" marker (tokens.py's ``hash_doubtful``); like ``$``/``#``,
+    it's always preserved here regardless of whether the module actually enables
+    that marker — interpretation is gated later, at tokenization.
+    """
     annotation, n = re.subn(
-        r"[^{}_,\?.:=°><\[\]\(\)\w\s'\-~$#@]",
+        r"[^{}_,\?.:=°><\[\]\(\)\w\s'\-~$#@*]",
         "",
         annotation,
     )
@@ -306,7 +312,10 @@ def check_spaces_dots(annotation: str) -> tuple[int, str]:
     segments = re.split(r"(°[^°]+°)", annotation)
     subs = 0
     for i, seg in enumerate(segments):
-        if not seg.startswith("°"):
+        # Only touch actual °...° matches (regex-guaranteed len >= 3);
+        # non-matched leftover text can also start with a stray/unpaired °
+        # (e.g. doubled °° markers), which must not be treated as a span.
+        if len(seg) < 3 or not seg.startswith("°") or not seg.endswith("°"):
             continue
         if seg[1] == " ":
             seg = seg[0] + seg[2:]
