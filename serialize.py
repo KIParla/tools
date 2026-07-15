@@ -260,6 +260,7 @@ def build_json(transcript: Transcript) -> dict:
         "WARNINGS": {},
         "ERRORS": {},
         "ERROR_DETAILS": [],
+        "ERROR_TOKENS": [],
     }
 
     for tu in transcript.transcription_units:
@@ -280,6 +281,16 @@ def build_json(transcript: Transcript) -> dict:
         spk["tokens-pause"]    = spk.get("tokens-pause", 0)    + sum(1 for t in tu.tokens if df.tokentype.shortpause     in t.token_type)
         spk["tokens-err"]      = spk.get("tokens-err", 0)      + sum(1 for t in tu.tokens if df.tokentype.error          in t.token_type)
         spk["code-switching"]  = spk.get("code-switching", 0)  + (1 if tu.non_ita != df.languagevariation.none else 0)
+
+        for tok in tu.tokens:
+            if df.tokentype.error in tok.token_type:
+                ret["ERROR_TOKENS"].append({
+                    "tu_id": tu.tu_id,
+                    "speaker": tu.speaker,
+                    "span": tu.annotation[tok.span[0]:tok.span[1]],
+                    "form": tok.form,
+                    "context": tu.annotation,
+                })
 
         for key, count in tu.warnings.items():
             ret["WARNINGS"][key] = ret["WARNINGS"].get(key, 0) + count

@@ -105,6 +105,7 @@ def build_rows(module_dir: Path) -> tuple[list[dict], bool]:
         errors = entry["ERRORS"] if entry else {}
         warnings = entry["WARNINGS"] if entry else {}
         error_details = entry.get("ERROR_DETAILS", []) if entry else []
+        error_tokens = entry.get("ERROR_TOKENS", []) if entry else []
         tokens_err = sum(s.get("tokens-err", 0) for s in entry["speakers"].values()) if entry else 0
         missing_transcript = meta_issues == ["no transcript found"]
 
@@ -114,6 +115,7 @@ def build_rows(module_dir: Path) -> tuple[list[dict], bool]:
             "metadata_issues": [] if missing_transcript else meta_issues,
             "errors": errors,
             "error_details": error_details,
+            "error_tokens": error_tokens,
             "warnings": warnings,
             "tokens_err": tokens_err,
             "has_pipeline_data": entry is not None,
@@ -122,9 +124,9 @@ def build_rows(module_dir: Path) -> tuple[list[dict], bool]:
     def _rank(r):
         if r["missing_transcript"]:
             return 0
-        if r["errors"] or r["metadata_issues"]:
+        if r["errors"] or r["metadata_issues"] or r["error_tokens"]:
             return 1
-        if r["warnings"] or r["tokens_err"]:
+        if r["warnings"]:
             return 2
         if not r["has_pipeline_data"]:
             return 3
@@ -240,7 +242,15 @@ def render_errors_page(module_reports: list[tuple[str, list[dict], bool]]) -> st
                 records.append({
                     "module": name, "code": r["code"], "kind": "error",
                     "rule": occ["rule"], "tuId": occ["tu_id"], "speaker": occ["speaker"],
-                    "text": occ["text"], "detail": None,
+                    "text": occ["text"], "span": None, "detail": None,
+                    "tsvUrl": tsv_url, "eafUrl": eaf_url,
+                })
+
+            for occ in r["error_tokens"]:
+                records.append({
+                    "module": name, "code": r["code"], "kind": "error",
+                    "rule": "TOKEN_TYPE_ERROR", "tuId": occ["tu_id"], "speaker": occ["speaker"],
+                    "text": occ["context"], "span": occ["span"], "detail": None,
                     "tsvUrl": tsv_url, "eafUrl": eaf_url,
                 })
 
@@ -256,12 +266,12 @@ def render_errors_page(module_reports: list[tuple[str, list[dict], bool]]) -> st
                   "to refresh this page.")
     lines.append("")
     lines.append("Only real problems: malformed Jefferson notation the pipeline couldn't "
-                  "auto-fix, a missing source recording, or a metadata cross-reference gap. "
-                  "One row per *occurrence* (not per file) — each transcription error shows "
-                  "the actual transcription-unit text it fired on, with the relevant Jefferson "
-                  "marker highlighted, so you can see exactly what to fix without opening the "
-                  "file first. For the pipeline's routine auto-fix diary, see "
-                  "xref:validation-log.adoc[Validation log].")
+                  "auto-fix, a word the tokenizer couldn't parse at all (`TOKEN_TYPE_ERROR`), "
+                  "a missing source recording, or a metadata cross-reference gap. One row per "
+                  "*occurrence* (not per file) — each shows the actual transcription-unit text "
+                  "it fired on, with the offending marker or word highlighted, so you can see "
+                  "exactly what to fix without opening the file first. For the pipeline's "
+                  "routine auto-fix diary, see xref:validation-log.adoc[Validation log].")
     lines.append("")
     lines.append("++++")
     lines.append(html)
@@ -400,13 +410,22 @@ table.vr-table tr:hover td { background: #f0f2fa; }
     return d.innerHTML;
   }
 
-  function highlight(text, chars) {
+  function highlightChars(text, chars) {
     var escaped = esc(text);
     if (!chars) return escaped;
     var set = chars.split("");
     return escaped.split("").map(function (ch) {
       return set.indexOf(ch) !== -1 ? "<mark>" + ch + "</mark>" : ch;
     }).join("");
+  }
+
+  // TOKEN_TYPE_ERROR: highlight the specific malformed word (r.span) inside
+  // its surrounding TU text (r.text), rather than a character set.
+  function highlightSpan(text, span) {
+    if (!span) return esc(text);
+    var idx = text.indexOf(span);
+    if (idx === -1) return esc(text);
+    return esc(text.slice(0, idx)) + "<mark>" + esc(span) + "</mark>" + esc(text.slice(idx + span.length));
   }
 
   function kindLabel(kind) {
@@ -416,8 +435,9 @@ table.vr-table tr:hover td { background: #f0f2fa; }
   function whatCell(r) {
     if (r.kind === "no-transcript") return "no transcript found for this conversation";
     if (r.kind === "metadata") return esc(r.detail);
+    var highlighted = r.span ? highlightSpan(r.text, r.span) : highlightChars(r.text, RULE_CHARS[r.rule]);
     var html = '<div class="vr-rule">' + esc(r.rule) + '</div>' +
-      '<div class="vr-text">' + highlight(r.text, RULE_CHARS[r.rule]) + '</div>';
+      '<div class="vr-text">' + highlighted + '</div>';
     if (r.tuId != null) {
       html += '<div class="vr-tuinfo">tu_id ' + esc(r.tuId) + (r.speaker ? " · " + esc(r.speaker) : "") + '</div>';
     }
@@ -484,7 +504,8 @@ def generate_report(
         module_reports.append((module_dir.name, rows, has_pipeline))
         if verbose:
             n_actionable = sum(1 for r in rows
-                                if r["missing_transcript"] or r["errors"] or r["metadata_issues"])
+                                if r["missing_transcript"] or r["errors"] or r["metadata_issues"]
+                                or r["error_tokens"])
             print(f"{module_dir.name}: {len(rows)} conversations, {n_actionable} need review")
 
     for output, render in ((log_output, render_log_adoc), (errors_output, render_errors_page)):
