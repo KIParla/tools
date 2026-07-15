@@ -283,14 +283,17 @@ python check_participants.py --add-unknown-participant-column
 [[generate_validation_report]]
 == `generate_validation_report.py`
 
-Builds the xref:validation-report.adoc[Validation report] page: combines `check_participants.py`'s metadata-consistency results with per-conversation pipeline warnings/errors (from each module's `tmp/process/json/summary.json`, produced by `cli.py process`) into one AsciiDoc table per module, sorted so files needing attention come first.
+Builds two pages, combining `check_participants.py`'s metadata-consistency results with per-conversation pipeline warnings/errors from each module's `tmp/process/json/summary.json` (produced by `cli.py process`):
+
+* xref:validation-log.adoc[Validation log] — every warning the pipeline auto-fixed, per conversation. Informational, not actionable.
+* xref:validation-errors.adoc[Validation errors] — an interactive, filterable table of only real errors, metadata gaps, and missing transcripts, with GitHub links to jump straight to each file. This is the "what needs fixing" list.
 
 [source,bash]
 ----
 python generate_validation_report.py
 ----
 
-Run it again (and commit the regenerated page) after reprocessing a module, to keep the report current.
+Run it again (and commit the regenerated pages) after reprocessing a module — or via `sync.py`, which calls this automatically — to keep both current.
 
 [[sync]]
 == `sync.py`

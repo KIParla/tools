@@ -3,5 +3,6 @@
 * xref:normalize.adoc[Normalization pipeline]
 * xref:testing.adoc[Testing]
 * xref:workflows.adoc[Workflows]
-* xref:validation-report.adoc[Validation report]
+* xref:validation-errors.adoc[Validation errors]
+* xref:validation-log.adoc[Validation log]
 * xref:changelog.adoc[Changelog]

@@ -20,11 +20,19 @@ Standalone scripts to handle and transform KIParla data.
   directions. Runs across all modules by default (auto-discovered), or pass
   `--modules <dir> ...`. Pass `--add-unknown-participant-column` to add/refresh an
   `unknown-participant` column (`yes`/`no`) in each module's `conversations.tsv`.
-- `generate_validation_report.py`: build the validation report page (`docs/modules/ROOT/pages/validation-report.adoc`,
-  published as part of the KIParla docs site) combining `check_participants.py`'s
-  metadata-consistency results with per-conversation pipeline warnings/errors from
-  each module's `tmp/process/json/summary.json`. Run again and commit after
-  reprocessing a module to keep the report current.
+- `generate_validation_report.py`: build two validation pages (published as part of the
+  KIParla docs site), combining `check_participants.py`'s metadata-consistency results
+  with per-conversation pipeline warnings/errors from each module's
+  `tmp/process/json/summary.json`:
+  - `docs/modules/ROOT/pages/validation-log.adoc`: a diary of every warning the pipeline
+    auto-fixed per conversation — informational, not actionable.
+  - `docs/modules/ROOT/pages/validation-errors.adoc`: an interactive, filterable table
+    (filter by module / issue type, search by code) of only real errors, metadata
+    cross-reference gaps, and missing transcripts — the actionable list, with GitHub
+    links (`dev` branch) to jump straight to each file's `vert.tsv`/`eaf`.
+
+  Run again (and commit) after reprocessing a module, or via `sync.py`, to keep both
+  pages current.
 - `sync.py`: one-shot, one-directional sync for a single edited file — run manually
   after opening/saving a `.eaf` in ELAN, or hand-editing a `.vert.tsv`:
   - `python sync.py --from-eaf <path/to/X.eaf>`: eaf2csv → process (updates

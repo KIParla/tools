@@ -87,7 +87,7 @@ def _refresh_validation_report(tools_dir: Path) -> None:
     modules = discover_modules(tools_dir.parent)
     if modules:
         generate_report(modules, verbose=False)
-        print("refreshed docs/modules/ROOT/pages/validation-report.adoc")
+        print("refreshed docs/modules/ROOT/pages/validation-log.adoc and validation-errors.adoc")
 
 
 def sync_from_eaf(eaf_path: Path, module_override: str | None) -> None:

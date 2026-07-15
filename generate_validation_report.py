@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-generate_validation_report.py — Build a per-conversation validation recap page.
+generate_validation_report.py — Build the two validation pages.
 
 Combines two data sources, across all auto-discovered KIParla modules:
 
@@ -10,13 +10,19 @@ Combines two data sources, across all auto-discovered KIParla modules:
   2. Pipeline warnings/errors (module/tmp/process/json/summary.json, produced
      by `cli.py process`): per-conversation counts from serialize.build_json.
 
-Writes an AsciiDoc page to tools/docs/modules/ROOT/pages/validation-report.adoc
-(published as part of the shared KIParla docs-site).
+Writes two AsciiDoc pages (published as part of the shared KIParla docs-site):
+
+  - docs/modules/ROOT/pages/validation-log.adoc: a diary of every WARNING the
+    pipeline auto-fixed per conversation. Informational, not actionable.
+  - docs/modules/ROOT/pages/validation-errors.adoc: an interactive, filterable
+    table of only real ERRORS, metadata-consistency gaps, and missing
+    transcripts -- the actionable "go fix this" list, with GitHub links
+    (dev branch) to jump straight to each file.
 
 Usage:
     python generate_validation_report.py
     python generate_validation_report.py --modules /path/to/KIP ...
-    python generate_validation_report.py -o custom/output.adoc
+    python generate_validation_report.py --log-output custom/log.adoc --errors-output custom/errors.adoc
 
 Note: pipeline warnings/errors are only available for a module if it has been
 run through `cli.py process` (module/tmp/process/json/summary.json present).
@@ -32,11 +38,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from check_participants import check_module, discover_modules
-
-# Warnings that reflect a real structural issue worth a human look, as
-# opposed to routine normalization counts (ACCENTS, NUMBERS, MULTIPLE_SPACES,
-# ...) which are auto-fixed and not actionable.
-STRUCTURAL_WARNINGS = {"MOVED_BOUNDARIES", "SWITCHES", "MISMATCHING_OVERLAPS", "EMPTY_SPANS"}
 
 
 def load_summary(module_dir: Path) -> dict[str, dict] | None:
@@ -70,7 +71,15 @@ def metadata_issues_for(code: str, check_result: dict) -> list[str]:
 
 
 def build_rows(module_dir: Path) -> tuple[list[dict], bool]:
-    """Return (rows, has_pipeline_data) for one module."""
+    """Return (rows, has_pipeline_data) for one module.
+
+    Each row separates two things that need different treatment downstream:
+      - `errors` / `metadata_issues` / `missing_transcript`: real problems
+        that need a human fix -- the actionable set (validation-errors.adoc).
+      - `warnings`: the *full* WARNINGS dict (every key, not just a curated
+        subset) -- the pipeline's auto-fix diary, informational only
+        (validation-log.adoc).
+    """
     check_result = check_module(module_dir)
     summary = load_summary(module_dir)
     has_pipeline_data = summary is not None
@@ -95,31 +104,31 @@ def build_rows(module_dir: Path) -> tuple[list[dict], bool]:
 
         errors = entry["ERRORS"] if entry else {}
         warnings = entry["WARNINGS"] if entry else {}
-        structural = {k: v for k, v in warnings.items() if k in STRUCTURAL_WARNINGS}
         tokens_err = sum(s.get("tokens-err", 0) for s in entry["speakers"].values()) if entry else 0
-
-        if meta_issues == ["no transcript found"]:
-            status = "no-transcript"
-        elif errors or meta_issues:
-            status = "error"
-        elif structural or tokens_err:
-            status = "warn"
-        elif entry is None:
-            status = "no-pipeline-data"
-        else:
-            status = "ok"
+        missing_transcript = meta_issues == ["no transcript found"]
 
         rows.append({
             "code": code,
-            "status": status,
-            "metadata_issues": meta_issues,
+            "missing_transcript": missing_transcript,
+            "metadata_issues": [] if missing_transcript else meta_issues,
             "errors": errors,
-            "structural_warnings": structural,
+            "warnings": warnings,
             "tokens_err": tokens_err,
+            "has_pipeline_data": entry is not None,
         })
 
-    _status_order = {"error": 0, "warn": 1, "no-transcript": 2, "no-pipeline-data": 3, "ok": 4}
-    rows.sort(key=lambda r: (_status_order[r["status"]], r["code"]))
+    def _rank(r):
+        if r["missing_transcript"]:
+            return 0
+        if r["errors"] or r["metadata_issues"]:
+            return 1
+        if r["warnings"] or r["tokens_err"]:
+            return 2
+        if not r["has_pipeline_data"]:
+            return 3
+        return 4
+
+    rows.sort(key=lambda r: (_rank(r), r["code"]))
     return rows, has_pipeline_data
 
 
@@ -129,44 +138,34 @@ def _fmt_counts(d: dict) -> str:
     return ", ".join(f"{k}:{v}" for k, v in sorted(d.items()))
 
 
-def _status_label(status: str) -> str:
-    return {
-        "error": "*ERROR*",
-        "warn": "WARN",
-        "no-transcript": "_no transcript_",
-        "no-pipeline-data": "_no pipeline data_",
-        "ok": "OK",
-    }[status]
+# ---------------------------------------------------------------------------
+# validation-log.adoc — the auto-fix diary (informational, not actionable)
+# ---------------------------------------------------------------------------
 
-
-def render_adoc(module_reports: list[tuple[str, list[dict], bool]]) -> str:
+def render_log_adoc(module_reports: list[tuple[str, list[dict], bool]]) -> str:
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     lines = []
-    lines.append("= Validation report")
+    lines.append("= Validation log")
     lines.append("")
     lines.append(f"Generated {now} by `tools/generate_validation_report.py`. "
                   "Regenerate after reprocessing a module to refresh this page.")
     lines.append("")
-    lines.append("Combines metadata consistency checks (`check_participants.py`) and "
-                  "pipeline warnings/errors (`cli.py process` summaries). Rows are sorted "
-                  "so files needing attention come first: *ERROR* (transcription or metadata "
-                  "problems needing a fix) > WARN (structural warnings worth a look) > "
-                  "no transcript / no pipeline data > OK.")
+    lines.append("A diary of every warning the pipeline auto-fixed while processing each "
+                  "conversation (accent corrections, number-to-words, boundary nudges on "
+                  "short overlaps, and so on) -- already resolved, not action items. "
+                  "Browse this if you're curious what happened to a file. "
+                  "For files that actually need a human fix, see "
+                  "xref:validation-errors.adoc[Validation errors].")
     lines.append("")
 
-    # Overview table
     lines.append("== Overview")
     lines.append("")
-    lines.append('[cols="1,1,1,1,1,1"]')
+    lines.append('[cols="1,1,1"]')
     lines.append("|===")
-    lines.append("|Module |Conversations |Error |Warn |No transcript |OK")
+    lines.append("|Module |Conversations |With warnings")
     for name, rows, _has_pipeline in module_reports:
-        counts = {"error": 0, "warn": 0, "no-transcript": 0, "no-pipeline-data": 0, "ok": 0}
-        for r in rows:
-            counts[r["status"]] += 1
-        ok_total = counts["ok"] + counts["no-pipeline-data"]
-        lines.append(f"|{name} |{len(rows)} |{counts['error']} |{counts['warn']} "
-                      f"|{counts['no-transcript']} |{ok_total}")
+        n_with = sum(1 for r in rows if r["warnings"] or r["tokens_err"])
+        lines.append(f"|{name} |{len(rows)} |{n_with}")
     lines.append("|===")
     lines.append("")
 
@@ -177,17 +176,16 @@ def render_adoc(module_reports: list[tuple[str, list[dict], bool]]) -> str:
         lines.append("")
         if not has_pipeline:
             lines.append("CAUTION: no `tmp/process/json/summary.json` found for this module — "
-                          "pipeline warnings/errors are unavailable; only metadata consistency "
-                          "is shown below.")
+                          "pipeline warnings are unavailable.")
             lines.append("")
-        lines.append('[cols="1,1,3,2,2,1"]')
+        lines.append('[cols="1,4,1"]')
         lines.append("|===")
-        lines.append("|Code |Status |Metadata issues |Errors |Structural warnings |Error tokens")
+        lines.append("|Code |Warnings |Error tokens")
         for r in rows:
-            meta = "<br>".join(r["metadata_issues"]) if r["metadata_issues"] else "_"
+            if not (r["warnings"] or r["tokens_err"]):
+                continue
             lines.append(
-                f"|{r['code']} |{_status_label(r['status'])} |{meta} "
-                f"|{_fmt_counts(r['errors'])} |{_fmt_counts(r['structural_warnings'])} "
+                f"|{r['code']} |{_fmt_counts(r['warnings'])} "
                 f"|{r['tokens_err'] if r['tokens_err'] else '_'}"
             )
         lines.append("|===")
@@ -196,44 +194,257 @@ def render_adoc(module_reports: list[tuple[str, list[dict], bool]]) -> str:
     return "\n".join(lines)
 
 
-DEFAULT_OUTPUT = Path(__file__).parent / "docs/modules/ROOT/pages/validation-report.adoc"
+# ---------------------------------------------------------------------------
+# validation-errors.adoc — the actionable, filterable list
+# ---------------------------------------------------------------------------
+
+def _gh_urls(module_name: str, code: str) -> tuple[str, str]:
+    base = f"https://github.com/KIParla/{module_name}/blob/dev"
+    return f"{base}/tsv/{code}.vert.tsv", f"{base}/eaf/{code}.eaf"
 
 
-def generate_report(modules: list[Path], output: Path = DEFAULT_OUTPUT, verbose: bool = True) -> Path:
-    """Build the validation report for *modules* and write it to *output*.
+def render_errors_page(module_reports: list[tuple[str, list[dict], bool]]) -> str:
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    records = []
+    for name, rows, _has_pipeline in module_reports:
+        for r in rows:
+            if not (r["missing_transcript"] or r["errors"] or r["metadata_issues"]):
+                continue
+            tags = []
+            if r["missing_transcript"]:
+                tags.append("no-transcript")
+            if r["metadata_issues"]:
+                tags.append("metadata")
+            tags.extend(f"error:{k}" for k in r["errors"])
+            tsv_url, eaf_url = _gh_urls(name, r["code"])
+            records.append({
+                "module": name,
+                "code": r["code"],
+                "tags": tags,
+                "errors": _fmt_counts(r["errors"]) if r["errors"] else None,
+                "metadata": "; ".join(r["metadata_issues"]) if r["metadata_issues"] else None,
+                "missingTranscript": r["missing_transcript"],
+                "tsvUrl": tsv_url,
+                "eafUrl": eaf_url,
+            })
+
+    data_json = json.dumps(records, ensure_ascii=False).replace("</", "<\\/")
+
+    html = _ERRORS_PAGE_TEMPLATE.replace("__DATA__", data_json)
+
+    lines = []
+    lines.append("= Validation errors")
+    lines.append("")
+    lines.append(f"Generated {now} by `tools/generate_validation_report.py`. "
+                  "Regenerate after reprocessing a module, or after `sync.py --from-eaf`, "
+                  "to refresh this page.")
+    lines.append("")
+    lines.append("Only conversations with a real problem: malformed Jefferson notation the "
+                  "pipeline couldn't auto-fix, a missing source recording, or a metadata "
+                  "cross-reference gap. For the pipeline's routine auto-fix diary, see "
+                  "xref:validation-log.adoc[Validation log].")
+    lines.append("")
+    lines.append("++++")
+    lines.append(html)
+    lines.append("++++")
+    lines.append("")
+    return "\n".join(lines)
+
+
+_ERRORS_PAGE_TEMPLATE = """
+<div class="vr">
+<style>
+.vr { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+.vr-controls { display: flex; flex-wrap: wrap; gap: 1.5rem; margin-bottom: 1rem; padding: 0.75rem 1rem;
+  border: 1px solid #d7dad4; border-radius: 6px; background: #f7f7f5; }
+.vr-group { display: flex; flex-direction: column; gap: 0.25rem; }
+.vr-group-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: #666; margin-bottom: 0.15rem; }
+.vr-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; max-width: 32rem; }
+.vr-chip { font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; border: 1px solid #c3c7be;
+  background: #fff; cursor: pointer; user-select: none; color: #333; }
+.vr-chip.active { background: #33477a; border-color: #33477a; color: #fff; }
+.vr-search { padding: 4px 8px; border: 1px solid #c3c7be; border-radius: 4px; font-size: 0.85rem; min-width: 12rem; }
+.vr-count { font-size: 0.85rem; color: #666; margin: 0.5rem 0; }
+.vr-table-wrap { overflow-x: auto; border: 1px solid #d7dad4; border-radius: 6px; }
+table.vr-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+table.vr-table th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: #666; padding: 8px 10px; border-bottom: 1px solid #c3c7be; white-space: nowrap; background: #f7f7f5; }
+table.vr-table td { padding: 6px 10px; border-bottom: 1px solid #e5e5e0; vertical-align: top; }
+table.vr-table tr:hover td { background: #f0f2fa; }
+.vr-code { font-family: "SF Mono", Consolas, monospace; font-weight: 600; }
+.vr-tag { display: inline-block; font-family: "SF Mono", Consolas, monospace; font-size: 0.72rem;
+  background: #f7f7f5; border: 1px solid #d7dad4; border-radius: 3px; padding: 1px 5px; margin: 1px 3px 1px 0; }
+.vr-links a { margin-right: 0.6rem; font-size: 0.8rem; white-space: nowrap; }
+.vr-empty { padding: 1.5rem; text-align: center; color: #888; }
+</style>
+
+<div class="vr-controls">
+  <div class="vr-group">
+    <span class="vr-group-label">Module</span>
+    <div class="vr-chips" id="vr-modules"></div>
+  </div>
+  <div class="vr-group">
+    <span class="vr-group-label">Issue type</span>
+    <div class="vr-chips" id="vr-tags"></div>
+  </div>
+  <div class="vr-group">
+    <span class="vr-group-label">Code contains</span>
+    <input class="vr-search" id="vr-search" type="text" placeholder="e.g. SBCA">
+  </div>
+</div>
+
+<p class="vr-count" id="vr-count"></p>
+<div class="vr-table-wrap">
+  <table class="vr-table">
+    <thead>
+      <tr><th>Module</th><th>Code</th><th>Errors</th><th>Metadata</th><th>Jump to file</th></tr>
+    </thead>
+    <tbody id="vr-body"></tbody>
+  </table>
+</div>
+
+<script>
+(function () {
+  var DATA = __DATA__;
+  var activeModules = new Set();
+  var activeTags = new Set();
+
+  var modules = Array.from(new Set(DATA.map(function (r) { return r.module; }))).sort();
+  var tags = Array.from(new Set(DATA.reduce(function (acc, r) { return acc.concat(r.tags); }, []))).sort();
+
+  function chip(label, active, onClick) {
+    var el = document.createElement("span");
+    el.className = "vr-chip" + (active ? " active" : "");
+    el.textContent = label;
+    el.addEventListener("click", onClick);
+    return el;
+  }
+
+  function renderChips() {
+    var modEl = document.getElementById("vr-modules");
+    modEl.innerHTML = "";
+    modules.forEach(function (m) {
+      modEl.appendChild(chip(m, activeModules.has(m), function () {
+        activeModules.has(m) ? activeModules.delete(m) : activeModules.add(m);
+        renderChips();
+        renderTable();
+      }));
+    });
+    var tagEl = document.getElementById("vr-tags");
+    tagEl.innerHTML = "";
+    tags.forEach(function (t) {
+      tagEl.appendChild(chip(t, activeTags.has(t), function () {
+        activeTags.has(t) ? activeTags.delete(t) : activeTags.add(t);
+        renderChips();
+        renderTable();
+      }));
+    });
+  }
+
+  function matches(r) {
+    if (activeModules.size && !activeModules.has(r.module)) return false;
+    if (activeTags.size && !r.tags.some(function (t) { return activeTags.has(t); })) return false;
+    var q = document.getElementById("vr-search").value.trim().toLowerCase();
+    if (q && r.code.toLowerCase().indexOf(q) === -1) return false;
+    return true;
+  }
+
+  function esc(s) {
+    var d = document.createElement("div");
+    d.textContent = s == null ? "" : s;
+    return d.innerHTML;
+  }
+
+  function renderTable() {
+    var rows = DATA.filter(matches);
+    document.getElementById("vr-count").textContent =
+      rows.length + " of " + DATA.length + " flagged conversation(s) shown";
+    var body = document.getElementById("vr-body");
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="5" class="vr-empty">No conversations match these filters.</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map(function (r) {
+      var errCell = r.missingTranscript
+        ? '<span class="vr-tag">no transcript found</span>'
+        : (r.errors ? r.errors.split(", ").map(function (e) {
+            return '<span class="vr-tag">' + esc(e) + '</span>';
+          }).join("") : "—");
+      var metaCell = r.metadata ? esc(r.metadata) : "—";
+      var links = r.missingTranscript ? "" :
+        '<a href="' + r.tsvUrl + '" target="_blank" rel="noopener">vert.tsv</a>' +
+        '<a href="' + r.eafUrl + '" target="_blank" rel="noopener">eaf</a>';
+      return "<tr>" +
+        "<td>" + esc(r.module) + "</td>" +
+        '<td class="vr-code">' + esc(r.code) + "</td>" +
+        "<td>" + errCell + "</td>" +
+        "<td>" + metaCell + "</td>" +
+        '<td class="vr-links">' + links + "</td>" +
+        "</tr>";
+    }).join("");
+  }
+
+  document.getElementById("vr-search").addEventListener("input", renderTable);
+  renderChips();
+  renderTable();
+})();
+</script>
+</div>
+"""
+
+
+_PAGES_DIR = Path(__file__).parent / "docs/modules/ROOT/pages"
+DEFAULT_LOG_OUTPUT = _PAGES_DIR / "validation-log.adoc"
+DEFAULT_ERRORS_OUTPUT = _PAGES_DIR / "validation-errors.adoc"
+
+
+def generate_report(
+    modules: list[Path],
+    log_output: Path = DEFAULT_LOG_OUTPUT,
+    errors_output: Path = DEFAULT_ERRORS_OUTPUT,
+    verbose: bool = True,
+) -> tuple[Path, Path]:
+    """Build both validation pages for *modules*. Returns (log_path, errors_path).
 
     Shared by ``main()`` (CLI) and ``sync.py`` (called after a single-file
-    sync, to keep the report current without a full module reprocess).
+    sync, to keep the pages current without a full module reprocess).
     """
     module_reports = []
     for module_dir in modules:
         rows, has_pipeline = build_rows(module_dir)
         module_reports.append((module_dir.name, rows, has_pipeline))
         if verbose:
-            n_needs_review = sum(1 for r in rows if r["status"] in ("error", "warn"))
-            print(f"{module_dir.name}: {len(rows)} conversations, {n_needs_review} need review")
+            n_actionable = sum(1 for r in rows
+                                if r["missing_transcript"] or r["errors"] or r["metadata_issues"])
+            print(f"{module_dir.name}: {len(rows)} conversations, {n_actionable} need review")
 
-    adoc = render_adoc(module_reports)
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(adoc, encoding="utf-8")
-    if verbose:
-        print(f"wrote {output}")
-    return output
+    for output, render in ((log_output, render_log_adoc), (errors_output, render_errors_page)):
+        adoc = render(module_reports)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(adoc, encoding="utf-8")
+        if verbose:
+            print(f"wrote {output}")
+
+    return log_output, errors_output
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--modules", nargs="+", type=Path,
                      help="Paths to module root directories. Default: auto-discover.")
-    ap.add_argument("-o", "--output", type=Path, default=DEFAULT_OUTPUT,
-                     help="Output .adoc path.")
+    ap.add_argument("--log-output", type=Path, default=DEFAULT_LOG_OUTPUT,
+                     help="Output path for the warnings diary page.")
+    ap.add_argument("--errors-output", type=Path, default=DEFAULT_ERRORS_OUTPUT,
+                     help="Output path for the filterable errors page.")
     args = ap.parse_args()
 
     modules = args.modules or discover_modules(Path(__file__).resolve().parent.parent)
     if not modules:
         raise SystemExit("No modules found.")
 
-    generate_report(modules, args.output)
+    generate_report(modules, args.log_output, args.errors_output)
 
 
 if __name__ == "__main__":
