@@ -14,6 +14,9 @@ dependencies = [
     "regex",
     "num2words",
     "speach",
+    "tqdm",
+    "sequence_align",
+    "networkx",
 ]
 
 [project.optional-dependencies]
