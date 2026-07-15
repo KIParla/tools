@@ -259,6 +259,7 @@ def build_json(transcript: Transcript) -> dict:
         "overlaps": 0,
         "WARNINGS": {},
         "ERRORS": {},
+        "ERROR_DETAILS": [],
     }
 
     for tu in transcript.transcription_units:
@@ -285,6 +286,12 @@ def build_json(transcript: Transcript) -> dict:
         for key, has_error in tu.errors.items():
             if has_error:
                 ret["ERRORS"][key] = ret["ERRORS"].get(key, 0) + 1
+                ret["ERROR_DETAILS"].append({
+                    "rule": key,
+                    "tu_id": tu.tu_id,
+                    "speaker": tu.speaker,
+                    "text": tu.annotation,
+                })
 
     ret["overlaps"] = len(transcript.overlap_events)
     return ret

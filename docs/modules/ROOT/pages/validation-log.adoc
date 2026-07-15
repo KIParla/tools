@@ -1,6 +1,6 @@
 = Validation log
 
-Generated 2026-07-15 16:02 UTC by `tools/generate_validation_report.py`. Regenerate after reprocessing a module to refresh this page.
+Generated 2026-07-15 16:20 UTC by `tools/generate_validation_report.py`. Regenerate after reprocessing a module to refresh this page.
 
 A diary of every warning the pipeline auto-fixed while processing each conversation (accent corrections, number-to-words, boundary nudges on short overlaps, and so on) -- already resolved, not action items. Browse this if you're curious what happened to a file. For files that actually need a human fix, see xref:validation-errors.adoc[Validation errors].
 

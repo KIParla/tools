@@ -104,6 +104,7 @@ def build_rows(module_dir: Path) -> tuple[list[dict], bool]:
 
         errors = entry["ERRORS"] if entry else {}
         warnings = entry["WARNINGS"] if entry else {}
+        error_details = entry.get("ERROR_DETAILS", []) if entry else []
         tokens_err = sum(s.get("tokens-err", 0) for s in entry["speakers"].values()) if entry else 0
         missing_transcript = meta_issues == ["no transcript found"]
 
@@ -112,6 +113,7 @@ def build_rows(module_dir: Path) -> tuple[list[dict], bool]:
             "missing_transcript": missing_transcript,
             "metadata_issues": [] if missing_transcript else meta_issues,
             "errors": errors,
+            "error_details": error_details,
             "warnings": warnings,
             "tokens_err": tokens_err,
             "has_pipeline_data": entry is not None,
@@ -204,6 +206,10 @@ def _gh_urls(module_name: str, code: str) -> tuple[str, str]:
 
 
 def render_errors_page(module_reports: list[tuple[str, list[dict], bool]]) -> str:
+    """Build validation-errors.adoc. One record per *occurrence*, not per
+    conversation: each real error carries the actual TU text it fired on
+    (tu_id, speaker, text), so the offending span is visible right in the
+    page instead of just a rule-name count."""
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     records = []
@@ -211,23 +217,32 @@ def render_errors_page(module_reports: list[tuple[str, list[dict], bool]]) -> st
         for r in rows:
             if not (r["missing_transcript"] or r["errors"] or r["metadata_issues"]):
                 continue
-            tags = []
-            if r["missing_transcript"]:
-                tags.append("no-transcript")
-            if r["metadata_issues"]:
-                tags.append("metadata")
-            tags.extend(f"error:{k}" for k in r["errors"])
             tsv_url, eaf_url = _gh_urls(name, r["code"])
-            records.append({
-                "module": name,
-                "code": r["code"],
-                "tags": tags,
-                "errors": _fmt_counts(r["errors"]) if r["errors"] else None,
-                "metadata": "; ".join(r["metadata_issues"]) if r["metadata_issues"] else None,
-                "missingTranscript": r["missing_transcript"],
-                "tsvUrl": tsv_url,
-                "eafUrl": eaf_url,
-            })
+
+            if r["missing_transcript"]:
+                records.append({
+                    "module": name, "code": r["code"], "kind": "no-transcript",
+                    "rule": None, "tuId": None, "speaker": None, "text": None,
+                    "detail": "no transcript found for this conversation",
+                    "tsvUrl": None, "eafUrl": None,
+                })
+                continue
+
+            for issue in r["metadata_issues"]:
+                records.append({
+                    "module": name, "code": r["code"], "kind": "metadata",
+                    "rule": None, "tuId": None, "speaker": None, "text": None,
+                    "detail": issue,
+                    "tsvUrl": tsv_url, "eafUrl": eaf_url,
+                })
+
+            for occ in r["error_details"]:
+                records.append({
+                    "module": name, "code": r["code"], "kind": "error",
+                    "rule": occ["rule"], "tuId": occ["tu_id"], "speaker": occ["speaker"],
+                    "text": occ["text"], "detail": None,
+                    "tsvUrl": tsv_url, "eafUrl": eaf_url,
+                })
 
     data_json = json.dumps(records, ensure_ascii=False).replace("</", "<\\/")
 
@@ -240,9 +255,12 @@ def render_errors_page(module_reports: list[tuple[str, list[dict], bool]]) -> st
                   "Regenerate after reprocessing a module, or after `sync.py --from-eaf`, "
                   "to refresh this page.")
     lines.append("")
-    lines.append("Only conversations with a real problem: malformed Jefferson notation the "
-                  "pipeline couldn't auto-fix, a missing source recording, or a metadata "
-                  "cross-reference gap. For the pipeline's routine auto-fix diary, see "
+    lines.append("Only real problems: malformed Jefferson notation the pipeline couldn't "
+                  "auto-fix, a missing source recording, or a metadata cross-reference gap. "
+                  "One row per *occurrence* (not per file) — each transcription error shows "
+                  "the actual transcription-unit text it fired on, with the relevant Jefferson "
+                  "marker highlighted, so you can see exactly what to fix without opening the "
+                  "file first. For the pipeline's routine auto-fix diary, see "
                   "xref:validation-log.adoc[Validation log].")
     lines.append("")
     lines.append("++++")
@@ -261,7 +279,7 @@ _ERRORS_PAGE_TEMPLATE = """
 .vr-group { display: flex; flex-direction: column; gap: 0.25rem; }
 .vr-group-label { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
   color: #666; margin-bottom: 0.15rem; }
-.vr-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; max-width: 32rem; }
+.vr-chips { display: flex; flex-wrap: wrap; gap: 0.3rem; max-width: 34rem; }
 .vr-chip { font-size: 0.78rem; padding: 2px 8px; border-radius: 999px; border: 1px solid #c3c7be;
   background: #fff; cursor: pointer; user-select: none; color: #333; }
 .vr-chip.active { background: #33477a; border-color: #33477a; color: #fff; }
@@ -273,10 +291,17 @@ table.vr-table th { text-align: left; font-size: 0.72rem; text-transform: upperc
   color: #666; padding: 8px 10px; border-bottom: 1px solid #c3c7be; white-space: nowrap; background: #f7f7f5; }
 table.vr-table td { padding: 6px 10px; border-bottom: 1px solid #e5e5e0; vertical-align: top; }
 table.vr-table tr:hover td { background: #f0f2fa; }
-.vr-code { font-family: "SF Mono", Consolas, monospace; font-weight: 600; }
-.vr-tag { display: inline-block; font-family: "SF Mono", Consolas, monospace; font-size: 0.72rem;
-  background: #f7f7f5; border: 1px solid #d7dad4; border-radius: 3px; padding: 1px 5px; margin: 1px 3px 1px 0; }
-.vr-links a { margin-right: 0.6rem; font-size: 0.8rem; white-space: nowrap; }
+.vr-code { font-family: "SF Mono", Consolas, monospace; font-weight: 600; white-space: nowrap; }
+.vr-kind { display: inline-block; font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; }
+.vr-kind-error { background: #f6e6e4; color: #a5342f; }
+.vr-kind-metadata { background: #f6ecd7; color: #8a641a; }
+.vr-kind-no-transcript { background: #ece9f4; color: #4a3f8a; }
+.vr-rule { font-family: "SF Mono", Consolas, monospace; font-size: 0.72rem; color: #555; }
+.vr-text { font-family: "SF Mono", Consolas, monospace; font-size: 0.82rem; white-space: pre-wrap;
+  word-break: break-word; }
+.vr-text mark { background: #ffe27a; color: #1a1a1a; border-radius: 2px; padding: 0 1px; font-weight: 700; }
+.vr-tuinfo { font-size: 0.72rem; color: #888; margin-top: 2px; }
+.vr-links a { display: block; font-size: 0.8rem; white-space: nowrap; }
 .vr-empty { padding: 1.5rem; text-align: center; color: #888; }
 </style>
 
@@ -287,7 +312,11 @@ table.vr-table tr:hover td { background: #f0f2fa; }
   </div>
   <div class="vr-group">
     <span class="vr-group-label">Issue type</span>
-    <div class="vr-chips" id="vr-tags"></div>
+    <div class="vr-chips" id="vr-kinds"></div>
+  </div>
+  <div class="vr-group">
+    <span class="vr-group-label">Rule</span>
+    <div class="vr-chips" id="vr-rules"></div>
   </div>
   <div class="vr-group">
     <span class="vr-group-label">Code contains</span>
@@ -299,7 +328,7 @@ table.vr-table tr:hover td { background: #f0f2fa; }
 <div class="vr-table-wrap">
   <table class="vr-table">
     <thead>
-      <tr><th>Module</th><th>Code</th><th>Errors</th><th>Metadata</th><th>Jump to file</th></tr>
+      <tr><th>Module</th><th>Code</th><th>Type</th><th>What's wrong</th><th>Jump to file</th></tr>
     </thead>
     <tbody id="vr-body"></tbody>
   </table>
@@ -308,11 +337,27 @@ table.vr-table tr:hover td { background: #f0f2fa; }
 <script>
 (function () {
   var DATA = __DATA__;
+
+  // Which Jefferson marker to highlight for each error rule, so the
+  // imbalance is visible at a glance in the raw TU text.
+  var RULE_CHARS = {
+    "UNBALANCED_DOTS": "\\u00b0",
+    "UNBALANCED_PACE": "<>",
+    "UNBALANCED_GUESS": "()",
+    "UNBALANCED_OVERLAP": "[]",
+    "MISMATCHING_OVERLAPS": "[]",
+    "OVERLAPS:MISSING_ANNOTATION": "[]",
+    "OVERLAPS:MISSING_TIME": "[]"
+  };
+
   var activeModules = new Set();
-  var activeTags = new Set();
+  var activeKinds = new Set();
+  var activeRules = new Set();
 
   var modules = Array.from(new Set(DATA.map(function (r) { return r.module; }))).sort();
-  var tags = Array.from(new Set(DATA.reduce(function (acc, r) { return acc.concat(r.tags); }, []))).sort();
+  var kinds = Array.from(new Set(DATA.map(function (r) { return r.kind; }))).sort();
+  var rules = Array.from(new Set(DATA.filter(function (r) { return r.rule; })
+    .map(function (r) { return r.rule; }))).sort();
 
   function chip(label, active, onClick) {
     var el = document.createElement("span");
@@ -322,30 +367,28 @@ table.vr-table tr:hover td { background: #f0f2fa; }
     return el;
   }
 
-  function renderChips() {
-    var modEl = document.getElementById("vr-modules");
-    modEl.innerHTML = "";
-    modules.forEach(function (m) {
-      modEl.appendChild(chip(m, activeModules.has(m), function () {
-        activeModules.has(m) ? activeModules.delete(m) : activeModules.add(m);
-        renderChips();
-        renderTable();
-      }));
-    });
-    var tagEl = document.getElementById("vr-tags");
-    tagEl.innerHTML = "";
-    tags.forEach(function (t) {
-      tagEl.appendChild(chip(t, activeTags.has(t), function () {
-        activeTags.has(t) ? activeTags.delete(t) : activeTags.add(t);
+  function renderChipGroup(containerId, values, activeSet) {
+    var el = document.getElementById(containerId);
+    el.innerHTML = "";
+    values.forEach(function (v) {
+      el.appendChild(chip(v, activeSet.has(v), function () {
+        activeSet.has(v) ? activeSet.delete(v) : activeSet.add(v);
         renderChips();
         renderTable();
       }));
     });
   }
 
+  function renderChips() {
+    renderChipGroup("vr-modules", modules, activeModules);
+    renderChipGroup("vr-kinds", kinds, activeKinds);
+    renderChipGroup("vr-rules", rules, activeRules);
+  }
+
   function matches(r) {
     if (activeModules.size && !activeModules.has(r.module)) return false;
-    if (activeTags.size && !r.tags.some(function (t) { return activeTags.has(t); })) return false;
+    if (activeKinds.size && !activeKinds.has(r.kind)) return false;
+    if (activeRules.size && !activeRules.has(r.rule)) return false;
     var q = document.getElementById("vr-search").value.trim().toLowerCase();
     if (q && r.code.toLowerCase().indexOf(q) === -1) return false;
     return true;
@@ -357,30 +400,54 @@ table.vr-table tr:hover td { background: #f0f2fa; }
     return d.innerHTML;
   }
 
+  function highlight(text, chars) {
+    var escaped = esc(text);
+    if (!chars) return escaped;
+    var set = chars.split("");
+    return escaped.split("").map(function (ch) {
+      return set.indexOf(ch) !== -1 ? "<mark>" + ch + "</mark>" : ch;
+    }).join("");
+  }
+
+  function kindLabel(kind) {
+    return { "error": "Error", "metadata": "Metadata", "no-transcript": "No transcript" }[kind] || kind;
+  }
+
+  function whatCell(r) {
+    if (r.kind === "no-transcript") return "no transcript found for this conversation";
+    if (r.kind === "metadata") return esc(r.detail);
+    var html = '<div class="vr-rule">' + esc(r.rule) + '</div>' +
+      '<div class="vr-text">' + highlight(r.text, RULE_CHARS[r.rule]) + '</div>';
+    if (r.tuId != null) {
+      html += '<div class="vr-tuinfo">tu_id ' + esc(r.tuId) + (r.speaker ? " · " + esc(r.speaker) : "") + '</div>';
+    }
+    return html;
+  }
+
+  var RENDER_CAP = 500;
+
   function renderTable() {
-    var rows = DATA.filter(matches);
-    document.getElementById("vr-count").textContent =
-      rows.length + " of " + DATA.length + " flagged conversation(s) shown";
+    var matched = DATA.filter(matches);
+    var rows = matched.slice(0, RENDER_CAP);
+    var countText = matched.length + " of " + DATA.length + " issue(s) match";
+    if (matched.length > RENDER_CAP) {
+      countText += " — showing the first " + RENDER_CAP + "; narrow the filters to see the rest";
+    }
+    document.getElementById("vr-count").textContent = countText;
     var body = document.getElementById("vr-body");
     if (!rows.length) {
-      body.innerHTML = '<tr><td colspan="5" class="vr-empty">No conversations match these filters.</td></tr>';
+      body.innerHTML = '<tr><td colspan="5" class="vr-empty">No issues match these filters.</td></tr>';
       return;
     }
     body.innerHTML = rows.map(function (r) {
-      var errCell = r.missingTranscript
-        ? '<span class="vr-tag">no transcript found</span>'
-        : (r.errors ? r.errors.split(", ").map(function (e) {
-            return '<span class="vr-tag">' + esc(e) + '</span>';
-          }).join("") : "—");
-      var metaCell = r.metadata ? esc(r.metadata) : "—";
-      var links = r.missingTranscript ? "" :
+      var links = r.tsvUrl ?
         '<a href="' + r.tsvUrl + '" target="_blank" rel="noopener">vert.tsv</a>' +
-        '<a href="' + r.eafUrl + '" target="_blank" rel="noopener">eaf</a>';
+        '<a href="' + r.eafUrl + '" target="_blank" rel="noopener">eaf</a>' : "";
       return "<tr>" +
         "<td>" + esc(r.module) + "</td>" +
         '<td class="vr-code">' + esc(r.code) + "</td>" +
-        "<td>" + errCell + "</td>" +
-        "<td>" + metaCell + "</td>" +
+        '<td><span class="vr-kind vr-kind-' + r.kind + '">' + kindLabel(r.kind) + "</span></td>" +
+        "<td>" + whatCell(r) + "</td>" +
         '<td class="vr-links">' + links + "</td>" +
         "</tr>";
     }).join("");
