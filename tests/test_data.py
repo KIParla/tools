@@ -30,9 +30,9 @@ class TestPreprocess:
         tu = TranscriptionUnit(0, "S", 0, 1, 1, "#_ foreign word")
         assert tu.include  # normalization skipped, so empty-unit check doesn't apply
 
-    def test_non_ita_some_sets_flag_and_strips_prefix(self):
+    def test_non_ita_unspecified_sets_flag_and_strips_prefix(self):
         tu = TranscriptionUnit(0, "S", 0, 1, 1, "# hola che bella")
-        assert tu.non_ita == df.languagevariation.some
+        assert tu.non_ita == df.languagevariation.unspecified
         assert not tu.annotation.startswith("# ")
 
     def test_warnings_accumulated(self):
@@ -122,6 +122,24 @@ class TestTokenize:
         tu.tokenize()
         # No #-tokens here — non_ita stays none.
         assert tu.non_ita == df.languagevariation.none
+
+    def test_non_ita_yes_derived_from_token_marker(self):
+        """No TU-level '# ' prefix; a per-token #word marker alone derives
+        `yes`, not `unspecified` — these must stay distinguishable so
+        vert2eaf knows whether to reconstruct a '# ' prefix."""
+        tu = TranscriptionUnit(0, "S", 0, 1, 1, "ciao #come stai",
+                               cfg={"variation_markers": {"hash_token": True}})
+        tu.tokenize()
+        assert tu.non_ita == df.languagevariation.yes
+
+    def test_non_ita_unspecified_survives_tokenize(self):
+        """An explicit TU-level '# ' prefix stays `unspecified` through
+        tokenize(), even though no individual token ends up non_ita."""
+        tu = TranscriptionUnit(0, "S", 0, 1, 1, "# ciao come stai",
+                               cfg={"variation_markers": {"hash_token": True}})
+        tu.tokenize()
+        assert tu.non_ita == df.languagevariation.unspecified
+        assert not any(t.non_ita for t in tu.tokens)
 
     def test_position_flags_set(self):
         tu = TranscriptionUnit(0, "S", 0, 1, 1, "uno due tre")

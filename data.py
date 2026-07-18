@@ -93,7 +93,7 @@ class TranscriptionUnit:
             return
 
         if self.annotation.startswith("# "):
-            self.non_ita = df.languagevariation.some
+            self.non_ita = df.languagevariation.unspecified
             self.annotation = self.annotation[1:].strip()
 
         # 2c–2g. Normalize, error-check, conditional fixes, symbol corrections.
@@ -173,13 +173,18 @@ class TranscriptionUnit:
             variation_context=self.non_ita,
             cfg_variation=cfg.get("variation_markers", {}),
         )
-        # Update TU-level non_ita based on token-level flags.
+        # Update TU-level non_ita based on token-level flags. `unspecified`
+        # (explicit TU-level "# " prefix, set in step 2b) is never downgraded
+        # here — it must survive independently of per-token marks so
+        # vert2eaf can tell it apart from `yes` (see vert_to_linear_rows).
         has_non_ita = any(t.non_ita for t in self.tokens)
         all_non_ita = bool(self.tokens) and all(t.non_ita for t in self.tokens)
         if all_non_ita:
             self.non_ita = df.languagevariation.all
+        elif self.non_ita == df.languagevariation.unspecified:
+            pass
         elif has_non_ita:
-            self.non_ita = df.languagevariation.some
+            self.non_ita = df.languagevariation.yes
 
     # ------------------------------------------------------------------
     # Step 7 — Map span features to tokens

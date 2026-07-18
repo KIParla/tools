@@ -20,7 +20,7 @@ def test_tokentype_warning_distinct_from_error():
 
 
 def test_languagevariation_all_values():
-    for name in ("none", "some", "all"):
+    for name in ("none", "yes", "unspecified", "all"):
         assert hasattr(df.languagevariation, name)
 
 

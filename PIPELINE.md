@@ -89,11 +89,20 @@ in all downstream steps.
 
 | prefix | meaning                        | action                        |
 |--------|--------------------------------|-------------------------------|
-| `# `   | some tokens are non-Italian    | strip prefix, set `non_ita=some` |
+| `# `   | some tokens are non-Italian, unspecified which | strip prefix, set `non_ita=unspecified` |
 | `#_`   | entire TU is non-Italian       | strip prefix, set `non_ita=all`, **return early** (no further normalization) |
 
 When `non_ita=all` the annotation is not normalized and tokenization assigns
 `Language=NO_ISO_CODE` to every token.
+
+`non_ita=unspecified` (step 2b) and `non_ita=yes` (derived bottom-up in step 5e from
+individually-`#`/`$`/`#*`-marked tokens) are tracked as distinct `languagevariation`
+values, not merged — `unspecified` is never downgraded to `yes` by step 5e, even if the
+TU happens to also contain individually-marked tokens. This distinction is what lets
+`vert2eaf` losslessly reconstruct the `"# "` prefix only when it was actually present in
+the source (see `serialize.vert_to_linear_rows`): `unspecified` means "there's no other
+record of this marker, reconstruct the prefix"; `yes` means "each contributing token
+already carries its own marker in `span`, reconstructing the prefix would duplicate it."
 
 ### 2c. Normalization (warning) rules
 
@@ -133,8 +142,8 @@ The prefix is stripped during tokenization and a `Variation=` label is written t
 | `#*word` | token | `Variation=Doubtful` | StraParlaBO, StraParlaTO |
 
 The dataflags enum `tokenvariation` carries `token`, `emerging`, `doubtful` values.
-TU-level variation (`languagevariation.some` / `.all`) maps to `Variation=Unit` in the
-`variation` output column.
+TU-level variation (`languagevariation.yes` / `.unspecified` / `.all`) is rendered as-is
+(`tu.non_ita.name`) in the `variation` output column.
 
 ### 2d. Error checks
 
@@ -280,8 +289,9 @@ the token list. Assigned in a post-tokenization pass over the token sequence.
 ### 5e. Post-tokenize: language variation
 
 If the TU was marked `non_ita=all` in step 2b, every token gets `Language=NO_ISO_CODE`.
-Otherwise, `non_ita` on the TU is updated to `some` / `all` based on how many tokens
-carry the `non_ita` flag.
+Otherwise, `non_ita` on the TU is updated to `all` (every token carries the `non_ita`
+flag) or `yes` (some do) — unless it's already `unspecified` (explicit TU-level `"# "`
+prefix from step 2b), which is preserved rather than downgraded to `yes`.
 
 ---
 

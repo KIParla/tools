@@ -31,7 +31,11 @@ class tokentype(Flag):
 
 class languagevariation(Flag):
     none = auto()
-    some = auto()
+    # Derived bottom-up: some individually-#/$/#*-marked tokens are present.
+    yes = auto()
+    # Explicit TU-level "# " prefix, no per-token attribution — distinct from
+    # `yes` so vert2eaf knows whether to reconstruct the "# " prefix.
+    unspecified = auto()
     all = auto()
 
 

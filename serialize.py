@@ -522,15 +522,12 @@ def vert_to_linear_rows(vert_path) -> list[dict]:
     special handling: they are preserved verbatim in each token's ``span``
     (stripped only from ``form`` during tokenization, never from ``span``).
 
-    TU-level variation is only reconstructed for ``variation=all`` (prepends
-    ``"#_ "``). ``variation=some`` is deliberately NOT re-prefixed with
-    ``"# "``: vert.tsv cannot distinguish an explicit TU-level ``"# "``
-    marker (used when individual non-Italian tokens aren't decidable) from
-    ``some`` arising purely because individually-marked tokens are present
-    (already correctly reconstructed via their own ``span``). Synthesizing
-    ``"# "`` in the latter case would duplicate the marker; never adding it
-    loses the marker in the former case. This is a documented, tested,
-    accepted limitation — see tests/test_vert2eaf.py.
+    TU-level variation is reconstructed for ``variation=all`` (prepends
+    ``"#_ "``) and ``variation=unspecified`` (prepends ``"# "``) — the
+    explicit TU-level marker used when individual non-Italian tokens aren't
+    decidable. ``variation=yes`` (derived bottom-up from individually-marked
+    tokens) is never re-prefixed: those tokens already carry their own
+    marker in ``span``, so adding "# " would duplicate it.
     """
     vert_path = Path(vert_path)
     rows: list[dict] = []
@@ -554,7 +551,9 @@ def vert_to_linear_rows(vert_path) -> list[dict]:
                     text_parts.append(" ")
             text = "".join(text_parts)
 
-            if variation == "all":
+            if variation == "unspecified":
+                text = "# " + text
+            elif variation == "all":
                 text = "#_ " + text
 
             m_start = _BEGIN_RE.search(tok_rows[0].get("align", "") or "")
@@ -740,13 +739,17 @@ def conversation_to_linear(transcript, output_filename, sep="\t"):
             if not tu.include:
                 continue
             variation = "_"
-            if df.languagevariation.some in tu.non_ita or df.languagevariation.all in tu.non_ita:
+            if tu.non_ita != df.languagevariation.none:
                 variation = tu.non_ita.name
 
             text = tu.annotation
             orthographic = " ".join(tok.form for tok in tu.tokens)
 
-            if df.languagevariation.some in tu.non_ita:
+            # Only `unspecified` (explicit TU-level "# " prefix) re-adds the
+            # marker text — `yes` (derived bottom-up from individually-marked
+            # tokens) already has each marker preserved in its own token span,
+            # so re-adding "# " here would duplicate it.
+            if df.languagevariation.unspecified in tu.non_ita:
                 text = "# " + text
             if df.languagevariation.all in tu.non_ita:
                 text = "#_ " + text

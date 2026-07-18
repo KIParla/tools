@@ -1,8 +1,10 @@
 """Tests for vert.tsv -> eaf reconstruction (serialize.vert_to_linear_rows / vert2eaf).
 
-See tools/README.md and the docstring of vert_to_linear_rows for the one
-documented, accepted lossy case: TU-level "# " (some, undecidable
-attribution) variation markers are not reconstructed.
+TU-level "# " (variation=unspecified) and "#_" (variation=all) markers both
+round-trip losslessly — see the docstring of vert_to_linear_rows. This relies
+on `unspecified` (explicit TU-level marker) and `yes` (derived bottom-up from
+individually-marked tokens) being tracked as distinct languagevariation
+values; collapsing them back into one would reintroduce the ambiguity.
 """
 
 import json
@@ -90,16 +92,24 @@ class TestVertToLinearRows:
         rows = vert_to_linear_rows(vert)
         assert rows[0]["text"].startswith("#_ ")
 
-    def test_tu_level_some_prefix_not_reconstructed(self, tmp_path):
-        """Documented lossy case: TU-level '# ' (undecidable attribution),
-        with no individually-marked tokens, cannot be distinguished from
-        `some` arising purely from token-level marks, so it's not
-        reconstructed. See vert_to_linear_rows docstring."""
+    def test_tu_level_unspecified_prefix_reconstructed(self, tmp_path):
+        """Explicit TU-level '# ' (undecidable attribution, no individually-
+        marked tokens) round-trips: variation=unspecified tells vert2eaf to
+        reconstruct the prefix."""
         t = _make_transcript(["# ciao come stai"])
         vert = _write_vert(t, tmp_path)
         rows = vert_to_linear_rows(vert)
-        assert not rows[0]["text"].startswith("#")
-        assert rows[0]["text"] == "ciao come stai"
+        assert rows[0]["text"] == "# ciao come stai"
+
+    def test_tu_level_yes_not_re_prefixed(self, tmp_path):
+        """A TU with no explicit '# ' prefix, only an individually-marked
+        token, must NOT get a synthesized '# ' prefix on reconstruction —
+        the marker already round-trips via the token's own span."""
+        t = _make_transcript(["ciao #word dopo"])
+        vert = _write_vert(t, tmp_path)
+        rows = vert_to_linear_rows(vert)
+        assert rows[0]["text"] == "ciao #word dopo"
+        assert not rows[0]["text"].startswith("# ")
 
     def test_begin_end_round_trip(self, tmp_path):
         t = _make_transcript(["ciao come stai."])

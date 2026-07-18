@@ -184,7 +184,7 @@ class TestConversationToConll:
         out = tmp_path / "test.vert.tsv"
         conversation_to_conll(t, out)
         rows = _read_vert(out)
-        assert rows[0]["variation"] == "some"
+        assert rows[0]["variation"] == "unspecified"
 
     def test_lemma_upos_xpos_feats_deprel_are_underscore(self, tmp_path):
         t = _make_simple_transcript(["ciao"])
