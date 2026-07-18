@@ -561,6 +561,49 @@ def test_remove_empty_spans_multiple():
 
 
 # ---------------------------------------------------------------------------
+# apply_word_corrections
+# ---------------------------------------------------------------------------
+
+def test_word_corrections_single_word_variants():
+    assert normalize.apply_word_corrections("vabbe dai") == (1, "vabbè dai")
+    assert normalize.apply_word_corrections("cè bene") == (1, "c(io)è bene")
+    assert normalize.apply_word_corrections("mha non so") == (1, "mah non so")
+    assert normalize.apply_word_corrections("emh forse") == (1, "ehm forse")
+    assert normalize.apply_word_corrections("hem forse") == (1, "ehm forse")
+    assert normalize.apply_word_corrections("he sì") == (1, "eh sì")
+    assert normalize.apply_word_corrections("ih che ridere") == (1, "hi che ridere")
+
+def test_word_corrections_mh_family_by_length():
+    assert normalize.apply_word_corrections("m sì") == (1, "mh sì")
+    assert normalize.apply_word_corrections("hm sì") == (1, "mh sì")
+    assert normalize.apply_word_corrections("mhm sì") == (1, "mhmh sì")
+    assert normalize.apply_word_corrections("hmhm sì") == (1, "mhmh sì")
+
+def test_word_corrections_va_phrase_variants():
+    assert normalize.apply_word_corrections("va beh dai") == (1, "vabbè dai")
+    assert normalize.apply_word_corrections("va be dai") == (1, "vabbè dai")
+    assert normalize.apply_word_corrections("va be' dai") == (1, "vabbè dai")
+    assert normalize.apply_word_corrections("ma vah dai") == (1, "ma va dai")
+    assert normalize.apply_word_corrections("ma và dai") == (1, "ma va dai")
+    assert normalize.apply_word_corrections("ma va' dai") == (1, "ma va dai")
+
+def test_word_corrections_va_apostrophe_not_touched_outside_ma_va():
+    """va' (truncated "vai") has an unrelated meaning outside "ma va'" and
+    must not be flattened to "va" in that context."""
+    assert normalize.apply_word_corrections("va' a casa") == (0, "va' a casa")
+
+def test_word_corrections_no_false_positive_inside_reduction_span():
+    """The single-letter "m"->"mh" entry must not match inside a
+    Jefferson-bracket-continued token like m(e l)o (a reduction span,
+    not the standalone word "m")."""
+    assert normalize.apply_word_corrections("m(e l)o segno") == (0, "m(e l)o segno")
+    assert normalize.apply_word_corrections("co(m)e stai") == (0, "co(m)e stai")
+
+def test_word_corrections_no_change():
+    assert normalize.apply_word_corrections("ciao come stai") == (0, "ciao come stai")
+
+
+# ---------------------------------------------------------------------------
 # flag_empty_unit
 # ---------------------------------------------------------------------------
 

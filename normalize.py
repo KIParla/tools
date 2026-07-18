@@ -283,6 +283,58 @@ def replace_pero(annotation: str, accent_map: dict[str, str] | None = None) -> t
     return total, annotation
 
 
+# Discourse-marker/interjection spelling normalizations — flat literal
+# word-or-phrase replacements (unlike ACCENT_*_MAP, no final-character-only
+# constraint, and entries may be multi-word). Modules may replace this list
+# entirely or extend it.
+WORD_CORRECTIONS: list[tuple[str, str]] = [
+    ("va beh", "vabbè"),
+    ("va be'", "vabbè"),
+    ("va be", "vabbè"),
+    ("ma va'", "ma va"),
+    ("vabbe", "vabbè"),
+    ("cè", "c(io)è"),
+    ("mha", "mah"),
+    ("emh", "ehm"),
+    ("hem", "ehm"),
+    ("he", "eh"),
+    ("hmhm", "mhmh"),
+    ("mhm", "mhmh"),
+    ("hm", "mh"),
+    ("m", "mh"),
+    ("ih", "hi"),
+    ("vah", "va"),
+    ("và", "va"),
+]
+
+
+def apply_word_corrections(annotation: str, corrections: list[tuple[str, str]] | None = None) -> tuple[int, str]:
+    """Replace known misspelled discourse markers/interjections with their
+    canonical spelling (e.g. "mha" -> "mah", "va beh" -> "vabbè").
+
+    Entries are literal word/phrase matches on word boundaries — no
+    Jefferson-marker tolerance (unlike ACCENT_CHE_MAP/ACCENT_PERO_MAP, which
+    only ever swap a word's final character). Longer/phrase entries are
+    checked first, so e.g. "va beh" is replaced before a hypothetical
+    standalone "va" rule could interfere.
+    """
+    if corrections is None:
+        corrections = WORD_CORRECTIONS
+    total = 0
+    for wrong, right in corrections:
+        # Boundaries are space/"="/string-edge only — the same delimiters
+        # tokenize_tu itself splits on (`re.split(r"( |=)", annotation)`) —
+        # not a generic \w/\W transition. A \b-style check would treat
+        # Jefferson brackets as boundaries too, wrongly matching e.g. the
+        # "m" in "m(e l)o" (a reduction span, not the standalone word "m").
+        pattern = re.compile(
+            r"(?:(?<=^)|(?<=[ =]))" + re.escape(wrong) + r"(?:(?=$)|(?=[ =]))"
+        )
+        annotation, n = pattern.subn(right, annotation)
+        total += n
+    return total, annotation
+
+
 def check_numbers(annotation: str) -> tuple[int, str]:
     """Convert digit sequences to Italian words (2 → due)."""
     matches = list(re.finditer(r"\b[0-9]+\b", annotation))
@@ -519,6 +571,7 @@ WARNING_RULES.extend([
     ValidationRule("ACCENTS",              replace_che),
     ValidationRule("ACCENTS",              replace_po),
     ValidationRule("ACCENTS",              replace_pero),
+    ValidationRule("WORD_CORRECTIONS",     apply_word_corrections),
     ValidationRule("NUMBERS",              check_numbers),
     # Span-internal spacing fixed after the annotation is otherwise clean.
     ValidationRule("UNEVEN_SPACES",        check_spaces_dots),

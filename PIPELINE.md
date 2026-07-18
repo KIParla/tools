@@ -120,9 +120,10 @@ The count is accumulated in `tu.warnings[RULE_NAME]`.
 | 7 | `OVERLAP_PROLONGATION`| `overlap_prolongations`   | **Default off.** Move `[` before the last character + its colons: `word:*[:` → `wor[d:*:`. |
 | 8 | `MULTIPLE_SPACES`     | `remove_spaces`           | Remove tabs, newlines, double spaces. |
 | 9 | `ACCENTS`             | `apply_accent_corrections` | Apply word-boundary-aware substitutions from `accent_corrections` (config list). |
-| 10| `NUMBERS`             | `check_numbers`           | Replace Arabic numerals with Italian words (`num2words`). |
-| 11| `HASH_UNIT_SPACE`     | `normalize_hash_unit_space` | **Default off.** Ensure `#_` at start of unit has a space: `#_word` → `#_ word`. (StraParlaBO, StraParlaTO) |
-| 12| `HASH_PREFIX_SPACE`   | `normalize_hash_prefix`    | **Default off.** Move `#` to front of unit with a space. (KIPasti) |
+| 10| `WORD_CORRECTIONS`    | `apply_word_corrections`  | Replace known misspelled discourse markers/interjections (`WORD_CORRECTIONS` list, e.g. `mha`→`mah`, `va beh`→`vabbè`) — full word/phrase matches on space/`=`/string-edge boundaries only, not Jefferson-marker-tolerant like `ACCENTS`. |
+| 11| `NUMBERS`             | `check_numbers`           | Replace Arabic numerals with Italian words (`num2words`). |
+| 12| `HASH_UNIT_SPACE`     | `normalize_hash_unit_space` | **Default off.** Ensure `#_` at start of unit has a space: `#_word` → `#_ word`. (StraParlaBO, StraParlaTO) |
+| 13| `HASH_PREFIX_SPACE`   | `normalize_hash_prefix`    | **Default off.** Move `#` to front of unit with a space. (KIPasti) |
 
 **Config:** rules are toggled per module; `allowed_symbols`, `accent_corrections`, and
 `reduction_words` are lists in `defaults.yml` that modules may override.
