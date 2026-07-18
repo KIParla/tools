@@ -238,7 +238,7 @@ def _add_token(parent: ET.Element, tok: dict, unit_id: str, idx: int) -> ET.Elem
         return _sub(parent, "pause", dur="short")
 
     if tok_type == "nonverbalbehavior":
-        nvb = tok.get("form", tok.get("span", "nvb")).strip("{}")
+        nvb = tok.get("form", tok.get("span", "nvb")).strip("()")
         vocal = _sub(parent, "vocal")
         desc = _sub(vocal, "desc")
         desc.text = nvb
@@ -273,8 +273,13 @@ def _add_token(parent: ET.Element, tok: dict, unit_id: str, idx: int) -> ET.Elem
     if jf.get("SpaceAfter") == "No":
         attribs["join"] = "right"
 
+    rend = []
+    if jf.get("Reduced") == "Yes":
+        rend.append("reduced")
     if jf.get("ProsodicLink") == "Yes":
-        attribs["rend"] = "prosodicLink"
+        rend.append("prosodicLink")
+    if rend:
+        attribs["rend"] = " ".join(rend)
 
     w = _sub(parent, "w", **attribs)
 

@@ -102,3 +102,28 @@ accent_corrections:
   - {wrong: "pero'",     right: "però"}
   - {wrong: "perche'",   right: "perché"}
   - {wrong: "puo'",      right: "può"}
+
+# Words/phrases where a candidate guess span (letters immediately before "("
+# and after ")", e.g. c(io)è, or a multi-token contraction like m(e l)o —
+# "me lo" reduced across a word boundary) marks phonetic reduction rather
+# than transcriber uncertainty. Only forms listed here are reclassified
+# (Reduced=Yes in jefferson_feats, on every token the span touches);
+# anything else falls back to an ordinary guess span in the guesses column.
+# Multi-word entries match the space-joined form of the tokens the span
+# touches. Modules may replace this list entirely or extend it. Matching is
+# case-insensitive on the token's form.
+reduction_words:
+  - cioè
+  - cioé
+  - buono
+  - buona
+  - buoni
+  - buone
+  - può
+  - puoi
+  - vuole
+  - vuoi
+  - vuol
+  - scuola
+  - perché
+  - fuori

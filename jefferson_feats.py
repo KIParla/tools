@@ -120,8 +120,8 @@ def form_from_span(span: str) -> str | None:
     """Derive the canonical form from a span string.
 
     Mirrors the normalisation in kiparla_tools/data.py Token.__post_init__:
-      1. Strip bracket chars: [ ] ( ) < > °
-      2. Return None for special tokens: {P}, {…}, all-x (unknown)
+      1. Return None for special tokens: (.), ((...)), all-x (unknown)
+      2. Strip bracket chars: [ ] ( ) < > °
       3. Strip leading $ or # sigils
       4. Remove trailing intonation punctuation: . , ?
       5. Remove elongation colons (:+)
@@ -132,6 +132,13 @@ def form_from_span(span: str) -> str | None:
     if not span or span == '_':
         return None
 
+    # Special tokens: form is not predictable. Checked before the bracket
+    # strip below, since (.) and ((...)) use the same parens as guess/pace
+    # spans.
+    stripped = span.strip()
+    if stripped == '(.)' or (stripped.startswith('((') and stripped.endswith('))')):
+        return None
+
     text = span
     for ch in '[]()<>°':
         text = text.replace(ch, '')
@@ -140,9 +147,6 @@ def form_from_span(span: str) -> str | None:
     if not text:
         return None
 
-    # Special tokens: form is not predictable
-    if text == '{P}' or text.startswith('{'):
-        return None
     if all(c == 'x' for c in text):
         return None
 

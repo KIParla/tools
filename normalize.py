@@ -93,19 +93,47 @@ def remove_spaces(annotation: str) -> tuple[int, str]:
     return total, annotation.strip()
 
 
-def _replace_spaces_in_braces(match: re.Match) -> str:
-    return "{" + match.group(1).replace(" ", "_") + "}"
+# Shortpause: literal Jefferson `(.)`.
+PAUSE_RE = re.compile(r"\(\.\)")
+# Non-verbal behavior: literal Jefferson `((...))`, non-nested.
+NVB_RE = re.compile(r"\(\(([^()]*)\)\)")
+# Either marker, used where callers need to treat both the same way.
+NVB_OR_PAUSE_RE = re.compile(r"\(\([^()]*\)\)|\(\.\)")
+
+
+def _replace_spaces_in_nvb(match: re.Match) -> str:
+    return "((" + match.group(1).replace(" ", "_") + "))"
 
 
 def meta_tag(annotation: str) -> tuple[int, str]:
-    """Convert Jefferson double-parenthesis notation: (( → {, )) → }, (.) → {P}."""
-    subs_map = {"((": "{", "))": "}", "(.)": "{P}"}
-    total = 0
-    for old, new in subs_map.items():
-        annotation, n = re.subn(re.escape(old), new, annotation)
-        total += n
-    annotation = re.sub(r"\{([\w ]+)\}", _replace_spaces_in_braces, annotation)
+    """Normalize spacing inside Jefferson NVB spans: `((ride forte))` becomes
+    a single `((ride_forte))` token. Shortpause `(.)` and NVB `((...))` are
+    otherwise left as literal Jefferson notation (not rewritten to {P}/{...})."""
+    annotation, total = NVB_RE.subn(_replace_spaces_in_nvb, annotation)
     return total, annotation
+
+
+def is_reduction_candidate_span(annotation: str, start: int, end: int) -> bool:
+    """True if the (start, end) guess span could be a phonetic reduction
+    marker rather than a genuine 'hard to understand' span (e.g. `(non lo
+    so)`): letters immediately before `(` and after `)`.
+
+    Covers both the single-token case (`c(io)è`) and the multi-token case
+    (`m(e l)o`, i.e. "me lo" contracted across a word boundary) — the
+    parens content may contain whitespace. Being a candidate isn't
+    sufficient on its own: the caller still checks the reconstructed
+    word/phrase against the reduction_words config whitelist.
+    """
+    if start == 0 or end >= len(annotation):
+        return False
+    return annotation[start - 1].isalpha() and annotation[end].isalpha()
+
+
+def _mask_non_guess_parens(annotation: str) -> str:
+    """Blank out shortpause `(.)` and NVB `((...))` spans (same length, so
+    offsets are preserved) so guess-span detection only sees genuine
+    single-parenthesis 'hard to understand' spans."""
+    return NVB_OR_PAUSE_RE.sub(lambda m: "_" * len(m.group(0)), annotation)
 
 
 def check_spaces(annotation: str) -> tuple[int, str]:
@@ -130,10 +158,10 @@ def check_spaces(annotation: str) -> tuple[int, str]:
         # Space before punctuation at end (or before another space).
         # e.g. "ciao ," → "ciao,"
         (r"([^ ]) ([.,:?])",                 r"\1\2"),
-        # Missing space before NVB tag.
-        (r"([^ \[\(<>°])(\{[^}]+\})",        r"\1 \2"),
-        # Missing space after NVB tag.
-        (r"(\{[^}]+\})([^ \]\)<>°])",        r"\1 \2"),
+        # Missing space before NVB/pause tag.
+        (r"([^ \[\(<>°])(\(\([^()]*\)\)|\(\.\))",        r"\1 \2"),
+        # Missing space after NVB/pause tag.
+        (r"(\(\([^()]*\)\)|\(\.\))([^ \]\)<>°])",        r"\1 \2"),
     ]
     for pattern, replacement in rules:
         annotation, n = re.subn(pattern, replacement, annotation)
@@ -142,9 +170,9 @@ def check_spaces(annotation: str) -> tuple[int, str]:
 
 
 def remove_pauses(annotation: str) -> tuple[int, str]:
-    """Strip leading and trailing short-pause markers {P}."""
+    """Strip leading and trailing short-pause markers (.)."""
     annotation, n = re.subn(
-        r"^([\[\]()<>°]?)\s*\{P\}\s*|\s*\{P\}\s*([\[\]()<>°]?)$",
+        r"^([\[\]()<>°]?)\s*\(\.\)\s*|\s*\(\.\)\s*([\[\]()<>°]?)$",
         r"\1\2",
         annotation,
     )
@@ -288,21 +316,21 @@ def switch_NVB(annotation: str) -> tuple[int, str]:
     NVB tags found immediately after an opening bracket, or immediately before
     a closing bracket, are relocated to just outside the span.
 
-    Exception: {P} immediately after [ or immediately before ] is left in
+    Exception: (.) immediately after [ or immediately before ] is left in
     place — a pause inside an overlap span is transcriptionally valid.
     """
     total = 0
-    # Opening [ : move any NVB except {P} to before the bracket.
-    annotation, n = re.subn(r"(\[)(\{(?!P\})\w+\})", r"\2 \1", annotation)
+    # Opening [ : move any NVB except (.) to before the bracket.
+    annotation, n = re.subn(r"(\[)(\(\([^()]*\)\))", r"\2 \1", annotation)
     total += n
-    # Opening ( < > ° : move any NVB (including {P}) to before the bracket.
-    annotation, n = re.subn(r"([(<>°])(\{\w+\})", r"\2 \1", annotation)
+    # Opening ( < > ° : move any NVB/pause (including (.)) to before the bracket.
+    annotation, n = re.subn(r"([(<>°])(\(\([^()]*\)\)|\(\.\))", r"\2 \1", annotation)
     total += n
-    # Closing ] : move any NVB except {P} to after the bracket.
-    annotation, n = re.subn(r"(\{(?!P\})\w+\})(])", r"\2 \1", annotation)
+    # Closing ] : move any NVB except (.) to after the bracket.
+    annotation, n = re.subn(r"(\(\([^()]*\)\))(])", r"\2 \1", annotation)
     total += n
-    # Closing ) > < ° : move any NVB (including {P}) to after the bracket.
-    annotation, n = re.subn(r"(\{\w+\})([)><°])", r"\2 \1", annotation)
+    # Closing ) > < ° : move any NVB/pause (including (.)) to after the bracket.
+    annotation, n = re.subn(r"(\(\([^()]*\)\)|\(\.\))([)><°])", r"\2 \1", annotation)
     total += n
     return total, annotation.strip()
 
@@ -406,6 +434,16 @@ def check_normal_parentheses(annotation: str, open_char: str, close_char: str) -
     return not is_open
 
 
+def check_guess_parentheses(annotation: str) -> bool:
+    """Return True if guess-span parentheses are balanced and non-nested.
+
+    Shortpause `(.)` and NVB `((...))` also use parentheses but aren't guess
+    spans, and NVB's `((` looks "nested" to a naive scanner — both are masked
+    out first so only genuine `(word)` guess spans are checked.
+    """
+    return check_normal_parentheses(_mask_non_guess_parens(annotation), "(", ")")
+
+
 def check_angular_parentheses(annotation: str) -> bool:
     """Return True if <...> (slow) and >...< (fast) pace markers are balanced."""
     fast = False
@@ -466,8 +504,8 @@ def flag_empty_unit(annotation: str) -> tuple[int, str]:
 WARNING_RULES.extend([
     # Remove illegal symbols first so later rules see clean input.
     ValidationRule("SYMBOL_NOT_ALLOWED",   clean_non_jefferson_symbols),
-    # Convert Jefferson double-parenthesis notation before trimming pauses,
-    # because meta_tag is what creates {P} from (.).
+    # Normalize spacing inside NVB spans before trimming pauses, so TRIM_PAUSES
+    # sees a single well-formed (.) / ((...)) token.
     ValidationRule("META_TAGS",            meta_tag),
     # Fix bracket/punctuation spacing before trimming leading/trailing markers,
     # so the trim patterns see normalized whitespace.
@@ -491,7 +529,8 @@ WARNING_RULES.extend([
     # Re-run space normalization after switch_NVB, because moving an NVB tag
     # out of a bracket can leave a stray space inside it.
     ValidationRule("UNEVEN_SPACES",        check_spaces),
-    # Remove empty bracket spans created by earlier rules (e.g. [{P}] → []).
+    # Remove empty bracket spans created by earlier rules (e.g. [(.)] → []
+    # after TRIM_PAUSES strips a pause that was the sole content of a span).
     ValidationRule("EMPTY_SPANS",          remove_empty_spans),
     # Flag annotation-level units that have no content left after normalization.
     # Callers should exclude any TU whose normalized result is ''.
@@ -504,7 +543,7 @@ ERROR_RULES.extend([
     ValidationRule("UNBALANCED_PACE",
                    check_angular_parentheses),
     ValidationRule("UNBALANCED_GUESS",
-                   partial(check_normal_parentheses, open_char="(", close_char=")")),
+                   check_guess_parentheses),
     ValidationRule("UNBALANCED_OVERLAP",
                    partial(check_normal_parentheses, open_char="[", close_char="]")),
 ])

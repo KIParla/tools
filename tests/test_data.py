@@ -48,6 +48,18 @@ class TestPreprocess:
         tu = TranscriptionUnit(0, "S", 0, 1, 1, "ho detto (ciao)")
         assert len(tu.guessing_spans) == 1
 
+    def test_word_internal_span_classified_as_reduction(self):
+        """c(io)è is phonetic reduction, not a genuine guess span."""
+        tu = TranscriptionUnit(0, "S", 0, 1, 1, "c(io)è ciao")
+        assert len(tu.reduction_spans) == 1
+        assert len(tu.guessing_spans) == 0
+
+    def test_multiword_span_stays_a_guess(self):
+        """A guess span with whitespace inside is never word-internal."""
+        tu = TranscriptionUnit(0, "S", 0, 1, 1, "(non lo so) ciao")
+        assert len(tu.guessing_spans) == 1
+        assert len(tu.reduction_spans) == 0
+
     def test_low_volume_spans_extracted(self):
         tu = TranscriptionUnit(0, "S", 0, 1, 1, "°piano piano°")
         assert len(tu.low_volume_spans) == 1
@@ -147,6 +159,48 @@ class TestAddTokenFeatures:
         tu.add_token_features()
         guess_tokens = [t for t in tu.tokens if t.guesses]
         assert len(guess_tokens) > 0
+
+    def test_whitelisted_reduction_sets_reduced_flag(self):
+        tu = TranscriptionUnit(0, "S", 0, 1, 1, "c(io)è ciao",
+                                cfg={"reduction_words": ["cioè"]})
+        tu.tokenize()
+        tu.add_token_features()
+        reduced_tokens = [t for t in tu.tokens if t.reduced]
+        assert len(reduced_tokens) == 1
+        assert reduced_tokens[0].form == "cioè"
+        assert reduced_tokens[0].guesses == {}   # not double-counted as a guess
+
+    def test_non_whitelisted_word_internal_span_falls_back_to_guess(self):
+        """bu(o)no is word-internal but not on the (empty) whitelist here,
+        so it must still surface as a guess rather than being dropped."""
+        tu = self._make("bu(o)no ciao")
+        tu.add_token_features()
+        assert not any(t.reduced for t in tu.tokens)
+        guess_tokens = [t for t in tu.tokens if t.guesses]
+        assert len(guess_tokens) == 1
+        assert guess_tokens[0].form == "buono"
+
+    def test_whitelisted_multitoken_reduction_marks_both_tokens(self):
+        """m(e l)o splits into two tokens (me, lo); if the reconstructed
+        phrase "me lo" is whitelisted, both tokens get Reduced=Yes."""
+        tu = TranscriptionUnit(0, "S", 0, 1, 1, "m(e l)o segno",
+                                cfg={"reduction_words": ["me lo"]})
+        tu.tokenize()
+        tu.add_token_features()
+        assert [t.form for t in tu.tokens] == ["me", "lo", "segno"]
+        assert tu.tokens[0].reduced and tu.tokens[1].reduced
+        assert not tu.tokens[2].reduced
+        assert tu.tokens[0].guesses == {} and tu.tokens[1].guesses == {}
+
+    def test_non_whitelisted_multitoken_span_falls_back_to_linked_guesses(self):
+        """Without 'me lo' on the whitelist, both touched tokens fall back
+        to guesses sharing the same span id (they're one guess group)."""
+        tu = TranscriptionUnit(0, "S", 0, 1, 1, "m(e l)o segno")
+        tu.tokenize()
+        tu.add_token_features()
+        assert not tu.tokens[0].reduced and not tu.tokens[1].reduced
+        assert set(tu.tokens[0].guesses) == set(tu.tokens[1].guesses)
+        assert tu.tokens[0].guesses and tu.tokens[1].guesses
 
     def test_position_flags_set(self):
         tu = self._make("uno due tre")

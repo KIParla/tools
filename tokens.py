@@ -56,6 +56,9 @@ class Token:
     fast_pace:  dict[int, tuple[int, int]] = field(init=False, default_factory=dict)
     low_volume: dict[int, tuple[int, int]] = field(init=False, default_factory=dict)
     guesses:    dict[int, tuple[int, int]] = field(init=False, default_factory=dict)
+    # True when a word-internal guess span (e.g. c(io)è) matched a word on
+    # the module's configured reduction_words whitelist.
+    reduced:    bool = field(init=False, default=False)
 
     # Position of this token within its TU (start/end flags set after tokenization).
     position_in_tu: df.position = field(init=False, default=df.position.inner)
@@ -77,6 +80,16 @@ class Token:
 
     def _classify(self):
         text = self.form
+
+        # 0. Shortpause / NVB — checked before the generic bracket strip below,
+        # since (.) and ((...)) use the same parens as guess/pace/volume spans.
+        if text == "(.)":
+            self.token_type = df.tokentype.shortpause
+            return
+
+        if text.startswith("((") and text.endswith("))"):
+            self.token_type = df.tokentype.nonverbalbehavior
+            return
 
         # Strip Jefferson span markers — they are position markers only.
         for ch in "[]()<>°":

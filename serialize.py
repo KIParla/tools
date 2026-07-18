@@ -145,6 +145,9 @@ def _jefferson_feats(tok) -> str:
     if tok.truncation:
         parts.append("Truncated=Yes")
 
+    if tok.reduced:
+        parts.append("Reduced=Yes")
+
     if tok.prosodiclink:
         parts.append("ProsodicLink=Yes")
 
@@ -740,9 +743,8 @@ def conversation_to_linear(transcript, output_filename, sep="\t"):
             if df.languagevariation.some in tu.non_ita or df.languagevariation.all in tu.non_ita:
                 variation = tu.non_ita.name
 
-            text = tu.annotation.replace("{P}", "(.)").replace("{", "((").replace("}", "))")
+            text = tu.annotation
             orthographic = " ".join(tok.form for tok in tu.tokens)
-            orthographic = orthographic.replace("{P}", "(.)").replace("{", "((").replace("}", "))")
 
             if df.languagevariation.some in tu.non_ita:
                 text = "# " + text

@@ -21,7 +21,7 @@ import networkx as nx
 import regex as re
 
 import dataflags as df
-from normalize import validate_and_normalize
+from normalize import validate_and_normalize, _mask_non_guess_parens, is_reduction_candidate_span as _is_reduction_candidate_span
 from tokens import Token, tokenize_tu
 
 logger = logging.getLogger(__name__)
@@ -54,7 +54,11 @@ class TranscriptionUnit:
     fast_pace_spans:   list[tuple[int, int]] = field(init=False, default_factory=list)
     low_volume_spans:  list[tuple[int, int]] = field(init=False, default_factory=list)
     high_volume_spans: list[tuple[int, int]] = field(init=False, default_factory=list)
+    # Genuine "hard to understand" spans, e.g. (non lo so).
     guessing_spans:    list[tuple[int, int]] = field(init=False, default_factory=list)
+    # Word-internal spans marking a phonetically reduced sound, e.g. c(io)è —
+    # letters immediately before and after the parens, no whitespace inside.
+    reduction_spans:   list[tuple[int, int]] = field(init=False, default_factory=list)
 
     # Populated by Transcript.check_overlaps (step 6).
     overlapping_times:   dict = field(init=False, default_factory=dict)
@@ -145,10 +149,13 @@ class TranscriptionUnit:
             ]
 
         if "(" in self.annotation and not self.errors.get("UNBALANCED_GUESS"):
-            self.guessing_spans = [
-                (m.start(), m.end())
-                for m in re.finditer(r"\([^)]+\)", self.annotation)
-            ]
+            masked = _mask_non_guess_parens(self.annotation)
+            for m in re.finditer(r"\([^)]+\)", masked):
+                start, end = m.start(), m.end()
+                if _is_reduction_candidate_span(self.annotation, start, end):
+                    self.reduction_spans.append((start, end))
+                else:
+                    self.guessing_spans.append((start, end))
 
     # ------------------------------------------------------------------
     # Step 5 — Tokenize
@@ -208,18 +215,20 @@ class TranscriptionUnit:
             token_at.append(-3)
             form_idx.append(-3)
 
-        def _apply(feature: str, spans: list[tuple[int, int]], use_match_id: bool = False):
-            for span_id, span in enumerate(spans):
-                a, b = span
-                pairs = list(zip(token_at[a:b], form_idx[a:b]))
-                covered = {ti for ti, _ in pairs if ti >= 0}
-                char_ranges: dict[int, list[int]] = {ti: [] for ti in covered}
-                for ti, fi in pairs:
-                    if ti in char_ranges:
-                        char_ranges[ti].append(fi)
-                for ti, positions in char_ranges.items():
-                    cs = min(positions)
-                    ce = max(positions) + 1
+        def _char_ranges_for(a: int, b: int) -> dict[int, tuple[int, int]]:
+            """Map a (start, end) char span in the annotation to per-token
+            (cs, ce) form-char ranges, for each token the span touches."""
+            pairs = list(zip(token_at[a:b], form_idx[a:b]))
+            covered = {ti for ti, _ in pairs if ti >= 0}
+            char_ranges: dict[int, list[int]] = {ti: [] for ti in covered}
+            for ti, fi in pairs:
+                if ti in char_ranges:
+                    char_ranges[ti].append(fi)
+            return {ti: (min(pos), max(pos) + 1) for ti, pos in char_ranges.items()}
+
+        def _apply(feature: str, spans: list[tuple[int, int]]):
+            for span_id, (a, b) in enumerate(spans):
+                for ti, (cs, ce) in _char_ranges_for(a, b).items():
                     tok = self.tokens[ti]
                     if feature == "slow_pace":
                         tok.slow_pace[span_id] = (cs, ce)
@@ -236,6 +245,26 @@ class TranscriptionUnit:
         _apply("low_volume", self.low_volume_spans)
         # high_volume is detected per-token in Token._classify; no dict on Token.
         _apply("guesses",    self.guessing_spans)
+
+        # Reduction candidates (e.g. c(io)è, or a multi-token contraction like
+        # m(e l)o — "me lo" reduced across a word boundary) are only genuine
+        # phonetic reduction if the reconstructed word/phrase is on the
+        # module's configured reduction_words whitelist; otherwise they fall
+        # back to ordinary guess spans on each touched token.
+        reduction_words = {w.lower() for w in self.cfg.get("reduction_words", [])}
+        for i, (a, b) in enumerate(self.reduction_spans):
+            ranges = _char_ranges_for(a, b)
+            touched = sorted(ranges)  # token order, not set-iteration order
+            phrase = " ".join(self.tokens[ti].form for ti in touched)
+            # Fallback span ids continue past guessing_spans' numbering so they
+            # can't collide with a real guess span id on the same token.
+            fallback_span_id = len(self.guessing_spans) + i
+            if phrase.lower() in reduction_words:
+                for ti in touched:
+                    self.tokens[ti].reduced = True
+            else:
+                for ti in touched:
+                    self.tokens[ti].guesses[fallback_span_id] = ranges[ti]
 
         # Overlaps use match_id (clique id) as the key, not span index.
         if self.overlapping_matches:

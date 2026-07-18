@@ -186,9 +186,16 @@ def infer_type(csv_row: dict) -> str:
     """Infer a sensible TSV type for a newly inserted token."""
     span = csv_row.get('span', '')
     form = csv_row.get('form', '')
-    if span == '{P}' or form == '{P}' or form == '[PAUSE]':
+    # Accept both the current (.)/((...)) notation and the legacy {P}/{tag}
+    # notation, since wip/*.csv files not yet reprocessed through the
+    # tools/ pipeline may still use the old form.
+    if span in ('(.)', '{P}') or form in ('(.)', '{P}', '[PAUSE]'):
         return 'shortpause'
-    if span.startswith('{') and span.endswith('}'):
+    if (
+        (span.startswith('((') and span.endswith('))'))
+        or (span.startswith('{') and span.endswith('}'))
+        or form in ('[NVB]',)
+    ):
         return 'nonverbalbehavior'
     if form == 'x':
         return 'unknown'

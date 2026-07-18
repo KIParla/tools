@@ -110,6 +110,23 @@ class TestConversationToConll:
         rows = _read_vert(out)
         assert "Intonation" not in rows[0]["jefferson_feats"]
 
+    def test_whitelisted_reduction_is_a_feature_not_a_guess(self, tmp_path):
+        t = Transcript("TEST")
+        tu = TranscriptionUnit(0, "SPK0", 0.0, 1.5, 1.5, "c(io)è ho detto (forse)",
+                                cfg={"reduction_words": ["cioè"]})
+        tu.tokenize()
+        tu.add_token_features()
+        t.add(tu)
+        t.sort()
+        out = tmp_path / "test.vert.tsv"
+        conversation_to_conll(t, out)
+        rows = _read_vert(out)
+        by_form = {r["form"]: r for r in rows}
+        assert by_form["cioè"]["guesses"] == "_"
+        assert by_form["cioè"]["jefferson_feats"] == "Reduced=Yes"
+        assert by_form["forse"]["guesses"] == "0-5(0)"
+        assert "Reduced" not in by_form["forse"]["jefferson_feats"]
+
     def test_prolongation_field(self, tmp_path):
         t = _make_simple_transcript(["cia::o"])
         out = tmp_path / "test.vert.tsv"

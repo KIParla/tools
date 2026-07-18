@@ -13,10 +13,10 @@ Checks performed:
   3. UPOS             — must be a valid Universal Dependencies tag, or '_'
   4. Multiword tokens — parent rows (those with subtoken rows) must have
                         lemma='_' and upos='_'
-  5. Pauses           — tokens with form='[PAUSE]' or span='{P}' must have
+  5. Pauses           — tokens with form='[PAUSE]' or span='(.)' must have
                         a bracket tag as lemma (e.g. '[PAUSE]') and upos='X'
-  6. Nonverbal        — tokens whose span is enclosed in {} (excluding {P}) must
-                        have a bracket tag as lemma (e.g. '[SING]') and upos='X'
+  6. Nonverbal        — tokens whose span is enclosed in (( )) must
+                        have a bracket tag as lemma (e.g. '[NVB]') and upos='X'
   7. Missing annotation — regular tokens (not multiword parents, pauses or
                         nonverbal) with lemma='_' or upos='_' are reported as
                         warnings (not errors)
@@ -62,12 +62,17 @@ def _subtoken_base(token_id: str) -> str | None:
 def _is_pause(row: dict) -> bool:
     form = (row.get('form') or '').strip()
     span = (row.get('span') or '').strip()
-    return form in ('[PAUSE]', '{P}') or span == '{P}'
+    # Accept both the current (.) notation and the legacy {P} notation, since
+    # wip/*.csv files not yet reprocessed through the tools/ pipeline may
+    # still use the old form.
+    return form in ('[PAUSE]', '(.)', '{P}') or span in ('(.)', '{P}')
 
 
 def _is_nonverbal(row: dict) -> bool:
     span = (row.get('span') or '').strip()
-    return span.startswith('{') and span.endswith('}') and not _is_pause(row)
+    is_paren_form = span.startswith('((') and span.endswith('))')
+    is_brace_form = span.startswith('{') and span.endswith('}')
+    return (is_paren_form or is_brace_form) and not _is_pause(row)
 
 
 def validate_csv(path: Path) -> tuple[list[str], list[str]]:
@@ -157,7 +162,7 @@ def validate_csv(path: Path) -> tuple[list[str], list[str]]:
         if _is_nonverbal(row):
             if not re.fullmatch(r'\[.+\]', lemma):
                 errors.append(
-                    f"{loc}: nonverbal token lemma should be a bracket tag like '[SING]', got '{lemma}'"
+                    f"{loc}: nonverbal token lemma should be a bracket tag like '[NVB]', got '{lemma}'"
                 )
             if upos != 'X':
                 errors.append(

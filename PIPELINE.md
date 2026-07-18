@@ -103,9 +103,9 @@ The count is accumulated in `tu.warnings[RULE_NAME]`.
 | # | rule name             | function                  | what it does |
 |---|-----------------------|---------------------------|--------------|
 | 1 | `SYMBOL_NOT_ALLOWED`  | `clean_non_jefferson_symbols` | Remove characters not in `allowed_symbols` (config), `\w`, `\s`, or active variation prefixes (`$`, `#*`). |
-| 2 | `META_TAGS`           | `meta_tag`                | Convert `((` → `{`, `))` → `}`, `(.)` → `{P}`. Spaces inside `{…}` replaced with `_` so the tag is treated as a single token downstream. |
-| 3 | `UNEVEN_SPACES`       | `check_spaces`            | Remove spaces immediately inside `[ ]` and `( )`, before `. , : ?`, and around `{…}` tags. |
-| 4 | `TRIM_PAUSES`         | `remove_pauses`           | Remove leading/trailing `{P}`. |
+| 2 | `META_TAGS`           | `meta_tag`                | Normalize spacing inside NVB spans: spaces inside `((…))` replaced with `_` so the tag is treated as a single token downstream. Shortpause `(.)` and NVB `((…))` stay literal Jefferson notation (not rewritten). |
+| 3 | `UNEVEN_SPACES`       | `check_spaces`            | Remove spaces immediately inside `[ ]` and `( )`, before `. , : ?`, and around `(.)`/`((…))` tags. |
+| 4 | `TRIM_PAUSES`         | `remove_pauses`           | Remove leading/trailing `(.)`. |
 | 5 | `TRIM_PROSODICLINKS`  | `remove_prosodiclinks`    | Remove leading/trailing `=`. |
 | 6 | `UNEVEN_SPACES`       | `space_prosodiclink`      | Remove spaces around `=`. |
 | 7 | `OVERLAP_PROLONGATION`| `overlap_prolongations`   | **Default off.** Move `[` before the last character + its colons: `word:*[:` → `wor[d:*:`. |
@@ -115,8 +115,8 @@ The count is accumulated in `tu.warnings[RULE_NAME]`.
 | 11| `HASH_UNIT_SPACE`     | `normalize_hash_unit_space` | **Default off.** Ensure `#_` at start of unit has a space: `#_word` → `#_ word`. (StraParlaBO, StraParlaTO) |
 | 12| `HASH_PREFIX_SPACE`   | `normalize_hash_prefix`    | **Default off.** Move `#` to front of unit with a space. (KIPasti) |
 
-**Config:** rules are toggled per module; `allowed_symbols` and `accent_corrections`
-are lists in `defaults.yml` that modules may override.
+**Config:** rules are toggled per module; `allowed_symbols`, `accent_corrections`, and
+`reduction_words` are lists in `defaults.yml` that modules may override.
 
 ### Variation markers
 
@@ -164,12 +164,12 @@ Stored as character offset pairs on the TU for use in step 7.
 | `low_volume_spans` | `°` present, no dot error  | `°[^°]+°`          |
 | `high_volume_spans`| always                     | runs of uppercase letters |
 | `overlapping_spans`| `[` present, no overlap error | `\[[^\]]+\]`    |
-| `guessing_spans`   | `(` present, no guess error | `\([^)]+\)`       |
+| `guessing_spans`   | `(` present, no guess error | `\([^)]+\)` (run against the annotation with `(.)`/`((…))` masked out first, so pause/NVB spans aren't mistaken for guess spans). Each match is then split by `is_reduction_candidate_span` into `guessing_spans` (genuine "hard to understand" spans) or `reduction_spans` (reduction candidate: letters immediately before `(` and after `)` — covers both the single-token case `c(io)è` and the multi-token case `m(e l)o`, since the parens content may contain whitespace). `reduction_spans` are a *candidate* list only — step 7 decides the final classification against the `reduction_words` config whitelist, matching the space-joined form of every token the span touches. |
 
 ### 2g. Symbol order corrections
 
 - `switch_symbols`: fix `[.,?][:-~]` → `[:-~][.,?]` (punctuation must follow, not precede, prosodic/interruption markers).
-- `switch_NVB`: fix `[{TAG}` → `{TAG}[` and `{TAG}]` → `]{TAG}` (NVB tag must be outside overlap brackets).
+- `switch_NVB`: fix `[((TAG))` → `((TAG))[` and `((TAG))]` → `]((TAG))` (NVB tag must be outside overlap brackets).
 
 Counts accumulated in `tu.warnings["SWITCHES"]`.
 
@@ -223,8 +223,8 @@ In order of priority:
 | condition | token_type | notes |
 |-----------|------------|-------|
 | starts with `@` | `anonymized` | |
-| `{P}` | `shortpause` | |
-| starts with `{` | `nonverbalbehavior` | any other `{…}` tag |
+| `(.)` | `shortpause` | |
+| starts with `((` and ends with `))` | `nonverbalbehavior` | checked before the generic `[]()<>°` marker strip, since `(.)`/`((…))` reuse guess/pace-span parens |
 | all `x` characters | `unknown` | form kept as-is; `Syllables=N` added (N = number of `x`s) |
 | starts with `$` | `linguistic` + `non_ortho=True` | strip `$` prefix |
 | starts with `#` | `linguistic` + `non_ita=True`, `iso_code=NO_ISO_CODE` | strip `#` prefix |
@@ -424,11 +424,11 @@ Produced when `tiers_to_extract` is non-empty:
 | `type`          | token type flag (`linguistic`, `shortpause`, `nonverbalbehavior`, …) |
 | `meta_label`    | `_` |
 | `variation`     | language variation flag on the TU |
-| `jefferson_feats` | pipe-separated: `Intonation=X`, `Interrupted=Yes`, `Truncated=Yes`, `ProsodicLink=Yes`, `SpaceAfter=No`, `PauseAfter=Yes`, `Language=ISO`, `Orthography=Yes`, `Volume=X`, `Variation=X`, `Syllables=N` |
+| `jefferson_feats` | pipe-separated: `Intonation=X`, `Interrupted=Yes`, `Truncated=Yes`, `Reduced=Yes`, `ProsodicLink=Yes`, `SpaceAfter=No`, `PauseAfter=Yes`, `Language=ISO`, `Orthography=Yes`, `Volume=X`, `Variation=X`, `Syllables=N` |
 | `align`         | `Begin=X` / `End=X` / `Begin=X\|End=X` for first/last token of TU |
 | `prolongations` | e.g. `3x2,7x1` (char_pos × length pairs) |
 | `pace`          | `Slow=0-5(0),…` / `Fast=…` |
-| `guesses`       | `0-3(0),…` |
+| `guesses`       | `0-3(0),…` — genuine "hard to understand" spans only. A reduction-candidate span (single-token `c(io)è` or multi-token `m(e l)o`) whose reconstructed word/phrase is on the `reduction_words` config whitelist is *not* recorded here — every token it touches gets `Reduced=Yes` in `jefferson_feats` instead. If not whitelisted, it falls back to an ordinary entry in this column on each touched token, sharing one span id. |
 | `overlaps`      | `0-3(0),…` |
 
 ---

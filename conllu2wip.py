@@ -19,8 +19,8 @@ tu_id           prefix of token_id (e.g. '33' from '33-1'); '_' for subtokens
 unit            same prefix, always filled
 id              CoNLL-U internal id verbatim ('4-5' for multiword, '4' for subtoken)
 span            word from jefferson_text (space-split); '_' for subtokens
-form            CoNLL-U form; '[PAUSE]' for pauses; '[TAG]' for nonverbals
-lemma           CoNLL-U lemma; '_' for multiword parents; '[PAUSE]'/tag for specials
+form            CoNLL-U form; '[PAUSE]' for pauses; '[NVB]' for nonverbals
+lemma           CoNLL-U lemma; '_' for multiword parents; '[PAUSE]'/'[NVB]' for specials
 upos            CoNLL-U upos; '_' for multiword parents; 'X' for pause/nonverbal
 jefferson_feats '_' (recomputed downstream from span)
 """
@@ -369,7 +369,7 @@ def sentence_to_rows(sent: dict) -> tuple[list[dict], list[str]]:
     jt_idx = 0
     prev_pause_after = False   # True after a token whose misc has PauseAfter=Yes
 
-    _JT_TAG_RE = re.compile(r'\{[A-Za-z][A-Za-z0-9]*\}')
+    _JT_TAG_RE = re.compile(r'\(\([A-Za-z][A-Za-z0-9_]*\)\)|\{[A-Za-z][A-Za-z0-9]*\}')
 
     for t, kid, is_synth, is_sub in emitted:
         cid   = t['conllu_id']
@@ -380,13 +380,19 @@ def sentence_to_rows(sent: dict) -> tuple[list[dict], list[str]]:
 
         mw = _is_mw_range(cid) or is_synth
 
+        # Accept both the current (.)/((...)) notation and the legacy {P}/
+        # {tag} notation, since not-yet-reprocessed jefferson_text may still
+        # use the old form.
         is_pause = (
-            form == '{P}'
+            form in ('(.)', '{P}')
             or misc.get('Type') in ('shortpause', 'longpause')
         )
         is_nonverbal = (
             not is_pause
-            and form.startswith('{') and form.endswith('}')
+            and (
+                (form.startswith('((') and form.endswith('))'))
+                or (form.startswith('{') and form.endswith('}'))
+            )
         )
 
         # Skip {P}/shortpause tokens when the preceding token's PauseAfter=Yes
@@ -400,11 +406,14 @@ def sentence_to_rows(sent: dict) -> tuple[list[dict], list[str]]:
         if is_sub:
             span = '_'
         else:
-            # Skip annotation-only {TAG} words (e.g. {ride}, {borbotta}) that
-            # appear in jefferson_text without a corresponding CoNLL-U token.
-            # When the current token's form IS a {TAG}, it should consume the
-            # matching word — so we only skip when the forms don't match.
-            if not (form.startswith('{') and form.endswith('}')):
+            # Skip annotation-only ((TAG)) words (e.g. ((ride)), ((borbotta)))
+            # that appear in jefferson_text without a corresponding CoNLL-U
+            # token. When the current token's form IS a ((TAG)), it should
+            # consume the matching word — so we only skip when the forms don't match.
+            if not (
+                (form.startswith('((') and form.endswith('))'))
+                or (form.startswith('{') and form.endswith('}'))
+            ):
                 while jt_idx < len(jt_words) and _JT_TAG_RE.fullmatch(jt_words[jt_idx]):
                     jt_idx += 1
 
@@ -457,12 +466,11 @@ def sentence_to_rows(sent: dict) -> tuple[list[dict], list[str]]:
                 lemma='[PAUSE]', upos='X', jefferson_feats='_',
             )
         elif is_nonverbal:
-            tag = f'[{form[1:-1].upper()}]'
             row = dict(
                 token_id=kid, speaker=speaker,
                 tu_id=unit, unit=unit, id=cid,
-                span=span, form=tag,
-                lemma=tag, upos='X', jefferson_feats='_',
+                span=span, form='[NVB]',
+                lemma='[NVB]', upos='X', jefferson_feats='_',
             )
         else:
             row = dict(

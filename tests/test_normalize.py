@@ -204,11 +204,11 @@ def test_remove_spaces_tabs_and_newlines():
 # meta_tag
 # ---------------------------------------------------------------------------
 
-def test_meta_tag_shortpause():
-    assert normalize.meta_tag("(.) ciao") == (1, "{P} ciao")
+def test_meta_tag_shortpause_unchanged():
+    assert normalize.meta_tag("(.) ciao") == (0, "(.) ciao")
 
 def test_meta_tag_comment():
-    assert normalize.meta_tag("ciao ((bla bla)) ciao") == (2, "ciao {bla_bla} ciao")
+    assert normalize.meta_tag("ciao ((bla bla)) ciao") == (1, "ciao ((bla_bla)) ciao")
 
 def test_meta_tag_no_change():
     n, result = normalize.meta_tag("ciao come stai")
@@ -217,7 +217,7 @@ def test_meta_tag_no_change():
 
 def test_meta_tag_spaces_become_underscores():
     _, result = normalize.meta_tag("((parla veloce))")
-    assert result == "{parla_veloce}"
+    assert result == "((parla_veloce))"
 
 
 # ---------------------------------------------------------------------------
@@ -245,20 +245,20 @@ def test_check_spaces_no_change():
 # ---------------------------------------------------------------------------
 
 def test_remove_pauses_leading():
-    assert normalize.remove_pauses("{P} ciao") == (1, "ciao")
+    assert normalize.remove_pauses("(.) ciao") == (1, "ciao")
 
 def test_remove_pauses_trailing():
-    assert normalize.remove_pauses("ciao {P}") == (1, "ciao")
+    assert normalize.remove_pauses("ciao (.)") == (1, "ciao")
 
 def test_remove_pauses_both():
-    assert normalize.remove_pauses("{P} ciao {P}") == (2, "ciao")
+    assert normalize.remove_pauses("(.) ciao (.)") == (2, "ciao")
 
 def test_remove_pauses_internal_not_removed():
-    assert normalize.remove_pauses("ciao {P} ciao") == (0, "ciao {P} ciao")
+    assert normalize.remove_pauses("ciao (.) ciao") == (0, "ciao (.) ciao")
 
 def test_remove_pauses_with_bracket():
-    assert normalize.remove_pauses("[{P} casa") == (1, "[casa")
-    assert normalize.remove_pauses("casa {P} >") == (1, "casa>")
+    assert normalize.remove_pauses("[(.) casa") == (1, "[casa")
+    assert normalize.remove_pauses("casa (.) >") == (1, "casa>")
 
 def test_remove_pauses_no_pause():
     assert normalize.remove_pauses("(a) casa") == (0, "(a) casa")
@@ -396,43 +396,42 @@ def test_switch_symbols_no_change():
 
 def test_switch_NVB_overlap_nvb_moves_out():
     # Non-pause NVB after [ moves out
-    assert normalize.switch_NVB("[{ride}") == (1, "{ride} [")
+    assert normalize.switch_NVB("[((ride))") == (1, "((ride)) [")
 
 def test_switch_NVB_overlap_pause_exempt_opening():
-    # {P} immediately after [ stays (pause inside overlap is valid)
-    assert normalize.switch_NVB("[{P}") == (0, "[{P}")
+    # (.) immediately after [ stays (pause inside overlap is valid)
+    assert normalize.switch_NVB("[(.)") == (0, "[(.)")
 
 def test_switch_NVB_overlap_pause_exempt_closing():
-    # {P} immediately before ] stays
-    assert normalize.switch_NVB("{P}]") == (0, "{P}]")
+    # (.) immediately before ] stays
+    assert normalize.switch_NVB("(.)]") == (0, "(.)]")
 
 def test_switch_NVB_overlap_pause_exempt_full_span():
-    # [{P}] must not change at all
-    assert normalize.switch_NVB("[{P}]") == (0, "[{P}]")
+    # [(.)] must not change at all
+    assert normalize.switch_NVB("[(.)]") == (0, "[(.)]")
 
 def test_switch_NVB_overlap_non_pause_closing():
-    assert normalize.switch_NVB("{ride}]") == (1, "] {ride}")
+    assert normalize.switch_NVB("((ride))]") == (1, "] ((ride))")
 
 def test_switch_NVB_guess_span():
-    # ( ) : all NVBs move out, including {P}
-    # Opening rule fires first: ({P} → {P} (, then {P} is no longer adjacent to )
-    assert normalize.switch_NVB("({P})") == (1, "{P} ()")
-    assert normalize.switch_NVB("({ride})") == (1, "{ride} ()")
+    # ( ) : all NVBs move out, including (.)
+    assert normalize.switch_NVB("((.))") == (1, "(.) ()")
+    assert normalize.switch_NVB("(((ride)))") == (1, "((ride)) ()")
 
 def test_switch_NVB_pace_span():
     # < > : all NVBs move out
-    n, result = normalize.switch_NVB("<{laugh}>")
+    n, result = normalize.switch_NVB("<((laugh))>")
     assert n == 1
-    assert result == "{laugh} <>"
+    assert result == "((laugh)) <>"
 
 def test_switch_NVB_volume_span():
     # ° ° : all NVBs move out
-    n, result = normalize.switch_NVB("°{laugh}°")
+    n, result = normalize.switch_NVB("°((laugh))°")
     assert n == 1
-    assert result == "{laugh} °°"
+    assert result == "((laugh)) °°"
 
 def test_switch_NVB_no_change():
-    assert normalize.switch_NVB("{P} ciao") == (0, "{P} ciao")
+    assert normalize.switch_NVB("(.) ciao") == (0, "(.) ciao")
 
 
 # ---------------------------------------------------------------------------
@@ -603,19 +602,17 @@ def test_integration_clean_annotation_unchanged():
 
 
 def test_integration_meta_tag_conversion():
-    """(.) is converted to {P}; the leading {P} is then stripped by TRIM_PAUSES."""
+    """(.) and ((ride)) stay literal; the leading (.) is stripped by TRIM_PAUSES."""
     normalized, warnings, errors = normalize.validate_and_normalize("(.) ciao ((ride))")
-    assert normalized == "ciao {ride}"
-    assert warnings.get("META_TAGS", 0) >= 2
+    assert normalized == "ciao ((ride))"
     assert "TRIM_PAUSES" in warnings
     assert errors == {}
 
 
 def test_integration_leading_pause_stripped():
-    """{P} at the start is removed by TRIM_PAUSES (after META_TAGS creates it)."""
+    """(.) at the start is removed by TRIM_PAUSES."""
     normalized, warnings, _ = normalize.validate_and_normalize("(.) ciao")
     assert normalized == "ciao"
-    assert "META_TAGS" in warnings
     assert "TRIM_PAUSES" in warnings
 
 
@@ -636,9 +633,8 @@ def test_integration_number_conversion():
 def test_integration_multi_rule_sequence():
     """(.) + accent + number all fire in sequence."""
     normalized, warnings, errors = normalize.validate_and_normalize("(.) perchè 2")
-    # meta_tag: (.) → {P}; trim_pauses strips it; replace_che fixes accent; check_numbers converts
+    # trim_pauses strips the leading (.); replace_che fixes accent; check_numbers converts
     assert normalized == "perché due"
-    assert "META_TAGS" in warnings
     assert "TRIM_PAUSES" in warnings
     assert "ACCENTS" in warnings
     assert "NUMBERS" in warnings
@@ -646,12 +642,12 @@ def test_integration_multi_rule_sequence():
 
 
 def test_integration_overlap_pause_results_in_empty_unit():
-    """{P} at span boundary is stripped by TRIM_PAUSES; the resulting []
+    """(.) at span boundary is stripped by TRIM_PAUSES; the resulting []
     is removed by EMPTY_SPANS; flag_empty_unit then marks the TU for exclusion.
     """
-    normalized, warnings, _ = normalize.validate_and_normalize("[{P}]")
+    normalized, warnings, _ = normalize.validate_and_normalize("[(.)]")
     assert normalized == ""
-    assert "SWITCHES" not in warnings   # switch_NVB correctly left {P} alone
+    assert "SWITCHES" not in warnings   # switch_NVB correctly left (.) alone
     assert "TRIM_PAUSES" in warnings
     assert "EMPTY_SPANS" in warnings
     assert "EMPTY_UNIT" in warnings
@@ -662,8 +658,8 @@ def test_integration_nvb_moved_outside_overlap():
     The trailing space check_spaces pass (after switch_NVB) cleans the stray
     space that moving the tag leaves inside the bracket.
     """
-    normalized, warnings, _ = normalize.validate_and_normalize("[{ride} ciao]")
-    assert normalized == "{ride} [ciao]"
+    normalized, warnings, _ = normalize.validate_and_normalize("[((ride)) ciao]")
+    assert normalized == "((ride)) [ciao]"
     assert "SWITCHES" in warnings
 
 
@@ -712,12 +708,12 @@ def test_integration_config_disables_accents():
 
 
 def test_integration_empty_span_from_nvb_removal():
-    """[{ride}] → switch_NVB moves ride out → [] → removed by EMPTY_SPANS."""
-    normalized, warnings, _ = normalize.validate_and_normalize("[{ride}]")
-    assert normalized == "{ride}"
+    """[((ride))] → switch_NVB moves ((ride)) out → [] → removed by EMPTY_SPANS."""
+    normalized, warnings, _ = normalize.validate_and_normalize("[((ride))]")
+    assert normalized == "((ride))"
     assert "SWITCHES" in warnings
     assert "EMPTY_SPANS" in warnings
-    assert "EMPTY_UNIT" not in warnings   # {ride} is content
+    assert "EMPTY_UNIT" not in warnings   # ((ride)) is content
 
 
 def test_integration_empty_unit_excluded():
