@@ -25,15 +25,33 @@ Or write directly to the KIParla artifacts layout:
         --artifacts-root KIParla-artifacts \\
         --module        ParlaTO
 
+With a translation layer (e.g. Straparlando modules):
+    python3 tools/linear2html.py \\
+        --orthographic  Stra-ParlaTO/linear-orthographic/STCA001.txt \\
+        --jefferson     Stra-ParlaTO/linear-jefferson/STCA001.txt \\
+        --tsv           Stra-ParlaTO/tsv/STCA001.vert.tsv \\
+        --conversations Stra-ParlaTO/metadata/conversations.tsv \\
+        --participants  Stra-ParlaTO/metadata/participants.tsv \\
+        --translations  Stra-ParlaTO/translations/STCA001.translations.json \\
+        --artifacts-root KIParla-artifacts \\
+        --module        Stra-ParlaTO
+
 The conversation code is inferred from the input filename stem.
 Either --orthographic or --jefferson (or both) must be supplied.
 --tsv is optional; when supplied, per-turn begin/end times are embedded
 and can be toggled on/off in the page.
+--translations is optional and requires --tsv (translations are matched
+to turns via the real tu_id from the .vert.tsv, not the transcript's
+positional order). Accepts a <name>.translations.json or .tsv file
+(see tools/serialize.py TRANSLATIONS_FIELDNAMES); each row's
+parent_tu_id links it to the turn it translates. Rendered as a
+per-turn translation line, hidden by default and toggled on screen.
 """
 
 import argparse
 import csv
 import html
+import json
 import os
 import re
 import subprocess
@@ -131,11 +149,12 @@ def _append_unit_text(text_jefferson, text_orthographic, row):
         text_orthographic.append(" ")
 
 
-def _finalize_unit(tu_idx, speaker, begin_ms, end_ms, text_jefferson, text_orthographic):
+def _finalize_unit(tu_idx, tu_id, speaker, begin_ms, end_ms, text_jefferson, text_orthographic):
     jeff_text = re.sub(r" +", " ", "".join(text_jefferson).strip())
     orth_text = re.sub(r" +", " ", "".join(text_orthographic).strip())
     return {
         "tu_idx": tu_idx,
+        "tu_id": tu_id,
         "speaker": speaker.strip(),
         "begin": begin_ms,
         "end": end_ms,
@@ -165,7 +184,7 @@ def load_tsv_units(tsv_path):
             if tid != current_tu:
                 units.append(
                     _finalize_unit(
-                        len(units), current_speaker, begin_ms, end_ms,
+                        len(units), current_tu, current_speaker, begin_ms, end_ms,
                         text_jefferson, text_orthographic,
                     )
                 )
@@ -194,7 +213,7 @@ def load_tsv_units(tsv_path):
     if current_tu is not None:
         units.append(
             _finalize_unit(
-                len(units), current_speaker, begin_ms, end_ms,
+                len(units), current_tu, current_speaker, begin_ms, end_ms,
                 text_jefferson, text_orthographic,
             )
         )
@@ -239,6 +258,53 @@ def align_turns_to_units(turns, units, text_key):
         pos = matched + 1
 
     return aligned
+
+
+def load_translations(path):
+    """Read a <name>.translations.json or .tsv file into a list of row dicts.
+
+    Each row has tu_id, speaker, start, end, parent_tu_id, text (see
+    tools/serialize.py TRANSLATIONS_FIELDNAMES). parent_tu_id refers to the
+    real tu_id of the turn being translated, not a positional index.
+    """
+    path = Path(path)
+    if path.suffix == ".json":
+        with path.open(encoding="utf-8") as f:
+            rows = json.load(f)
+    else:
+        with path.open(encoding="utf-8", newline="") as f:
+            rows = list(csv.DictReader(f, delimiter="\t"))
+    return [row for row in rows if row.get("text", "").strip()]
+
+
+def build_translations_map(translation_rows, units):
+    """Map each unit's tu_idx to its list of (speaker, text) translations.
+
+    translation_rows come from load_translations(); units come from
+    load_tsv_units(). Rows whose parent_tu_id does not match any unit's
+    real tu_id are skipped with a warning.
+    """
+    tu_id_to_idx = {u["tu_id"]: u["tu_idx"] for u in units}
+    translations_map = {}
+
+    for row in translation_rows:
+        parent_tu_id = row.get("parent_tu_id")
+        if parent_tu_id in (None, "", "_"):
+            continue
+        parent_tu_id = str(parent_tu_id)
+        tu_idx = tu_id_to_idx.get(parent_tu_id)
+        if tu_idx is None:
+            print(
+                f"[warn] translation tu_id={row.get('tu_id')} references "
+                f"unknown parent_tu_id={parent_tu_id}, skipping",
+                file=sys.stderr,
+            )
+            continue
+        translations_map.setdefault(tu_idx, []).append(
+            (row.get("speaker", "").strip(), row["text"].strip())
+        )
+
+    return translations_map
 
 
 def fmt_ms(ms):
@@ -594,6 +660,32 @@ tbody td {
 }
 .show-times .turn-time { display: block; }
 
+/* ── translations (hidden until .show-translations on .transcript) ── */
+.turn-translation-label,
+.turn-translation-text {
+    display: none;
+}
+.show-translations .turn-translation-label,
+.show-translations .turn-translation-text {
+    display: block;
+}
+.turn-translation-label {
+    grid-column: 1;
+    font-size: .75rem;
+    color: #999;
+    padding-top: .1rem;
+}
+.turn-translation-label::after { content: "traduzione"; }
+.turn-translation-text {
+    grid-column: 2;
+    font-style: italic;
+    color: #666;
+    margin-top: .15rem;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
 /* ── Jefferson notation ── */
 .jtext { font: inherit; }
 .overlap { color: #2060a0; }
@@ -870,6 +962,11 @@ function showPanel(id) {
 function toggleTimes(btn) {
     var t = document.querySelector('.transcript');
     var on = t.classList.toggle('show-times');
+    btn.classList.toggle('active', on);
+}
+function toggleTranslations(btn) {
+    var t = document.querySelector('.transcript');
+    var on = t.classList.toggle('show-translations');
     btn.classList.toggle('active', on);
 }
 function toggleTimeline(btn) {
@@ -1176,7 +1273,7 @@ window.addEventListener('pointercancel', stopTimelineDrag);
 """
 
 
-def render_turns(turns, colour_map, is_jefferson, timings=None):
+def render_turns(turns, colour_map, is_jefferson, timings=None, translations_map=None):
     parts = []
     prev_spk = None
     for i, (spk, text) in enumerate(turns):
@@ -1189,6 +1286,7 @@ def render_turns(turns, colour_map, is_jefferson, timings=None):
 
         time_html = ""
         data_tu = ""
+        tu_idx = None
         if timings and i < len(timings):
             tu_idx, b, e = timings[i]
             b_str, e_str = fmt_ms(b), fmt_ms(e)
@@ -1203,6 +1301,14 @@ def render_turns(turns, colour_map, is_jefferson, timings=None):
             data_begin = ""
             data_end = ""
 
+        translation_html = ""
+        if translations_map and tu_idx in translations_map:
+            translation_html = "".join(
+                f'<span class="turn-translation-label"></span>'
+                f'<span class="turn-translation-text">{html.escape(trans_text)}</span>'
+                for _trans_spk, trans_text in translations_map[tu_idx]
+            )
+
         parts.append(
             f'<div class="turn"{data_tu}{data_begin}{data_end}>'
             f'<div class="turn-meta">'
@@ -1210,6 +1316,7 @@ def render_turns(turns, colour_map, is_jefferson, timings=None):
             f'{time_html}'
             f'</div>'
             f'<span class="turn-text">{rendered}</span>'
+            f'{translation_html}'
             f'</div>'
         )
         prev_spk = spk
@@ -1278,22 +1385,33 @@ def _latex_participants_table(rows):
 """
 
 
-def _latex_transcript_table(turns, timings):
+def _latex_transcript_table(turns, timings, translations_map=None):
     rows = []
     prev_speaker = None
     for idx, (speaker, text) in enumerate(turns):
         time_label = ""
+        tu_idx = None
         if timings and idx < len(timings):
-            _, begin_ms, end_ms = timings[idx]
+            tu_idx, begin_ms, end_ms = timings[idx]
             b_str, e_str = fmt_ms(begin_ms), fmt_ms(end_ms)
             time_label = f"{b_str}–{e_str}" if b_str and e_str else (b_str or e_str)
-        rows.append((speaker if speaker != prev_speaker else "", time_label, text))
+        rows.append((speaker if speaker != prev_speaker else "", time_label, text, False))
         prev_speaker = speaker
 
-    body = "\n".join(
-        " & ".join(_latex_cell(cell) for cell in row) + r" \\"
-        for row in rows
-    )
+        if translations_map and tu_idx in translations_map:
+            for _trans_spk, trans_text in translations_map[tu_idx]:
+                rows.append(("", "", trans_text, True))
+
+    body_lines = []
+    for spk_cell, time_cell, text_cell, is_translation in rows:
+        if is_translation:
+            text_latex = rf"\textit{{\small\color{{gray}}traduzione: {_latex_cell(text_cell)}}}"
+        else:
+            text_latex = _latex_cell(text_cell)
+        body_lines.append(
+            " & ".join([_latex_cell(spk_cell), _latex_cell(time_cell), text_latex]) + r" \\"
+        )
+    body = "\n".join(body_lines)
     return rf"""
 \small
 \setlength{{\tabcolsep}}{{5pt}}
@@ -1310,7 +1428,7 @@ def _latex_transcript_table(turns, timings):
 """
 
 
-def build_pdf_markdown(code, label, turns, timings, conv, participants_map, speaker_order):
+def build_pdf_markdown(code, label, turns, timings, conv, participants_map, speaker_order, translations_map=None):
     meta_items = [
         ("Codice", code),
         ("Tipo", tr(conv.get("type", ""), TYPE_LABELS)),
@@ -1367,7 +1485,7 @@ def build_pdf_markdown(code, label, turns, timings, conv, participants_map, spea
         "",
         "## Trascrizione",
         "",
-        _latex_transcript_table(turns, timings),
+        _latex_transcript_table(turns, timings, translations_map),
     ]
     return "\n".join(lines) + "\n"
 
@@ -1375,6 +1493,7 @@ def build_pdf_markdown(code, label, turns, timings, conv, participants_map, spea
 def ensure_pdfs(
     output_path, code, conv, participants_map, speaker_order,
     orth_turns=None, jeff_turns=None, orth_timings=None, jeff_timings=None,
+    translations_map=None,
 ):
     """Generate transcript PDFs next to the HTML output tree and return relative hrefs."""
     output_path = Path(output_path).resolve()
@@ -1395,7 +1514,7 @@ def ensure_pdfs(
         md_path = pdf_dir / f"{code}-{slug}.md"
         pdf_path = pdf_dir / f"{code}-{slug}.pdf"
         md_path.write_text(
-            build_pdf_markdown(code, label, turns, timings, conv, participants_map, speaker_order),
+            build_pdf_markdown(code, label, turns, timings, conv, participants_map, speaker_order, translations_map),
             encoding="utf-8",
         )
         subprocess.run(
@@ -1443,6 +1562,7 @@ def build_html(
     code, conv, participants_map, all_turns, orth_turns, jeff_turns,
     orth_timings=None, jeff_timings=None, timeline_units=None,
     css_href="css/linear2html.css", js_href="js/linear2html.js", pdf_links=None,
+    translations_map=None,
 ):
     e = lambda s: html.escape(str(s)) if s else ""
 
@@ -1508,11 +1628,11 @@ def build_html(
     default_panel = None
 
     if orth_turns is not None:
-        panels.append(("panel-orth", "ortografico", render_turns(orth_turns, colour_map, False, orth_timings)))
+        panels.append(("panel-orth", "ortografico", render_turns(orth_turns, colour_map, False, orth_timings, translations_map)))
         default_panel = default_panel or "panel-orth"
 
     if jeff_turns is not None:
-        panels.append(("panel-jeff", "Jefferson", render_turns(jeff_turns, colour_map, True, jeff_timings)))
+        panels.append(("panel-jeff", "Jefferson", render_turns(jeff_turns, colour_map, True, jeff_timings, translations_map)))
         default_panel = default_panel or "panel-jeff"
 
     toggle_html = ""
@@ -1529,6 +1649,10 @@ def build_html(
     if orth_timings or jeff_timings:
         time_button = '<button onclick="toggleTimes(this)">tempi</button>'
 
+    translations_button = ""
+    if translations_map:
+        translations_button = '<button onclick="toggleTranslations(this)">traduzioni</button>'
+
     timeline_button = ""
     if timeline_units:
         timeline_button = '<button type="button" class="active" onclick="toggleTimeline(this)">timeline</button>'
@@ -1538,11 +1662,11 @@ def build_html(
         '<button type="button" onclick="increaseFontSize()">A+</button>'
     )
 
-    if transcript_buttons or time_button or timeline_button or font_controls:
-        sep = '<span style="color:#ddd;margin:0 .3rem">|</span>' if transcript_buttons and time_button else ""
+    if transcript_buttons or time_button or translations_button or timeline_button or font_controls:
+        sep = '<span style="color:#ddd;margin:0 .3rem">|</span>' if transcript_buttons and (time_button or translations_button) else ""
         toggle_html = (
             f'<div class="toggle-bar">'
-            f'{"".join(transcript_buttons)}<span class="toggle-sep">{sep}</span>{time_button}{timeline_button}{font_controls}'
+            f'{"".join(transcript_buttons)}<span class="toggle-sep">{sep}</span>{time_button}{translations_button}{timeline_button}{font_controls}'
             f'</div>'
         )
 
@@ -1674,6 +1798,11 @@ def main():
     ap.add_argument("--orthographic",  help="Orthographic linear .txt file")
     ap.add_argument("--jefferson",     help="Jefferson linear .txt file")
     ap.add_argument("--tsv",           help="vert.tsv file for per-turn begin/end timings (optional)")
+    ap.add_argument(
+        "--translations",
+        help="<name>.translations.json or .tsv file (optional, requires --tsv); "
+             "rendered as a toggleable per-turn translation line",
+    )
     ap.add_argument("--conversations", required=True, help="conversations.tsv")
     ap.add_argument("--participants",  required=True, help="participants.tsv")
     ap.add_argument("--output",        help="Output .html file")
@@ -1729,18 +1858,28 @@ def main():
         if orth_turns is not None:
             orth_timings = align_turns_to_units(orth_turns, timeline_units, "orth_text")
 
+    translations_map = None
+    if args.translations:
+        if timeline_units is None:
+            print("[warn] --translations requires --tsv, ignoring --translations", file=sys.stderr)
+        else:
+            translation_rows = load_translations(args.translations)
+            translations_map = build_translations_map(translation_rows, timeline_units)
+
     css_href, js_href = ensure_shared_assets(output_path)
     speaker_order = list(dict.fromkeys(spk for spk, _ in all_turns))
     pdf_links = ensure_pdfs(
         output_path, code, conv, participants, speaker_order,
         orth_turns=orth_turns, jeff_turns=jeff_turns,
         orth_timings=orth_timings, jeff_timings=jeff_timings,
+        translations_map=translations_map,
     )
 
     out = build_html(
         code, conv, participants, all_turns, orth_turns, jeff_turns,
         orth_timings=orth_timings, jeff_timings=jeff_timings, timeline_units=timeline_units,
         css_href=css_href, js_href=js_href, pdf_links=pdf_links,
+        translations_map=translations_map,
     )
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
