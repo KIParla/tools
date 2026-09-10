@@ -25,7 +25,10 @@ This page tracks notable documentation and maintenance changes for the `tools` r
   so they no longer break token adjacency (`the (.) dog` still matches
   `"the" "dog"`). Registries gained `STRUCTURE pause` and `STRUCTURE nvb`. A
   turn that is only pause/NVB keeps the marker but loses its (now empty)
-  `<transcription_unit>` wrapper.
+  `<transcription_unit>` wrapper. A run of consecutive markers (across turn
+  boundaries too) is collapsed to at most one `<pause/>` and one
+  `<nvb descr="a; b">` — two same-type zero-width structures at one position
+  would otherwise be dropped by the indexer.
 * `WORD_CORRECTIONS`: added `ceh` → `c(io)è` and `mmh` → `mhmh`. Each
   occurrence is reported as a `WORD_CORRECTIONS` warning like the existing
   interjection spellings.

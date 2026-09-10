@@ -254,77 +254,87 @@ def convert_file(
             tu_order.append(tu_id)
         tus[tu_id].append(row)
 
-    for tu_id in tu_order:
+    def tu_open_tag(tu_id):
         tu_rows = tus[tu_id]
         speaker = tu_rows[0]["speaker"]
         part = participants.get(speaker, {})
-
-        begin_ms = None
-        end_ms = None
+        begin_ms = end_ms = None
         for row in tu_rows:
             b, e = parse_begin_end(row["align"])
             if b is not None and begin_ms is None:
                 begin_ms = b
             if e is not None:
                 end_ms = e
-
         begin_str = str(begin_ms) if begin_ms is not None else ""
         end_str = str(end_ms) if end_ms is not None else ""
-        audio_url = build_url(
-            base_url, f"player/player.cgi?code={code}&begin={begin_str}&end={end_str}"
-        )
-
-        transcription_unit_attrs = [
+        attrs = [
             ("begin", begin_str),
             ("end", end_str),
-            ("audio_file", audio_url),
+            ("audio_file", build_url(
+                base_url, f"player/player.cgi?code={code}&begin={begin_str}&end={end_str}")),
             ("participant_code", speaker),
             *iter_participant_attrs(part),
         ]
         if issues_base_url:
-            transcription_unit_attrs.append((
-                "report_url",
-                build_report_url(
-                    issues_base_url, doc_module, code, tu_id, speaker,
-                    begin_str, end_str, doc_url,
-                ),
-            ))
+            attrs.append(("report_url", build_report_url(
+                issues_base_url, doc_module, code, tu_id, speaker,
+                begin_str, end_str, doc_url)))
         if tu_id in translations:
-            transcription_unit_attrs.append(
-                ("translation", _xml_attr(translations[tu_id]))
-            )
-        attrs_str = "".join(f' {name}="{value}"' for name, value in transcription_unit_attrs)
+            attrs.append(("translation", _xml_attr(translations[tu_id])))
+        return "<transcription_unit" + "".join(f' {n}="{v}"' for n, v in attrs) + ">"
 
-        # Build the unit body first. Short pauses and non-verbal behaviour become
-        # zero-width structures rather than tokens, so they never break token
-        # adjacency (`the (.) dog` / `the ((ride)) dog` still match `"the" "dog"`).
-        body = []
-        has_token = False
-        for row in tu_rows:
+    # Single pass over the conversation. Short pauses and non-verbal behaviour
+    # become zero-width structures (<pause/> / <nvb/>) rather than tokens, so
+    # they never break token adjacency (`the (.) dog` / `the ((ride)) dog` still
+    # match `"the" "dog"`). Every run of markers between two real tokens is
+    # collapsed to at most one <pause/> and one <nvb/>: two occurrences of the
+    # same zero-width structure at one position would be silently dropped by the
+    # indexer, and a run can straddle a transcription_unit boundary.
+    open_tu = None
+    pending_pause = False
+    pending_nvb = []
+
+    def flush_markers():
+        nonlocal pending_pause, pending_nvb
+        if pending_pause:
+            print("<pause/>", file=out)
+        if pending_nvb:
+            print(f'<nvb descr="{_xml_attr("; ".join(pending_nvb))}"/>', file=out)
+        pending_pause, pending_nvb = False, []
+
+    for tu_id in tu_order:
+        for row in tus[tu_id]:
             form = row["form"]
             if is_shortpause(row):
-                body.append("<pause/>")
+                pending_pause = True
                 continue
             if is_nvb(row):
-                body.append(f'<nvb descr="{_xml_attr(nvb_descr(form))}"/>')
+                descr = nvb_descr(form)
+                if descr:
+                    pending_nvb.append(descr)
                 continue
+            if not form or form == "_":
+                continue
+            # real token
+            if open_tu is not None and open_tu != tu_id:
+                print("</transcription_unit>", file=out)
+                open_tu = None
+            if open_tu is None:
+                flush_markers()                      # between turns -> conversation level
+                print(tu_open_tag(tu_id), file=out)
+                open_tu = tu_id
+            else:
+                flush_markers()                      # between tokens of the same turn
             token_id = row.get("token_id", "") or ""
-            if form and form != "_":
-                fields = [form, token_id, *(_pos_value(row, a) for a in LINGUISTIC_ATTRS)]
-                body.append("\t".join(fields))
-                has_token = True
-                if has_space_after_no(row):
-                    body.append("<g/>")
+            print("\t".join(
+                [form, token_id, *(_pos_value(row, a) for a in LINGUISTIC_ATTRS)]
+            ), file=out)
+            if has_space_after_no(row):
+                print("<g/>", file=out)
 
-        # A transcription_unit structure must span at least one token. Units that
-        # are pure pause / non-verbal behaviour keep their markers but drop the
-        # (empty) wrapper.
-        if has_token:
-            print(f"<transcription_unit{attrs_str}>", file=out)
-            print("\n".join(body), file=out)
-            print("</transcription_unit>", file=out)
-        elif body:
-            print("\n".join(body), file=out)
+    if open_tu is not None:
+        print("</transcription_unit>", file=out)
+    flush_markers()                                  # trailing markers
 
     print("</conversation>", file=out)
 
