@@ -567,6 +567,7 @@ def test_remove_empty_spans_multiple():
 def test_word_corrections_single_word_variants():
     assert normalize.apply_word_corrections("vabbe dai") == (1, "vabbè dai")
     assert normalize.apply_word_corrections("cè bene") == (1, "c(io)è bene")
+    assert normalize.apply_word_corrections("ceh bene") == (1, "c(io)è bene")
     assert normalize.apply_word_corrections("mha non so") == (1, "mah non so")
     assert normalize.apply_word_corrections("emh forse") == (1, "ehm forse")
     assert normalize.apply_word_corrections("hem forse") == (1, "ehm forse")
@@ -578,6 +579,7 @@ def test_word_corrections_mh_family_by_length():
     assert normalize.apply_word_corrections("hm sì") == (1, "mh sì")
     assert normalize.apply_word_corrections("mhm sì") == (1, "mhmh sì")
     assert normalize.apply_word_corrections("hmhm sì") == (1, "mhmh sì")
+    assert normalize.apply_word_corrections("mmh sì") == (1, "mhmh sì")
 
 def test_word_corrections_va_phrase_variants():
     assert normalize.apply_word_corrections("va beh dai") == (1, "vabbè dai")

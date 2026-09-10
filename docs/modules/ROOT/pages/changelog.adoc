@@ -4,6 +4,31 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* `tsv2vert_v2.py`: each `<transcription_unit>` now carries a `report_url`
+  attribute — a prefilled "open a GitHub issue about this turn" link targeting
+  the conversation's module repository (`--issues-base-url`, default
+  `https://github.com/KIParla`; pass `""` to disable). The corresponding
+  `report_url` `MAXLISTSIZE "0"` attribute was added to the KIParla registry
+  files.
+* `tsv2vert_v2.py`: `--translations-dir` (auto-detected from a sibling
+  `translations/` directory) adds a `translation` structure attribute to each
+  transcription unit that has a translation-tier rendering, matched by
+  `parent_tu_id`.
+* `tsv2vert_v2.py`: token lines now carry `lemma` and `upos` as positional
+  attributes 3–4 (from the source TSV, empty when absent), and each
+  `<conversation>` gets `linguistic_annotation="yes"/"no"`. The KIParla
+  registry files gained the matching `ATTRIBUTE lemma` / `ATTRIBUTE upos`
+  positional entries, a `linguistic_annotation` conversation attribute, and
+  that attribute in `SUBCORPATTRS`.
+* `tsv2vert_v2.py`: short pauses (`(.)`) and non-verbal behaviour (`((…))`) are
+  emitted as zero-width `<pause/>` / `<nvb descr="…"/>` tags instead of tokens,
+  so they no longer break token adjacency (`the (.) dog` still matches
+  `"the" "dog"`). Registries gained `STRUCTURE pause` and `STRUCTURE nvb`. A
+  turn that is only pause/NVB keeps the marker but loses its (now empty)
+  `<transcription_unit>` wrapper.
+* `WORD_CORRECTIONS`: added `ceh` → `c(io)è` and `mmh` → `mhmh`. Each
+  occurrence is reported as a `WORD_CORRECTIONS` warning like the existing
+  interjection spellings.
 * added an Antora documentation component for `tools`
 * documented the standalone scripts with concrete command examples
 * documented the test workflow
