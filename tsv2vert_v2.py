@@ -168,8 +168,12 @@ def is_nvb(row):
 
 
 def nvb_descr(form):
-    """'((versa_il_tè))' -> 'versa il tè'; '((_ride))' -> 'ride'."""
-    return form.strip().removeprefix("((").removesuffix("))").strip("_").replace("_", " ")
+    """'((versa_il_tè))' -> 'versa_il_tè'; '((_ride))' -> 'ride'.
+
+    Spaces are kept as underscores (the source `((...))` convention): a
+    registry DISPLAYBEGIN cannot render a value containing spaces.
+    """
+    return form.strip().removeprefix("((").removesuffix("))").strip("_")
 
 
 def load_translations(tsv_path, translations_dir):
@@ -285,6 +289,7 @@ def convert_file(
     open_tu = None
     pending_pause = False
     pending_nvb = []
+    glue_pending = False   # previous token had SpaceAfter=No
 
     def flush_markers():
         nonlocal pending_pause, pending_nvb
@@ -299,15 +304,18 @@ def convert_file(
             form = row["form"]
             if is_shortpause(row):
                 pending_pause = True
+                glue_pending = False   # a pause always gets a space on both sides
                 continue
             if is_nvb(row):
                 descr = nvb_descr(form)
                 if descr:
                     pending_nvb.append(descr)
+                glue_pending = False
                 continue
             if not form or form == "_":
                 continue
             # real token
+            had_markers = pending_pause or bool(pending_nvb)
             if open_tu is not None and open_tu != tu_id:
                 print("</transcription_unit>", file=out)
                 open_tu = None
@@ -317,12 +325,13 @@ def convert_file(
                 open_tu = tu_id
             else:
                 flush_markers()                      # between tokens of the same turn
+            if glue_pending and not had_markers:
+                print("<g/>", file=out)
             token_id = row.get("token_id", "") or ""
             print("\t".join(
                 [form, token_id, *(_pos_value(row, a) for a in LINGUISTIC_ATTRS)]
             ), file=out)
-            if has_space_after_no(row):
-                print("<g/>", file=out)
+            glue_pending = has_space_after_no(row)
 
     if open_tu is not None:
         print("</transcription_unit>", file=out)

@@ -28,7 +28,10 @@ This page tracks notable documentation and maintenance changes for the `tools` r
   `<transcription_unit>` wrapper. A run of consecutive markers (across turn
   boundaries too) is collapsed to at most one `<pause/>` and one
   `<nvb descr="a; b">` — two same-type zero-width structures at one position
-  would otherwise be dropped by the indexer.
+  would otherwise be dropped by the indexer. `nvb` `descr` keeps `_` for spaces
+  (a registry `DISPLAYBEGIN` cannot render a value with spaces); the markers
+  show in the concordance as `·(.)·` / `·((descr))·`. A word that was glued
+  (`SpaceAfter=No`) to a now-removed marker no longer emits `<g/>`.
 * `WORD_CORRECTIONS`: added `ceh` → `c(io)è` and `mmh` → `mhmh`. Each
   occurrence is reported as a `WORD_CORRECTIONS` warning like the existing
   interjection spellings.
