@@ -68,7 +68,10 @@ def load_conversations(path):
 
 def load_participants(path):
     with open(path) as f:
-        return {row["code"]: row for row in csv.DictReader(f, delimiter="\t")}
+        reader = csv.DictReader(f, delimiter="\t")
+        by_code = {row["code"]: row for row in reader}
+        attr_keys = [k for k in (reader.fieldnames or []) if k not in ("code", "conversations")]
+    return by_code, attr_keys
 
 
 def normalize_attr_name(name):
@@ -134,15 +137,22 @@ def iter_conversation_attrs(conv, code, doc_url):
         yield (attr_name, attr_value)
 
 
-def iter_participant_attrs(part):
+def iter_participant_attrs(part, attr_keys):
+    """Yield the participant_* attributes for one speaker.
+
+    A speaker with no `participants.tsv` row (`???`, `??`, and the odd
+    unlisted code) still gets every attribute, set to `N/A` — otherwise
+    NoSketch shows the internal `===NONE===` sentinel.
+    """
+    if not part:
+        for key in attr_keys:
+            yield (f'participant_{normalize_attr_name(key)}', "N/A")
+        return
+
     for key, value in part.items():
         if key in {"code", "conversations"}:
             continue
-
-        attr_name = f'participant_{normalize_attr_name(key)}'
-        attr_value = normalize_multivalue_value(value)
-
-        yield (attr_name, attr_value)
+        yield (f'participant_{normalize_attr_name(key)}', normalize_multivalue_value(value))
 
 
 def _xml_attr(value):
@@ -217,8 +227,8 @@ def build_report_url(issues_base_url, module, code, tu_id, speaker, doc_url):
 
 
 def convert_file(
-    tsv_path, conversations, participants, out, base_url, artifacts_base_url,
-    artifacts_module, issues_base_url, translations_dir,
+    tsv_path, conversations, participants, participant_attr_keys, out, base_url,
+    artifacts_base_url, artifacts_module, issues_base_url, translations_dir,
 ):
     code = Path(tsv_path).stem.split(".")[0]
 
@@ -270,7 +280,7 @@ def convert_file(
             ("audio_file", build_url(
                 base_url, f"player/player.cgi?code={code}&begin={begin_str}&end={end_str}")),
             ("participant_code", speaker),
-            *iter_participant_attrs(part),
+            *iter_participant_attrs(part, participant_attr_keys),
         ]
         if issues_base_url:
             attrs.append(("report_url", build_report_url(
@@ -397,7 +407,7 @@ def main():
     args = parser.parse_args()
 
     conversations = load_conversations(args.conversations)
-    participants_data = load_participants(args.participants)
+    participants_data, participant_attr_keys = load_participants(args.participants)
     artifacts_base_url = args.artifacts_base_url or args.base_url
     artifacts_module = args.artifacts_module or infer_artifacts_module(args.conversations)
 
@@ -406,6 +416,7 @@ def main():
             tsv_path,
             conversations,
             participants_data,
+            participant_attr_keys,
             sys.stdout,
             args.base_url,
             artifacts_base_url,

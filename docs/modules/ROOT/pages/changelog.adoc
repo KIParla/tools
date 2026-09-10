@@ -32,6 +32,9 @@ This page tracks notable documentation and maintenance changes for the `tools` r
   (a registry `DISPLAYBEGIN` cannot render a value with spaces); the markers
   show in the concordance as `·(.)·` / `·((descr))·`. A word that was glued
   (`SpaceAfter=No`) to a now-removed marker no longer emits `<g/>`.
+* `tsv2vert_v2.py`: a speaker with no `participants.tsv` row (`???`, `??`, an
+  unlisted code) now gets every `participant_*` attribute set to `N/A` instead
+  of unset (NoSketch was showing the `===NONE===` sentinel).
 * `WORD_CORRECTIONS`: added `ceh` → `c(io)è` and `mmh` → `mhmh`. Each
   occurrence is reported as a `WORD_CORRECTIONS` warning like the existing
   interjection spellings.
