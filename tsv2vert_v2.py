@@ -198,23 +198,16 @@ def load_translations(tsv_path, translations_dir):
     return out
 
 
-def build_report_url(issues_base_url, module, code, tu_id, speaker, begin_str, end_str, doc_url):
+def build_report_url(issues_base_url, module, code, tu_id, speaker, doc_url):
     """Prefilled "open a GitHub issue about this transcription unit" URL.
 
     Points at the issue tracker of the conversation's own module repository
-    (mapped by code prefix for the aggregated KIParla corpus).
+    (mapped by code prefix for the aggregated KIParla corpus). Kept short — it
+    is repeated on every transcription unit in the vertical.
     """
-    body = (
-        f"Conversazione: {code}\n"
-        f"Unità di trascrizione: {tu_id}\n"
-        f"Parlante: {speaker}\n"
-        f"Intervallo: {begin_str}–{end_str} ms\n"
-        f"Trascrizione completa: {doc_url}\n\n"
-        "<!-- Descrivi il problema (token, trascrizione, allineamento, metadati...). -->\n"
-    )
     query = urlencode({
-        "title": f"[{code}] problema di trascrizione — TU {tu_id}",
-        "body": body,
+        "title": f"[{code} · TU {tu_id} · {speaker}] problema di trascrizione",
+        "body": f"{doc_url}\n\n",
     })
     return f"{issues_base_url.rstrip('/')}/{module}/issues/new?{query}"
 
@@ -277,8 +270,7 @@ def convert_file(
         ]
         if issues_base_url:
             attrs.append(("report_url", build_report_url(
-                issues_base_url, doc_module, code, tu_id, speaker,
-                begin_str, end_str, doc_url)))
+                issues_base_url, doc_module, code, tu_id, speaker, doc_url)))
         if tu_id in translations:
             attrs.append(("translation", _xml_attr(translations[tu_id])))
         return "<transcription_unit" + "".join(f' {n}="{v}"' for n, v in attrs) + ">"
