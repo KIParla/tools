@@ -60,11 +60,20 @@ from pathlib import Path
 
 
 # ── colour palette assigned round-robin to speakers ───────────────────────────
+# Muted multi-hue set, chosen to sit next to the kiparla.it brand red
+# (#dd3333) without competing with it — no reds/oranges here, those are
+# reserved for interactive UI accents. Applied via the .spk-N CSS classes
+# (see CSS below), never as inline style.
 SPEAKER_COLOURS = [
-    "#4e79a7", "#f28e2b", "#e15759", "#76b7b2",
-    "#59a14f", "#edc948", "#b07aa1", "#ff9da7",
-    "#9c755f", "#bab0ac",
+    "#3a6b8a", "#4f7a3a", "#7a4f8a", "#2f8a78", "#8a7a2f",
+    "#4f4f8a", "#2f6b4f", "#8a4f6b", "#4f7a8a", "#6b5a3a",
 ]
+
+
+def is_unknown_speaker(spk):
+    """True for placeholder speaker codes like '?', '??', '???'."""
+    spk = (spk or "").strip()
+    return bool(spk) and set(spk) == {"?"}
 
 # ── Italian labels for metadata fields ────────────────────────────────────────
 TYPE_LABELS = {
@@ -376,7 +385,25 @@ CSS = """
     --base-font-size: 15px;
     --transcript-font-size: 1rem;
     --timeline-handle-size: 14px;
+    /* kiparla.it brand accent (theme customizer: link/button/nav colour) */
+    --brand: #dd3333;
+    --brand-dark: #ab0101;
 }
+
+/* ── speaker colours (assigned round-robin; see SPEAKER_COLOURS in
+   linear2html.py) — set color only, .dot/.speaker-segment pick it up via
+   currentColor so no per-turn inline style is needed ── */
+.spk-0 { color: #3a6b8a; }
+.spk-1 { color: #4f7a3a; }
+.spk-2 { color: #7a4f8a; }
+.spk-3 { color: #2f8a78; }
+.spk-4 { color: #8a7a2f; }
+.spk-5 { color: #4f4f8a; }
+.spk-6 { color: #2f6b4f; }
+.spk-7 { color: #8a4f6b; }
+.spk-8 { color: #4f7a8a; }
+.spk-9 { color: #6b5a3a; }
+.spk-unknown { color: #767672; }  /* fixed grey for ???/?? */
 
 body {
     font-family: 'Segoe UI', system-ui, sans-serif;
@@ -422,6 +449,8 @@ body.timeline-collapsed {
     color: #333;
     margin-bottom: .85rem;
     line-height: 1.25;
+    border-bottom: 2px solid var(--brand);
+    padding-bottom: .5rem;
 }
 
 .left-rail .toggle-bar {
@@ -461,6 +490,7 @@ body.timeline-collapsed {
 
 .download-links a:hover {
     background: #f0e8dc;
+    border-color: var(--brand);
 }
 
 /* ── sidebar ── */
@@ -541,7 +571,7 @@ body.timeline-collapsed {
     transition: background .15s, color .15s;
 }
 .sidebar-toggle:hover,
-.sidebar-toggle.active { background: #333; color: #fff; border-color: #333; }
+.sidebar-toggle.active { background: var(--brand); color: #fff; border-color: var(--brand); }
 
 /* ── participant table ── */
 table {
@@ -574,6 +604,7 @@ tbody td {
     margin-right: .35rem;
     vertical-align: middle;
     flex-shrink: 0;
+    background: currentColor;
 }
 
 /* ── toggle bar ── */
@@ -595,10 +626,12 @@ tbody td {
     transition: background .15s, color .15s;
 }
 .toggle-bar button.active {
-    background: #333;
+    background: var(--brand);
     color: #fff;
-    border-color: #333;
+    border-color: var(--brand);
 }
+
+.toggle-sep-bar { color: #ddd; margin: 0 .3rem; }
 
 /* ── transcript container ── */
 .transcript-shell {
@@ -804,20 +837,21 @@ tbody td {
 
 .timeline-marker.active {
     height: 14px;
-    background: #2d6c99;
+    background: var(--brand);
     opacity: 1;
 }
 
 .timeline-playhead {
     position: absolute;
     top: 50%;
+    left: 0;
     width: var(--timeline-handle-size);
     height: var(--timeline-handle-size);
     transform: translate(-50%, -50%);
     border-radius: 50%;
-    background: #2d6c99;
+    background: var(--brand);
     border: 2px solid #fff;
-    box-shadow: 0 0 0 3px rgba(45, 108, 153, .18);
+    box-shadow: 0 0 0 3px rgba(221, 51, 51, .18);
     cursor: grab;
 }
 
@@ -863,6 +897,7 @@ tbody td {
     border-radius: 999px;
     opacity: .55;
     cursor: pointer;
+    background: currentColor;
 }
 
 .speaker-segment.active {
@@ -872,7 +907,7 @@ tbody td {
 
 .timeline-marker.hover-linked {
     height: 16px;
-    background: #1f4f73;
+    background: var(--brand-dark);
     opacity: 1;
 }
 
@@ -890,6 +925,8 @@ footer {
     color: #aaa;
     text-align: center;
 }
+footer a { color: var(--brand); text-decoration: none; }
+footer a:hover { text-decoration: underline; }
 
 @media (max-width: 720px) {
     .page {
@@ -1258,6 +1295,35 @@ function formatMsLabel(begin, end) {
     var e = formatSingleMs(end);
     return b && e && b !== e ? (b + ' - ' + e) : (b || e);
 }
+// ── delegated event wiring (all markup uses data-action / classes, never
+// inline onclick/onpointerdown) ──
+var ACTIONS = {
+    'show-panel':          function(btn) { showPanel(btn.dataset.panel); },
+    'toggle-times':        function(btn) { toggleTimes(btn); },
+    'toggle-translations': function(btn) { toggleTranslations(btn); },
+    'toggle-timeline':     function(btn) { toggleTimeline(btn); },
+    'toggle-sidebar':      function()    { toggleSidebar(); },
+    'font-inc':            function()    { increaseFontSize(); },
+    'font-dec':            function()    { decreaseFontSize(); },
+    'zoom-in':             function()    { zoomTimeline(1.25); },
+    'zoom-out':            function()    { zoomTimeline(0.8); },
+};
+document.addEventListener('click', function(event) {
+    var actionEl = event.target.closest('[data-action]');
+    if (actionEl && ACTIONS[actionEl.dataset.action]) {
+        ACTIONS[actionEl.dataset.action](actionEl);
+        return;
+    }
+    var jumpEl = event.target.closest('.timeline-marker, .speaker-segment');
+    if (jumpEl) scrollToTimelineUnit(event);
+});
+document.addEventListener('pointerdown', function(event) {
+    // Clicking a marker/segment jumps to it (handled on 'click'); it must
+    // not also start a drag of the playhead underneath.
+    if (event.target.closest('.timeline-marker, .speaker-segment')) return;
+    if (event.target.closest('.timeline-track')) startTimelineDrag(event);
+});
+
 window.addEventListener('scroll', updateTimeline, { passive: true });
 window.addEventListener('resize', updateTimeline);
 window.addEventListener('load', function() {
@@ -1277,7 +1343,7 @@ def render_turns(turns, colour_map, is_jefferson, timings=None, translations_map
     parts = []
     prev_spk = None
     for i, (spk, text) in enumerate(turns):
-        colour = colour_map.get(spk, "#999")
+        colour = colour_map.get(spk, "spk-unknown")
         show_speaker = spk != prev_spk
         if is_jefferson:
             rendered = f'<span class="jtext">{markup_jefferson(text)}</span>'
@@ -1312,7 +1378,7 @@ def render_turns(turns, colour_map, is_jefferson, timings=None, translations_map
         parts.append(
             f'<div class="turn"{data_tu}{data_begin}{data_end}>'
             f'<div class="turn-meta">'
-            f'<span class="turn-speaker" style="color:{colour}">{html.escape(spk) if show_speaker else ""}</span>'
+            f'<span class="turn-speaker {colour}">{html.escape(spk) if show_speaker else ""}</span>'
             f'{time_html}'
             f'</div>'
             f'<span class="turn-text">{rendered}</span>'
@@ -1513,6 +1579,12 @@ def ensure_pdfs(
             continue
         md_path = pdf_dir / f"{code}-{slug}.md"
         pdf_path = pdf_dir / f"{code}-{slug}.pdf"
+        if pdf_path.is_file():
+            # Already built and nothing about the PDF's content (turn text,
+            # timings, participant table) has a reason to differ — rebuilding
+            # here would only be for an HTML/CSS/JS-only regeneration pass.
+            pdf_links[slug] = os.path.relpath(pdf_path, start=html_dir).replace(os.sep, "/")
+            continue
         md_path.write_text(
             build_pdf_markdown(code, label, turns, timings, conv, participants_map, speaker_order, translations_map),
             encoding="utf-8",
@@ -1566,11 +1638,20 @@ def build_html(
 ):
     e = lambda s: html.escape(str(s)) if s else ""
 
-    # colour map across all speakers from both transcripts
+    # colour map across all speakers from both transcripts, keyed to a CSS
+    # class (.spk-0.. / .spk-unknown) rather than a hex value — no per-turn
+    # inline style. Placeholder codes ('?', '??', '???') always get the fixed
+    # grey and don't consume a round-robin slot.
     colour_map = {}
+    real_speakers = 0
     for spk, _ in all_turns:
-        if spk not in colour_map:
-            colour_map[spk] = SPEAKER_COLOURS[len(colour_map) % len(SPEAKER_COLOURS)]
+        if spk in colour_map:
+            continue
+        if is_unknown_speaker(spk):
+            colour_map[spk] = "spk-unknown"
+        else:
+            colour_map[spk] = f"spk-{real_speakers % len(SPEAKER_COLOURS)}"
+            real_speakers += 1
 
     # ── metadata ──
     meta_items = [
@@ -1597,7 +1678,7 @@ def build_html(
         colour = colour_map[spk]
         rows.append(
             f'<tr>'
-            f'<td><span class="dot" style="background:{colour}"></span><strong>{e(spk)}</strong></td>'
+            f'<td><span class="dot {colour}"></span><strong>{e(spk)}</strong></td>'
             f'<td>{e(tr(p.get("occupation",""), OCCUPATION_LABELS))}</td>'
             f'<td>{e(p.get("gender",""))}</td>'
             f'<td>{e(p.get("birth-region", p.get("school-region","")))}</td>'
@@ -1641,29 +1722,29 @@ def build_html(
     transcript_buttons = []
     if len(panels) > 1:
         transcript_buttons = [
-            f'<button data-panel="{pid}" onclick="showPanel(\'{pid}\')">{lbl}</button>'
+            f'<button data-panel="{pid}" data-action="show-panel">{lbl}</button>'
             for pid, lbl, _ in panels
         ]
 
     time_button = ""
     if orth_timings or jeff_timings:
-        time_button = '<button onclick="toggleTimes(this)">tempi</button>'
+        time_button = '<button data-action="toggle-times">tempi</button>'
 
     translations_button = ""
     if translations_map:
-        translations_button = '<button onclick="toggleTranslations(this)">traduzioni</button>'
+        translations_button = '<button data-action="toggle-translations">traduzioni</button>'
 
     timeline_button = ""
     if timeline_units:
-        timeline_button = '<button type="button" class="active" onclick="toggleTimeline(this)">timeline</button>'
+        timeline_button = '<button type="button" class="active" data-action="toggle-timeline">timeline</button>'
 
     font_controls = (
-        '<button type="button" onclick="decreaseFontSize()">A-</button>'
-        '<button type="button" onclick="increaseFontSize()">A+</button>'
+        '<button type="button" data-action="font-dec">A-</button>'
+        '<button type="button" data-action="font-inc">A+</button>'
     )
 
     if transcript_buttons or time_button or translations_button or timeline_button or font_controls:
-        sep = '<span style="color:#ddd;margin:0 .3rem">|</span>' if transcript_buttons and (time_button or translations_button) else ""
+        sep = '<span class="toggle-sep-bar">|</span>' if transcript_buttons and (time_button or translations_button) else ""
         toggle_html = (
             f'<div class="toggle-bar">'
             f'{"".join(transcript_buttons)}<span class="toggle-sep">{sep}</span>{time_button}{translations_button}{timeline_button}{font_controls}'
@@ -1690,8 +1771,7 @@ def build_html(
 
         if valid_points and max_end > 0:
             marker_html = "".join(
-                f'<span class="timeline-marker" data-tu-idx="{tu_idx}" data-ratio="{(point / max_end):.6f}" '
-                f'onpointerdown="event.stopPropagation()" onclick="scrollToTimelineUnit(event)"></span>'
+                f'<span class="timeline-marker" data-tu-idx="{tu_idx}" data-ratio="{(point / max_end):.6f}"></span>'
                 for tu_idx, point in valid_points
             )
             speaker_rows = []
@@ -1706,16 +1786,14 @@ def build_html(
                         continue
                     seg_width = max(((seg_end - seg_start) / max_end) * 100, 0.35)
                     segments.append(
-                        f'<span class="speaker-segment" data-tu-idx="{unit["tu_idx"]}" '
+                        f'<span class="speaker-segment {colour_map[spk]}" data-tu-idx="{unit["tu_idx"]}" '
                         f'data-start-ratio="{(seg_start / max_end):.6f}" '
-                        f'data-end-ratio="{(seg_end / max_end):.6f}" '
-                        f'style="background:{colour_map[spk]}" '
-                        f'onpointerdown="event.stopPropagation()" onclick="scrollToTimelineUnit(event)"></span>'
+                        f'data-end-ratio="{(seg_end / max_end):.6f}"></span>'
                     )
                 if segments:
                     speaker_rows.append(
                         f'<div class="speaker-lane">'
-                        f'<span class="speaker-label" style="color:{colour_map[spk]}">{e(spk)}</span>'
+                        f'<span class="speaker-label {colour_map[spk]}">{e(spk)}</span>'
                         f'<div class="speaker-track">{"".join(segments)}</div>'
                         f'</div>'
                     )
@@ -1725,18 +1803,18 @@ def build_html(
   <div class="timeline-head">
     <span class="timeline-current">0:00</span>
     <span class="timeline-controls">
-      <button type="button" onclick="zoomTimeline(0.8)">−</button>
+      <button type="button" data-action="zoom-out">−</button>
       <span class="timeline-zoom-label">1.0x</span>
-      <button type="button" onclick="zoomTimeline(1.25)">+</button>
+      <button type="button" data-action="zoom-in">+</button>
       <span class="timeline-total">{e(fmt_ms(max_end))}</span>
     </span>
   </div>
   {speaker_map_html}
-  <div class="timeline-track" onpointerdown="startTimelineDrag(event)">
+  <div class="timeline-track">
     <div class="timeline-track-inner">
       <div class="timeline-rail"></div>
       {marker_html}
-      <div class="timeline-playhead" style="left:0%" onpointerdown="startTimelineDrag(event)"></div>
+      <div class="timeline-playhead"></div>
     </div>
   </div>
 </div>
@@ -1744,7 +1822,7 @@ def build_html(
 
     sidebar_html = f"""
 <aside class="sidebar" id="sidebar">
-  <button class="sidebar-close" type="button" onclick="toggleSidebar()" aria-label="Chiudi informazioni">×</button>
+  <button class="sidebar-close" type="button" data-action="toggle-sidebar" aria-label="Chiudi informazioni">×</button>
   <section class="sidebar-section">
     <h2>Conversazione</h2>
     <div class="meta-grid">{meta_html}</div>
@@ -1765,7 +1843,7 @@ def build_html(
 <link rel="stylesheet" href="{e(css_href)}">
 </head>
 <body{(' class="has-timeline"' if timeline_html else '')}>
-<button class="sidebar-toggle" type="button" onclick="toggleSidebar()" aria-controls="sidebar" aria-expanded="false">info</button>
+<button class="sidebar-toggle" type="button" data-action="toggle-sidebar" aria-controls="sidebar" aria-expanded="false">info</button>
 {sidebar_html}
 <div class="page">
   <aside class="left-rail">
