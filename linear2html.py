@@ -633,6 +633,22 @@ tbody td {
 
 .toggle-sep-bar { color: #ddd; margin: 0 .3rem; }
 
+/* ── ortografico/Jefferson switch (two connected segments, not two buttons) ── */
+.view-switch {
+    display: inline-flex;
+    border: 1px solid #ccc;
+    border-radius: 999px;
+    overflow: hidden;
+}
+.view-switch button {
+    border: none;
+    border-radius: 0;
+}
+.view-switch button.active {
+    background: var(--brand);
+    color: #fff;
+}
+
 /* ── transcript container ── */
 .transcript-shell {
     background: #fff;
@@ -1722,8 +1738,12 @@ def build_html(
     transcript_buttons = []
     if len(panels) > 1:
         transcript_buttons = [
-            f'<button data-panel="{pid}" data-action="show-panel">{lbl}</button>'
+            f'<button data-panel="{pid}" data-action="show-panel"'
+            f'{" class=\"active\"" if pid == default_panel else ""}>{lbl}</button>'
             for pid, lbl, _ in panels
+        ]
+        transcript_buttons = [
+            f'<span class="view-switch">{"".join(transcript_buttons)}</span>'
         ]
 
     time_button = ""
@@ -1858,7 +1878,11 @@ def build_html(
     </section>
   </div>
 
-  <footer>KIParla – <a href="https://www.kiparla.it/">kiparla.it</a></footer>
+  <footer>
+    KIParla – <a href="https://www.kiparla.it/">kiparla.it</a>
+    · <a href="https://github.com/KIParla/KIParla-artifacts">GitHub</a>
+    · <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a>
+  </footer>
 
 </div>
 {timeline_html}
