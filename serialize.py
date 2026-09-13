@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 VERT_FIELDNAMES = [
-    "token_id", "speaker", "tu_id", "unit", "id", "span",
+    "token_id", "speaker", "tu_id", "id", "span",
     "form", "lemma", "upos", "xpos", "feats", "deprel",
     "type", "meta_label", "variation", "jefferson_feats",
     "align", "prolongations", "pace", "guesses", "overlaps",
@@ -205,9 +205,23 @@ def _pace(tok) -> str:
 
 
 def _span_field(spans: dict) -> str:
+    """Render a {span_id: (char_start, char_end)} dict, e.g. "0-4(0)".
+
+    A span value of the string "X" instead of a (start, end) tuple means
+    "whole token" -- used for NVB/shortpause tokens in the `overlaps` column,
+    which can never be partially inside a `[...]` span (see
+    TranscriptionUnit.add_token_features in data.py) -- rendered as "X(0)".
+    """
     if not spans:
         return "_"
-    return ",".join(f"{cs}-{ce}({sid})" for sid, (cs, ce) in spans.items())
+    parts = []
+    for sid, value in spans.items():
+        if value == "X":
+            parts.append(f"X({sid})")
+        else:
+            cs, ce = value
+            parts.append(f"{cs}-{ce}({sid})")
+    return ",".join(parts)
 
 
 def conversation_to_conll(transcript: Transcript, output_path: Path, sep: str = "\t"):
@@ -226,7 +240,6 @@ def conversation_to_conll(transcript: Transcript, output_path: Path, sep: str = 
                     "token_id":      f"{tu.tu_id}-{tok_idx}",
                     "speaker":       tu.speaker,
                     "tu_id":         tu.tu_id,
-                    "unit":          tu.tu_id,
                     "id":            tok_idx,
                     "span":          tu.annotation[tok.span[0]:tok.span[1]],
                     "form":          tok.form,
@@ -391,6 +404,7 @@ def process(
     overlap_cfg = cfg.get("overlaps", {})
     duration_threshold = overlap_cfg.get("duration_threshold", 0.1)
     nvb_participates   = overlap_cfg.get("nvb_participates_in_overlaps", False)
+    stretch_threshold  = overlap_cfg.get("stretch_threshold", 0.0)
 
     relations_to_ignore: list[tuple] = []
     for pair in annotations.get("ignore", []):
@@ -406,6 +420,9 @@ def process(
 
     # Step 3 — Sort.
     transcript.sort()
+
+    # Step 3b — Stretch boundaries for annotated-but-missing overlaps (opt-in).
+    transcript.stretch_missing_overlaps(stretch_threshold)
 
     # Step 5 — Tokenize.
     for tu in transcript.transcription_units:

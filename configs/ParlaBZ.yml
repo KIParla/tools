@@ -1,6 +1,9 @@
 # ParlaBZ module — process pipeline configuration.
 # Keys not listed here fall back to defaults.yml.
 
-# NVB tiers in ParlaBZ legitimately overlap with speech and must not be pruned.
+# In ParlaBZ, an NVB/shortpause overlap that wasn't explicitly annotated with
+# `[...]` should still be flagged as a genuine overlap needing annotation,
+# not silently dropped as noise (shortpause is assimilated to NVB and follows
+# the same rule).
 overlaps:
   nvb_participates_in_overlaps: true

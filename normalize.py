@@ -365,25 +365,33 @@ def switch_symbols(annotation: str) -> tuple[int, str]:
 
 
 def switch_NVB(annotation: str) -> tuple[int, str]:
-    """Move NVB tags outside bracket spans of any kind.
+    """Move NVB tags and shortpause outside bracket spans of any kind --
+    except overlap spans `[...]`, where both are always left in place.
 
-    NVB tags found immediately after an opening bracket, or immediately before
-    a closing bracket, are relocated to just outside the span.
+    NVB tags and shortpause `(.)` found immediately after an opening `(`/`<`/`°`
+    or immediately before a closing `)`/`>`/`<`/`°` are relocated to just
+    outside that span — those markers (guess/pace/volume) are unrelated to
+    overlaps.
 
-    Exception: (.) immediately after [ or immediately before ] is left in
-    place — a pause inside an overlap span is transcriptionally valid.
+    `[`/`]` (overlap spans) are different: an NVB tag or `(.)` immediately
+    inside one is always left in place, unconditionally. A tag or pause
+    coinciding with an overlap boundary is transcriptionally valid content,
+    not something to relocate — relocating it would otherwise leave a bracket
+    pair with no content of its own, which a later rule then deletes as an
+    empty span, silently destroying the overlap annotation.
+
+    Note: whether an NVB-only or shortpause-only TU is treated as
+    *participating* in overlaps at all (for the purposes of the time-based
+    overlap graph) is a separate, TU-level decision gated by the module's
+    `overlaps.nvb_participates_in_overlaps` config — see
+    Transcript.check_overlaps in data.py. This function only concerns itself
+    with position within the annotation text.
     """
     total = 0
-    # Opening [ : move any NVB except (.) to before the bracket.
-    annotation, n = re.subn(r"(\[)(\(\([^()]*\)\))", r"\2 \1", annotation)
-    total += n
-    # Opening ( < > ° : move any NVB/pause (including (.)) to before the bracket.
+    # ( < > ° : move any NVB/pause to before the bracket. [ ] is exempt.
     annotation, n = re.subn(r"([(<>°])(\(\([^()]*\)\)|\(\.\))", r"\2 \1", annotation)
     total += n
-    # Closing ] : move any NVB except (.) to after the bracket.
-    annotation, n = re.subn(r"(\(\([^()]*\)\))(])", r"\2 \1", annotation)
-    total += n
-    # Closing ) > < ° : move any NVB/pause (including (.)) to after the bracket.
+    # ) > < ° : move any NVB/pause to after the bracket. [ ] is exempt.
     annotation, n = re.subn(r"(\(\([^()]*\)\)|\(\.\))([)><°])", r"\2 \1", annotation)
     total += n
     return total, annotation.strip()

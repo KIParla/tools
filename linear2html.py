@@ -137,6 +137,17 @@ def _append_unit_text(text_jefferson, text_orthographic, row):
     span = row.get("span", "")
     form = row.get("form", "")
     feats = row.get("jefferson_feats", "")
+    tu_variation = row.get("variation", "none")
+
+    # TU-level "# "/"#_" prefix: reconstruct it once, at the very first token
+    # of the unit — mirrors tools/tsv2formats.py so alignment text matches.
+    if not text_jefferson and not text_orthographic:
+        if tu_variation == "unspecified":
+            text_jefferson.append("# ")
+            text_orthographic.append("# ")
+        elif tu_variation == "all":
+            text_jefferson.append("#_ ")
+            text_orthographic.append("#_ ")
 
     if rtype in ["nonverbalbehavior", "shortpause"]:
         text_jefferson.append(span)
@@ -145,7 +156,10 @@ def _append_unit_text(text_jefferson, text_orthographic, row):
         text_orthographic.append("".join(c for c in span if c == "x"))
     elif rtype in ["linguistic"]:
         text_jefferson.append(span)
-        text_orthographic.append(form)
+        word = form
+        if tu_variation != "all" and "Variation=Token" in feats:
+            word = "#" + word
+        text_orthographic.append(word)
     elif rtype in ["error"]:
         text_jefferson.append(span)
         text_orthographic.append("".join(c for c in form if c.isalpha()))
@@ -369,7 +383,41 @@ def markup_jefferson(text):
         lambda m: store(f'{html.escape(m.group(1))}<span class="length">{html.escape(m.group(2))}</span>'),
         t,
     )
+    t = mark_variation(t, store)
 
+    t = html.escape(t)
+    for token, fragment in placeholders.items():
+        t = t.replace(token, fragment)
+    return t
+
+
+def mark_variation(text, store):
+    """Wrap language-variation markers ('# '/'#_' TU prefixes and per-word
+    '#word') in a single 'variation' span. '#*word' (doubtful) is a separate,
+    not-yet-styled convention and is left untouched."""
+    t = re.sub(
+        r'^(#_ |# )',
+        lambda m: store(f'<span class="variation">{html.escape(m.group(1))}</span>'),
+        text,
+    )
+    t = re.sub(
+        r'#(?!\*)\S+',
+        lambda m: store(f'<span class="variation">{html.escape(m.group(0))}</span>'),
+        t,
+    )
+    return t
+
+
+def markup_orthographic(text):
+    """Escape orthographic text, styling '# '/'#_'/'#word' variation markers."""
+    placeholders = {}
+
+    def store(html_fragment):
+        token = f"￲{len(placeholders)}￳"
+        placeholders[token] = html_fragment
+        return token
+
+    t = mark_variation(text, store)
     t = html.escape(t)
     for token, fragment in placeholders.items():
         t = t.replace(token, fragment)
@@ -743,6 +791,7 @@ tbody td {
 .pause   { color: #b05010; font-weight: 600; }
 .trunc   { color: #999; }
 .length  { color: #b05010; }
+.variation { color: var(--brand); font-weight: 600; }
 
 /* ── scroll timeline ── */
 .timeline {
@@ -1364,7 +1413,7 @@ def render_turns(turns, colour_map, is_jefferson, timings=None, translations_map
         if is_jefferson:
             rendered = f'<span class="jtext">{markup_jefferson(text)}</span>'
         else:
-            rendered = html.escape(text)
+            rendered = markup_orthographic(text)
 
         time_html = ""
         data_tu = ""

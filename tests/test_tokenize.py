@@ -32,6 +32,43 @@ class TestTokenClassification:
         t = self._tok("{ride}")
         assert t.token_type == df.tokentype.nonverbalbehavior
 
+    # --- literal Jefferson shortpause/NVB, plain and overlap-bracketed ---
+    def test_shortpause_literal(self):
+        t = self._tok("(.)")
+        assert t.token_type == df.tokentype.shortpause
+        assert t.form == "(.)"
+
+    def test_nvb_literal(self):
+        t = self._tok("((ride))")
+        assert t.token_type == df.tokentype.nonverbalbehavior
+        assert t.form == "((ride))"
+
+    def test_shortpause_literal_inside_overlap_brackets(self):
+        # `[`/`]` are overlap-span position markers, not content: a shortpause
+        # that is the sole content of an overlap span (single token, no
+        # internal whitespace to split on) must still be classified as such.
+        t = self._tok("[(.)]")
+        assert t.token_type == df.tokentype.shortpause
+        assert t.form == "(.)"
+
+    def test_nvb_literal_inside_overlap_brackets(self):
+        # Same, for an NVB tag left inside `[...]` -- always exempt from
+        # relocation at overlap-span edges (see normalize.py switch_NVB),
+        # e.g. `[((ride))]`.
+        t = self._tok("[((ride))]")
+        assert t.token_type == df.tokentype.nonverbalbehavior
+        assert t.form == "((ride))"
+
+    def test_nvb_literal_only_leading_bracket(self):
+        t = self._tok("[((ride))")
+        assert t.token_type == df.tokentype.nonverbalbehavior
+        assert t.form == "((ride))"
+
+    def test_nvb_literal_only_trailing_bracket(self):
+        t = self._tok("((ride))]")
+        assert t.token_type == df.tokentype.nonverbalbehavior
+        assert t.form == "((ride))"
+
     # --- unknown ---
     def test_unknown_single(self):
         t = self._tok("x")

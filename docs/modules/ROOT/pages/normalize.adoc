@@ -94,7 +94,7 @@ If `config` is `None` or a key is absent, each rule falls back to its `enabled_b
 |yes
 
 |`SWITCHES`
-|Moves intonation markers (`. , ?`) before prosodic/interruption symbols (`: - ~`) when they appear in the wrong order; moves NVB tags `{x}` outside bracket spans
+|Moves intonation markers (`. , ?`) before prosodic/interruption symbols (`: - ~`) when they appear in the wrong order; moves NVB tags and shortpause `(.)` outside guess/pace/volume spans (both are exempt at overlap-span `[…]` edges, unconditionally)
 |yes
 |===
 
@@ -121,19 +121,30 @@ If `config` is `None` or a key is absent, each rule falls back to its `enabled_b
 |yes
 |===
 
-== NVB tags and bracket spans
+== NVB tags, shortpause, and bracket spans
 
-Non-verbal behaviour tags (`{laugh}`, `{ride}`, `{toss}`, …) must appear _outside_ bracket spans, not inside them.
-The `SWITCHES` warning rule enforces this automatically by relocating any NVB tag found immediately after an opening bracket or immediately before a closing bracket.
+Non-verbal behaviour tags (`((laugh))`, `((ride))`, `((toss))`, …) and shortpause `(.)` must appear _outside_
+guess/pace/volume bracket spans (`(…)`, `<…>`, `°…°`), not inside them. The `SWITCHES` warning rule (`switch_NVB`)
+enforces this automatically by relocating any NVB tag or `(.)` found immediately after an opening bracket or
+immediately before a closing one.
 
-**Exception:** `{P}` (short pause) inside overlap brackets `[…]` is left in place.
-A pause that coincides with an overlap is transcriptionally significant and must be preserved.
+**Overlap brackets `[…]` are the one exception, and it is unconditional:** an NVB tag or `(.)` immediately after `[`
+or immediately before `]` is always left in place, regardless of any config. Both are transcriptionally valid content
+of an overlap span, not something to relocate out of it — relocating would leave a bracket pair with no content of
+its own, which a later rule then deletes as an empty span, silently destroying the overlap annotation.
+
+This is purely a position rule and has nothing to do with `overlaps.nvb_participates_in_overlaps`. That config
+instead governs a separate, TU-level decision: whether a TU that consists *entirely* of NVB and/or shortpause tokens
+is treated as participating in the time-based overlap graph at all — see `Transcript.check_overlaps` (`data.py`,
+`PIPELINE.md` step 6, sections 6a/6d/6e).
 
 [source]
 ----
-[{P}]        ← valid, no change
-[{laugh}]    ← becomes {laugh} []
-({P})        ← becomes {P} ()   (exception applies only to [ ])
+[(.)]         ← valid, no change   (pause always exempt at the edge)
+[((laugh))]   ← valid, no change   (NVB always exempt at the edge)
+[((laugh)) ciao]  ← valid, no change
+((.))         ← becomes (.) ()    (guess span: unrelated to overlaps, always relocated)
+<((laugh))>   ← becomes ((laugh)) <>   (pace span: same)
 ----
 
 == Accent maps
@@ -197,5 +208,5 @@ The tests cover:
 
 * pipeline infrastructure (empty registries, config enable/disable, rule ordering, warning count accumulation)
 * each normalization and validation function individually
-* the `{P}`-in-overlap exception for `switch_NVB`
+* the unconditional overlap-bracket-edge exemption for NVB and shortpause `(.)` in `switch_NVB`
 * the "space moves to the correct side" behaviour of `check_spaces`

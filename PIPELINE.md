@@ -46,6 +46,11 @@ eaf2csv output CSV
         ▼
 [8] Serialize to vert.tsv  (conversation_to_conll)
     + JSON summary
+        │
+        ▼
+[9] Render EAF  (CLI process, unless --no-eaf)
+    eaf/<name>.eaf           — one tier per speaker
+    eaf_layered/<name>.eaf   — layered hierarchy  + <module>.etf template
 ```
 
 ---
@@ -179,7 +184,7 @@ Stored as character offset pairs on the TU for use in step 7.
 ### 2g. Symbol order corrections
 
 - `switch_symbols`: fix `[.,?][:-~]` → `[:-~][.,?]` (punctuation must follow, not precede, prosodic/interruption markers).
-- `switch_NVB`: fix `[((TAG))` → `((TAG))[` and `((TAG))]` → `]((TAG))` (NVB tag must be outside overlap brackets).
+- `switch_NVB`: fix `(((TAG))` → `((TAG)) (` / `<((TAG))>` → `((TAG)) <>` / `°((TAG))°` → `((TAG)) °°` etc. — an NVB tag or shortpause `(.)` immediately inside a guess/pace/volume span (`(`/`<`/`>`/`°`) is relocated outside it; these markers are unrelated to overlaps. **Overlap brackets `[…]` are the one exception**: an NVB tag or `(.)` immediately after `[` or immediately before `]` is always left in place, unconditionally — both are transcriptionally valid content of an overlap span, not something to relocate. This is a pure position rule and has nothing to do with `nvb_participates_in_overlaps`; whether such a TU *participates* in the overlap graph at all is a separate, TU-level decision — see 6a/6d/6e.
 
 Counts accumulated in `tu.warnings["SWITCHES"]`.
 
@@ -300,22 +305,21 @@ prefix from step 2b), which is preserved rather than downgraded to `yes`.
 
 `Transcript.check_overlaps(duration_threshold, relations_to_ignore)`
 
-### 6a. Remove NVB edges *(configurable)*
+There is no NVB/shortpause-specific edge pruning here — every edge in the
+time-based overlap graph survives into clique-building (6c) regardless of
+token type, so a genuinely *annotated* `[...]` overlap span on an NVB-only or
+shortpause-only TU always gets matched to its real time-based partner and
+assigned a proper feature (6d), no matter what
+`overlaps.nvb_participates_in_overlaps` is set to. That config only comes into
+play in 6d, and only for *unannotated* NVB/shortpause-only overlap events —
+see below.
 
-**Config: `nvb_participates_in_overlaps` (default `false`)**
-
-When `false`: for every edge `(u, v)` in the overlap graph, if **all** tokens of `u`
-or **all** tokens of `v` are `nonverbalbehavior`, the edge is removed.
-
-When `true`: NVB TUs participate in overlaps like any other TU — NVB edges are kept
-and NVB-adjacent mismatches are not silently discarded.
-
-### 6b. Remove manually ignored pairs
+### 6a. Remove manually ignored pairs
 
 Edges listed in `relations_to_ignore` (loaded from per-file YAML annotation files)
 are removed unconditionally.
 
-### 6c. Remove short unannotated overlaps
+### 6b. Remove short unannotated overlaps
 
 For each edge where `duration < duration_threshold` AND neither TU has annotated
 `overlapping_spans`:
@@ -325,32 +329,37 @@ For each edge where `duration < duration_threshold` AND neither TU has annotated
 
 **Config:** `duration_threshold` (default `0.1`).
 
-### 6d. Find cliques and assign overlap events
+### 6c. Find cliques and assign overlap events
 
 `nx.find_cliques` on the pruned graph. Each clique becomes one overlap event with an
 `overlap_start` = max of TU starts, `overlap_end` = min of TU ends.
 
-A flag `nvb_in_clique` is set if any TU in the clique contains any NVB token.
+A flag `nvb_or_pause_in_clique` is set if any TU in the clique contains any NVB or
+shortpause token.
 
-### 6e. Match annotated spans to overlap events
+### 6d. Match annotated spans to overlap events
 
 For each TU, compare the count of `overlapping_spans` (bracket annotations in text)
 with the count of `overlapping_times` (graph-based events):
 
 | spans | times | outcome |
 |-------|-------|---------|
-| equal | equal | match by time order → `overlapping_matches` ✓ |
-| 0     | > 0   | check each event: if `nvb_in_clique` **or** `duration < threshold` → removable *(see note)* |
-|       |       | if all events removable → `MISMATCHING_OVERLAPS` warning |
+| equal | equal | match by time order → `overlapping_matches` ✓ (real match ids — this is the path an annotated NVB/shortpause overlap normally takes) |
+| 0     | > 0   | check each event: if `nvb_or_pause_in_clique` **or** `duration < threshold` → removable *(see note)* |
+|       |       | if all events removable → `MISMATCHING_OVERLAPS` warning, no feature assigned |
 |       |       | else → `OVERLAPS:MISSING_ANNOTATION` error |
 | > 0   | 0     | `OVERLAPS:MISSING_TIME` error; spans get `?` match id |
-| times > spans | — | try to remove NVB/short events to close the gap → warning or error |
+| times > spans | — | try to remove NVB/pause/short events to close the gap → warning or error |
 | otherwise | — | `MISMATCHING_OVERLAPS` error |
 
-**Config: `nvb_participates_in_overlaps` (same toggle as 6a)**
+**Config: `overlaps.nvb_participates_in_overlaps` (default `false`)**
 
-When `true`, `nvb_in_clique` is never treated as a reason to make an event removable,
-so missing annotations on NVB-adjacent overlaps become errors rather than warnings.
+This is the *only* thing this flag controls: whether an overlap event that involves
+only NVB and/or shortpause tokens, and has *no* annotated span backing it up, counts
+as removable noise (`false`, default — silently dropped with a `MISMATCHING_OVERLAPS`
+warning) or as a genuine overlap that should have been annotated (`true` —
+`OVERLAPS:MISSING_ANNOTATION` error instead). It has no effect on annotated overlaps —
+those are always matched and featured, regardless of token type.
 
 ---
 
@@ -367,6 +376,29 @@ feature can be rendered precisely in the vert.tsv output.
 
 First and last tokens of each TU get `position.start` / `position.end` flags (used to
 write `Begin=` / `End=` alignment in the output).
+
+### NVB/shortpause: whole-token overlap feature, not a sub-range
+
+The character-to-token index used for the mapping above is built from *form*
+characters only — colons, and `[]()<>°`/`.`/`,`/`?` markers, are excluded (see the
+`P+N` encoding below). An NVB tag or shortpause `(.)` has **no** form characters at
+all under that definition (every character of `((laugh))` or `(.)` is one of those
+excluded markers), so it is invisible to the ordinary per-character mapping — it never
+gets picked up even when it genuinely sits inside a matched overlap span.
+
+NVB/shortpause are also fundamentally different from ordinary tokens here: an ordinary
+token *can* straddle an overlap boundary mid-word (`s[cherzavo]`, `[` falling inside the
+token — see the `P+N` encoding below), so a precise letters-only sub-range is
+meaningful for it. NVB/shortpause never can (`((ri[de))]` is a malformed annotation,
+not valid data) — they are always entirely inside or entirely outside a span, so a
+char range wouldn't mean anything for them. `add_token_features` detects them
+separately via their own `Token.span` intersecting the matched overlap range, and
+records the sentinel string `"X"` instead of a `(char_start, char_end)` tuple, rendered
+in the `overlaps` column as `X(id)` — same convention as their `upos` value. E.g.
+`((ride))` → `X(0)`; `(.)` → `X(1)`. `_span_field` (`serialize.py`) renders either shape
+transparently, and every downstream consumer that reads this column
+(`tsv2tei.py`, `tsv2chat_bak.py`, `make_patch.py`) only ever extracts the id via
+`\((\d+)\)`, so `X(id)` is a drop-in match for the existing `cs-ce(id)` shape.
 
 ### Sub-token overlap position encoding (`P+N`)
 
@@ -416,15 +448,39 @@ Produced when `tiers_to_extract` is non-empty:
 3. **`<name>.translations.tsv`** — one row per extracted TU, columns: `tu_id`,
    `speaker`, `start`, `end`, `parent_tu_id`, `text`
 
+### EAF renderings (CLI `process`, unless `--no-eaf`)
+
+After the `.vert.tsv` is written, `process` renders each conversation to ELAN
+twice, into sibling folders of the tsv output dir:
+
+4. **`<module>/eaf/<name>.eaf`** — plain: one tier per speaker, the tier named
+   exactly as the speaker, one annotation per TU (`serialize.vert2eaf`).
+5. **`<module>/eaf_layered/<name>.eaf`** — the full layered hierarchy
+   (`ref@ / ft@ / tx@ / tx_ortho@ / tok@ / nvb@ / sent_id@ / …`; see
+   `docs/.../scripts.adoc#vert2eaf-layered`), plus
+   **`<module>/eaf_layered/<module>.etf`** — an ELAN template with the complete
+   tier set for every speaker, so a folder of files with different layer
+   subsets can be made uniform in ELAN.
+
+Both consume `<name>.translations.json` when present.
+
+This schema (plus `metadata/conversations.tsv` and `metadata/participants.tsv`,
+including the foreign keys between `speaker`/`participants`/`conversations`)
+is also formalized as [CSVW](https://www.w3.org/TR/tabular-data-primer/)
+metadata. `tools/csvw/*-schema.json` are the canonical source; the table
+below and each module's generated `<module>/csv-metadata.json` are both
+derived from them and must be kept in sync — run
+`python tools/csvw/generate_csvw.py --all <KIParla_root>` after editing a
+schema file to regenerate every module's copy.
+
 ### vert.tsv columns (tab-separated, `_` for missing values)
 
 | column          | content |
 |-----------------|---------|
-| `token_id`      | `TU_ID-TOKEN_IDX` (e.g. `5-2`) |
+| `token_id`      | `TU_ID-TOKEN_IDX`, assigned at creation (e.g. `5-2`). Stable and creation-order — a later split/add can leave the numeric suffix out of sequence within a TU (e.g. `1-1, 1-6, 1-2, 1-3…`), so don't rely on it for ordering |
 | `speaker`       | tier ID |
 | `tu_id`         | TU id |
-| `unit`          | same as `tu_id` |
-| `id`            | same as token index within TU |
+| `id`            | token's true position within its TU, `0`-based. Recomputed from row order on every patch (see `make_patch.py`), so — unlike `token_id` — always monotonic |
 | `span`          | raw Jefferson span (character slice of original annotation) |
 | `form`          | normalized form (lowercase, no prolongations, no punctuation) |
 | `lemma`         | `_` (filled by lemmatization step) |
@@ -442,6 +498,12 @@ Produced when `tiers_to_extract` is non-empty:
 | `guesses`       | `0-3(0),…` — genuine "hard to understand" spans only. A reduction-candidate span (single-token `c(io)è` or multi-token `m(e l)o`) whose reconstructed word/phrase is on the `reduction_words` config whitelist is *not* recorded here — every token it touches gets `Reduced=Yes` in `jefferson_feats` instead. If not whitelisted, it falls back to an ordinary entry in this column on each touched token, sharing one span id. |
 | `overlaps`      | `0-3(0),…` |
 
+`unit` (formerly a pure duplicate of `tu_id`) was dropped from the schema —
+superseded by `id` above. Files freshly serialized, or touched by a patch,
+no longer carry it; older untouched `.vert.tsv` files may still have it until
+a patch runs against them. Planned: `UD_sent`/`UD_id` columns for a
+different, sentence-level unit granularity (distinct from the Jefferson TU).
+
 ---
 
 ## Known module differences (to drive config design)
@@ -449,7 +511,7 @@ Produced when `tiers_to_extract` is non-empty:
 | behavior | current default | modules needing different value |
 |----------|-----------------|----------------------------------|
 | `tiers_to_ignore` | `["Traduzione"]` | modules where `Traduzione` should be processed |
-| `nvb_participates_in_overlaps` | `false` (prune NVB edges, treat NVB mismatches as removable) | ParlaBZ: `true` |
+| `nvb_participates_in_overlaps` | `false` (prune NVB/shortpause edges, treat NVB/shortpause mismatches as removable — shortpause is assimilated to NVB) | ParlaBZ: `true` |
 | `$` non-orthographic marker | kept / stripped to flag `non_ortho` | modules without `$` convention |
 | normalization rules | all enabled | TBD per module |
 | `duration_threshold` | `0.1` | TBD per module |

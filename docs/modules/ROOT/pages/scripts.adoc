@@ -77,6 +77,93 @@ This script is also invoked automatically by the `regenerate-derived` workflow
 whenever TSV files are pushed to `dev`.
 See xref:workflows.adoc#auto-regen[Automatic regeneration on TSV push].
 
+== `vert2eaf-layered` (`tsv2eaf_layered.py`)
+
+Converts a `.vert.tsv` into a *layered* `.eaf`: instead of one transcription
+tier per speaker, it builds a hierarchy per speaker. Tier names follow the
+Toolbox/ELAN interlinear `<code>@<speaker>` convention; the codes live in the
+`_TIER_CODES` dict at the top of `tsv2eaf_layered.py`.
+
+[cols="2,1,3"]
+|===
+| tier | ELAN stereotype | value
+
+| `ref@<speaker>`
+| time-alignable (top)
+| unit id, time-aligned on the unit's `Begin=`/`End=`
+
+| `ft@<speaker>`
+| `Symbolic_Association` (under `ref@`)
+| free translation of the unit, from `<name>.translations.json` (`--translations-dir`); matched by `parent_tu_id` → unit `tu_id`
+
+| `tx@<speaker>`
+| `Symbolic_Association` (under `ref@`)
+| Jefferson text of the unit (token `span`s joined, `=` on `ProsodicLink=Yes`)
+
+| `tx_ortho@<speaker>`
+| `Symbolic_Association` (under `ref@`)
+| orthographic text of the unit (token `form`s joined)
+
+| `tok@<speaker>`
+| `Symbolic_Subdivision` (under `tx_ortho@`)
+| one annotation per token, value = `form`
+
+| `sent_id@<speaker>`
+| `Symbolic_Association` (under `tok@`)
+| syntactic-sentence id(s) of the token, from the `sent_id` column (space-separated when a token is in >1 sentence). Carries the many-to-many syntax↔TU relation: EAF is a tree, so this is a per-token label rather than a spanning tier — a sentence crossing TUs is the same id on tokens under different `ref@` parents. Emitted only when the column is present and non-empty.
+
+| `nvb@<speaker>`
+| `Symbolic_Association` (under `tok@`)
+| for non-verbal / pause / unknown tokens only: `type` (+ `meta_label` when set)
+
+| `lemma@` `pos@` `xpos@` `feats@` `dep@` `<speaker>`
+| `Symbolic_Association` (under `tok@`)
+| per-token linguistic annotation; only with `--linguistic`
+|===
+
+Empty leaf tiers are dropped: `ft@` when there are no translations, `nvb@` when
+there are no non-verbal tokens, and any `--linguistic` tier whose column is `_`
+for every token in the file.
+
+NOTE: a `Time_Subdivision` unit tier would need a parent TU tier; with
+`__units` as the top tier it is a plain time-alignable tier. Equivalent today,
+since every TU holds exactly one unit.
+
+[source,bash]
+----
+python -m cli vert2eaf-layered --input-dir tsv/ -o eaf_layered/
+python -m cli vert2eaf-layered --input-files tsv/BOA1007.vert.tsv -o eaf_layered/ \
+    -a audio/ --translations-dir translations/ --linguistic
+----
+
+Units missing `Begin=`/`End=` (or with non-positive duration) are logged and skipped.
+
+=== Heterogeneous corpora and the `.etf` template
+
+Files differ in which layers they carry: a POS-tagged conversation has `pos@` /
+`lemma@` / `dep@`, an unparsed one does not; only some have translations. Each
+`.eaf` keeps just the tiers it has data for (empty leaf tiers are pruned). This
+is valid — ELAN never treats a missing dependent tier as an error — but the
+folder is not uniform.
+
+`--template PATH` writes an ELAN `.etf` alongside the run: the *full* tier set
+(every layer, `sent_id@` included) for every speaker seen across the inputs,
+plus all linguistic types and constraints. Two uses:
+
+* **schema reference** — the template is the authoritative list of every tier,
+  its stereotype and its parent.
+* **make a folder uniform** — in ELAN, _File ▸ Multiple File Processing ▸ Add
+  Tiers from an imported file_ (or _Edit ▸ Add New Tiers From Template_ per
+  file) fills every `.eaf` up to the complete structure. Matching is by exact
+  tier name, so the template must contain the real per-speaker names — it lists
+  the union of all speakers and can get large for a whole module.
+
+[source,bash]
+----
+python -m cli vert2eaf-layered --input-dir KIP/tsv/ -o KIP/eaf_layered/ \
+    --linguistic --template KIP/eaf_layered/KIP.etf
+----
+
 == `linear2html.py`
 
 Generates publication HTML pages and transcript PDFs from linearized transcript files.

@@ -1,0 +1,43 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<ANNOTATION_DOCUMENT AUTHOR="kiparla-tools" DATE="2026-09-03T15:14:49+00:00" FORMAT="3.0" VERSION="3.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://www.mpi.nl/tools/elan/EAFv3.0.xsd">
+    <HEADER MEDIA_FILE="" TIME_UNITS="milliseconds" />
+    <TIME_ORDER />
+    <TIER LINGUISTIC_TYPE_REF="ref-lt" TIER_ID="ref@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="ft-sa" TIER_ID="ft@BO026" PARENT_REF="ref@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="tx-sa" TIER_ID="tx@BO026" PARENT_REF="ref@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="tx_ortho-sa" TIER_ID="tx_ortho@BO026" PARENT_REF="ref@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="tok-ssub" TIER_ID="tok@BO026" PARENT_REF="tx_ortho@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="nvb-sa" TIER_ID="nvb@BO026" PARENT_REF="tok@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="sent_id-sa" TIER_ID="sent_id@BO026" PARENT_REF="tok@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="lemma-sa" TIER_ID="lemma@BO026" PARENT_REF="tok@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="pos-sa" TIER_ID="pos@BO026" PARENT_REF="tok@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="xpos-sa" TIER_ID="xpos@BO026" PARENT_REF="tok@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="feats-sa" TIER_ID="feats@BO026" PARENT_REF="tok@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="dep-sa" TIER_ID="dep@BO026" PARENT_REF="tok@BO026" />
+    <TIER LINGUISTIC_TYPE_REF="ref-lt" TIER_ID="ref@BO020" />
+    <TIER LINGUISTIC_TYPE_REF="ft-sa" TIER_ID="ft@BO020" PARENT_REF="ref@BO020" />
+    <TIER LINGUISTIC_TYPE_REF="tx-sa" TIER_ID="tx@BO020" PARENT_REF="ref@BO020" />
+    <TIER LINGUISTIC_TYPE_REF="tx_ortho-sa" TIER_ID="tx_ortho@BO020" PARENT_REF="ref@BO020" />
+    <TIER LINGUISTIC_TYPE_REF="tok-ssub" TIER_ID="tok@BO020" PARENT_REF="tx_ortho@BO020" />
+    <TIER LINGUISTIC_TYPE_REF="nvb-sa" TIER_ID="nvb@BO020" PARENT_REF="tok@BO020" />
+    <TIER LINGUISTIC_TYPE_REF="sent_id-sa" TIER_ID="sent_id@BO020" PARENT_REF="tok@BO020" />
+    <TIER LINGUISTIC_TYPE_REF="lemma-sa" TIER_ID="lemma@BO020" PARENT_REF="tok@BO020" />
+    <TIER LINGUISTIC_TYPE_REF="pos-sa" TIER_ID="pos@BO020" PARENT_REF="tok@BO020" />
+    <TIER LINGUISTIC_TYPE_REF="xpos-sa" TIER_ID="xpos@BO020" PARENT_REF="tok@BO020" />
+    <TIER LINGUISTIC_TYPE_REF="feats-sa" TIER_ID="feats@BO020" PARENT_REF="tok@BO020" />
+    <TIER LINGUISTIC_TYPE_REF="dep-sa" TIER_ID="dep@BO020" PARENT_REF="tok@BO020" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="dep-sa" TIME_ALIGNABLE="false" CONSTRAINTS="Symbolic_Association" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="feats-sa" TIME_ALIGNABLE="false" CONSTRAINTS="Symbolic_Association" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="ft-sa" TIME_ALIGNABLE="false" CONSTRAINTS="Symbolic_Association" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="lemma-sa" TIME_ALIGNABLE="false" CONSTRAINTS="Symbolic_Association" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="nvb-sa" TIME_ALIGNABLE="false" CONSTRAINTS="Symbolic_Association" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="pos-sa" TIME_ALIGNABLE="false" CONSTRAINTS="Symbolic_Association" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="ref-lt" TIME_ALIGNABLE="true" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="sent_id-sa" TIME_ALIGNABLE="false" CONSTRAINTS="Symbolic_Association" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="tok-ssub" TIME_ALIGNABLE="false" CONSTRAINTS="Symbolic_Subdivision" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="tx-sa" TIME_ALIGNABLE="false" CONSTRAINTS="Symbolic_Association" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="tx_ortho-sa" TIME_ALIGNABLE="false" CONSTRAINTS="Symbolic_Association" />
+    <LINGUISTIC_TYPE GRAPHIC_REFERENCES="false" LINGUISTIC_TYPE_ID="xpos-sa" TIME_ALIGNABLE="false" CONSTRAINTS="Symbolic_Association" />
+    <CONSTRAINT DESCRIPTION="1-1 association with a parent annotation" STEREOTYPE="Symbolic_Association" />
+    <CONSTRAINT DESCRIPTION="Symbolic subdivision of a parent annotation. Annotations refering to the same parent are ordered" STEREOTYPE="Symbolic_Subdivision" />
+</ANNOTATION_DOCUMENT>

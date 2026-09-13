@@ -18,11 +18,17 @@ What is patched:
     are recomputed from the new span; all other TSV features are preserved
   - Token deletions: TSV tokens absent from the CSV (e.g. second half of a merge)
     - Begin=/End= alignment is auto-transferred to neighboring tokens where possible
+    - prolongations/pace/guesses/overlaps are auto-transferred to the preceding
+      kept token when its form was extended by exactly the dropped token's form
+      (a clean merge), with char positions shifted by the length gained
   - Token additions: CSV tokens absent from the TSV are listed in the recap only
+  - `id`: recomputed as a monotonic 0-based position within each TU, from final
+    row order — independent of `token_id`, whose numeric suffix stays stable/
+    creation-order and can go out of sequence after a split or add
+  - `unit` column: dropped from the output (pure duplicate of `tu_id`)
 
 What is NOT patched:
-  - TSV-only columns (align, prolongations, pace, guesses, overlaps, type) except
-    for the automatic Begin/End transfer on structural changes
+  - `type` (annotation-only classification, not derived here)
   - Lemma/upos (annotation-only, not in source TSV)
   - Annotation sub-token rows (numeric token_id + letter suffix, e.g. 4-7a)
 
@@ -64,6 +70,93 @@ from jefferson_feats import (
 PATCHABLE_COLS = ['span', 'form']
 # TSV-only columns that may need manual attention after structural changes
 MANUAL_COLS = ['prolongations', 'pace', 'guesses', 'overlaps']
+
+# pace/guesses/overlaps encode zero-based char positions over `form` as
+# `<start>-<end>`, optionally with a `Fast=`/`Slow=` prefix (pace) or a
+# `(group_id)` suffix (pace/overlaps) — see README's vert.tsv column
+# reference. prolongations uses `<char_id>x<count>`.
+_POS_PAIR_RE = re.compile(r'(\d+)-(\d+)')
+_PROLONG_RE = re.compile(r'(\d+)x(\d+)')
+
+
+def _shift_positions(value: str, offset: int) -> str:
+    """Shift every `<start>-<end>` char-position pair in *value* by *offset*."""
+    return _POS_PAIR_RE.sub(lambda m: f'{int(m.group(1)) + offset}-{int(m.group(2)) + offset}', value)
+
+
+def _shift_prolongations(value: str, offset: int) -> str:
+    """Shift every `<char_id>x<count>` pair in *value* by *offset*."""
+    return _PROLONG_RE.sub(lambda m: f'{int(m.group(1)) + offset}x{m.group(2)}', value)
+
+
+_POSITIONAL_COL_SHIFTERS = {
+    'pace': _shift_positions,
+    'guesses': _shift_positions,
+    'overlaps': _shift_positions,
+    'prolongations': _shift_prolongations,
+}
+
+
+# One span entry: optional `Fast=`/`Slow=` prefix (pace), `<start>-<end>`,
+# optional `(group_id)` suffix (pace/overlaps).
+_SPAN_ENTRY_RE = re.compile(r'^(?P<prefix>[A-Za-z]+=)?(?P<start>\d+)-(?P<end>\d+)(?P<suffix>\(.*\))?$')
+
+
+def _merge_positional_feature(prev_value: str, dropped_value: str, offset: int, col: str) -> str:
+    """Shift *dropped_value* (from a token being merged away) by *offset*
+    characters and append it to *prev_value*.
+
+    For pace/guesses/overlaps, if the shifted span picks up exactly where
+    the kept token's last span of the same kind (prefix + group id) left
+    off — the normal case for a token that was itself one continuous
+    slow/fast/overlap span — the two are collapsed into one continuous
+    span instead of two adjacent comma-separated entries (`Slow=0-4(0)` +
+    `Slow=4-7(0)` → `Slow=0-7(0)`, not `Slow=0-4(0),Slow=4-7(0)`).
+    """
+    shifted = _POSITIONAL_COL_SHIFTERS[col](dropped_value, offset)
+    if prev_value in ('_', ''):
+        return shifted
+    if col == 'prolongations':
+        return f'{prev_value},{shifted}'
+
+    prev_entries = prev_value.split(',')
+    shifted_entries = shifted.split(',')
+    last = _SPAN_ENTRY_RE.match(prev_entries[-1])
+    first_new = _SPAN_ENTRY_RE.match(shifted_entries[0])
+    if (last and first_new
+            and last.group('prefix') == first_new.group('prefix')
+            and last.group('suffix') == first_new.group('suffix')
+            and int(last.group('end')) == int(first_new.group('start'))):
+        prev_entries[-1] = (
+            f"{last.group('prefix') or ''}{last.group('start')}-{first_new.group('end')}"
+            f"{last.group('suffix') or ''}"
+        )
+        shifted_entries = shifted_entries[1:]
+    return ','.join(prev_entries + shifted_entries)
+
+# Legacy curly-brace Jefferson notation: {P} for shortpause, {tag}/{multi_word_tag}
+# for non-verbal-behavior (spaces stored as underscores). normalize.py's decision
+# is to preserve literal (.)/((tag)) notation rather than rewrite it — see
+# meta_tag()'s docstring. Some wip/*.csv rows a lemmatizer never touched still
+# carry the legacy form copied verbatim from an older TSV pull; without this,
+# comparing them against a (correctly literal) source TSV would look like a
+# genuine edit and silently reintroduce the legacy notation into the corpus.
+_LEGACY_TAG_RE = re.compile(r'^\{([^{}]+)\}$')
+
+
+def normalize_legacy_pause_nvb(value: str) -> str:
+    """Canonicalize legacy {P}/{tag} notation to literal (.)/((tag)).
+
+    Leaves everything else untouched, including the lemmatization project's
+    own CoNLL-U placeholder forms ([PAUSE]/[NVB]), which are a distinct,
+    intentional convention for the `form` column and not a legacy notation.
+    """
+    if value == '{P}':
+        return '(.)'
+    m = _LEGACY_TAG_RE.match(value)
+    if m:
+        return '((' + m.group(1).replace('_', ' ') + '))'
+    return value
 
 
 def is_missing(value: str | None) -> bool:
@@ -153,13 +246,18 @@ def row_to_line(row: dict, header: list[str], eol: str) -> str:
 
 
 def update_jefferson_feats(tsv_value: str, csv_value: str, span_changed: bool,
-                           new_span: str) -> str:
+                           new_span: str, old_span: str = '') -> str:
     """Compute the patched jefferson_feats for a kept token.
 
     Rules:
     - Only Lang=XXX from the CSV is considered; all other CSV features are ignored.
     - If span changed: span-derived features (SPAN_DERIVED_FEAT_KEYS) are recomputed
-      from new_span and replace their counterparts in the TSV value.
+      from new_span and replace their counterparts in the TSV value — *unless* a
+      feature (Volume, in practice) wasn't derivable from old_span either, meaning
+      it was inherited from a wider multi-token °...° span the edited token merely
+      sits inside (only that span's boundary tokens carry a literal `°` — see
+      feats_from_span); in that case this token-local edit tells us nothing new
+      about it, so it's carried over rather than silently dropped.
     - Non-span features (ProsodicLink, SpaceAfter, Orthography, …) are always
       preserved from the TSV.
     - Lang from CSV is merged in last, overriding any Lang already present.
@@ -172,9 +270,13 @@ def update_jefferson_feats(tsv_value: str, csv_value: str, span_changed: bool,
 
     if span_changed:
         derived = feats_from_span(new_span)
-        # Keep non-span-derived features, replace span-derived ones
+        old_derived = feats_from_span(old_span)
         merged = {k: v for k, v in tsv_feats.items() if k not in SPAN_DERIVED_FEAT_KEYS}
-        merged.update(derived)
+        for key in SPAN_DERIVED_FEAT_KEYS:
+            if key in derived:
+                merged[key] = derived[key]
+            elif key not in old_derived and key in tsv_feats:
+                merged[key] = tsv_feats[key]
     else:
         merged = dict(tsv_feats)
 
@@ -259,8 +361,12 @@ def make_added_row(
     """Build a new TSV row for a token present in CSV but absent in TSV."""
     row = {c: '_' for c in tsv_header}
     row['token_id'] = csv_row['token_id']
-    row['span'] = csv_row.get('span', '_') or '_'
-    row['form'] = csv_row.get('form', '_') or '_'
+    row['span'] = normalize_legacy_pause_nvb(csv_row.get('span', '_') or '_')
+    csv_form = csv_row.get('form', '_') or '_'
+    if csv_form in ('[PAUSE]', '[NVB]'):
+        row['form'] = row['span']  # CoNLL-U placeholder — mirror span, see PATCHABLE_COLS loop
+    else:
+        row['form'] = normalize_legacy_pause_nvb(csv_form)
     row['tu_id'] = infer_missing_metadata(
         field='tu_id',
         csv_row=csv_row,
@@ -351,8 +457,28 @@ def build_new_rows(
                 pending_begin = align_d['Begin']
 
             manual_losses = {c: tsv_row[c] for c in MANUAL_COLS if c in tsv_row and tsv_row[c] != '_'}
+
+            # If this token's content was appended onto the immediately
+            # preceding kept token's form (a clean merge, e.g. "elle"+"due"
+            # → "elledue" — the documented "second half of a merge" case),
+            # transfer its positional features instead of just losing them,
+            # shifting char positions by the length of the kept token's
+            # original form.
+            transferred: set[str] = set()
+            if manual_losses and new_rows:
+                prev = new_rows[-1]
+                dropped_form = tsv_row.get('form', '')
+                prev_form = prev.get('form', '')
+                if dropped_form and prev_form.endswith(dropped_form) and len(prev_form) > len(dropped_form):
+                    offset = len(prev_form) - len(dropped_form)
+                    for col, value in manual_losses.items():
+                        prev[col] = _merge_positional_feature(prev.get(col, '_'), value, offset, col)
+                        notes.append(f"✅ {col}=`{value}` → `{prev['token_id']}` (shifted +{offset})")
+                        transferred.add(col)
+
             for c, v in manual_losses.items():
-                notes.append(f"⚠️ {c}=`{v}`")
+                if c not in transferred:
+                    notes.append(f"⚠️ {c}=`{v}`")
 
             drop_item: dict = {
                 'token_id': tid,
@@ -379,7 +505,19 @@ def build_new_rows(
         form_changed = False
         for col in PATCHABLE_COLS:
             if col in col_set and col in csv_row:
-                new_val = csv_row[col]
+                raw_val = csv_row[col]
+                if col == 'form' and raw_val in ('[PAUSE]', '[NVB]'):
+                    # [PAUSE]/[NVB] are the lemmatization project's own
+                    # CoNLL-U placeholder forms (see conllu2wip.py) — not
+                    # meant for the corpus `form` column. Per the
+                    # normalize.py decision (literal notation, form==span
+                    # for pause/NVB tokens), mirror the token's own span
+                    # instead of writing the placeholder into the corpus.
+                    # `span` is processed first (PATCHABLE_COLS order), so
+                    # new_row['span'] already reflects this same update.
+                    new_val = new_row.get('span', '')
+                else:
+                    new_val = normalize_legacy_pause_nvb(raw_val)
                 old_val = new_row.get(col, '')
                 if new_val and new_val != old_val:
                     new_row[col] = new_val
@@ -396,6 +534,7 @@ def build_new_rows(
                 csv_value=csv_row.get('jefferson_feats', '_'),
                 span_changed=span_changed,
                 new_span=new_row.get('span', '_'),
+                old_span=old_row_snapshot.get('span', '_'),
             )
             if new_jf != old_jf:
                 new_row['jefferson_feats'] = new_jf
@@ -497,7 +636,14 @@ def build_new_rows(
                 new_row['align'] = format_align(new_align)
                 notes.append(f"✅ Begin={new_align['Begin']} ← `{next_row['token_id']}`")
 
-        if not notes:
+        # Only the first/last token of a TU is expected to carry Begin=/End=
+        # at all (see README's `align` column) — an added token strictly
+        # inside a TU has correct (empty) alignment as-is and needs no
+        # manual check.
+        is_tu_first = prev_row is None or prev_row.get('tu_id') != new_row.get('tu_id')
+        is_tu_last = next_row is None or next_row.get('tu_id') != new_row.get('tu_id')
+        final_align = parse_align(new_row.get('align', '_'))
+        if (is_tu_first and 'Begin' not in final_align) or (is_tu_last and 'End' not in final_align):
             notes.append("⚠️ verifica allineamento manualmente")
 
         final_rows.append(new_row)
@@ -512,6 +658,16 @@ def build_new_rows(
             'notes': notes,
         })
 
+    # `id` is recomputed as a monotonic per-TU position, independent of
+    # `token_id`'s suffix — splits/adds keep token_id stable (creation-order,
+    # possibly out of sequence) while `id` always reflects true row order.
+    if 'id' in col_set:
+        next_id_by_tu: dict[str, int] = {}
+        for row in final_rows:
+            tu = row.get('tu_id', '_')
+            row['id'] = str(next_id_by_tu.get(tu, 0))
+            next_id_by_tu[tu] = int(row['id']) + 1
+
     return final_rows, change_items, drop_items, add_items
 
 
@@ -525,148 +681,74 @@ def _row_to_tsv(row: dict, header: list[str]) -> str:
 
 
 def _status_icon(notes: list[str]) -> str:
-    if any(note.startswith(('⚠️', '❌')) for note in notes):
-        return '⚠️'
-    return '✅'
-
-
-def _changed_cols_for_group(group_items: list[tuple[str, dict]]) -> list[str]:
-    """Return the subset of display columns that actually differ in this group."""
-    DISPLAY_ORDER = ['span', 'form', 'jefferson_feats', 'align']
-    changed: set[str] = set()
-    for type_, item in group_items:
-        if type_ == 'change':
-            old, new = item['old_row'], item['new_row']
-            for col in DISPLAY_ORDER:
-                if old.get(col, '_') != new.get(col, '_'):
-                    changed.add(col)
-        else:
-            row = item.get('old_row' if type_ == 'drop' else 'new_row', {})
-            for col in DISPLAY_ORDER[:3]:
-                if row.get(col, '_') not in ('_', ''):
-                    changed.add(col)
-    return [c for c in DISPLAY_ORDER if c in changed]
-
-
-def _group_status_icon(group_items: list[tuple[str, dict]]) -> str:
-    all_notes = [n for _, item in group_items for n in item.get('notes', [])]
-    if any(n.startswith('❌') for n in all_notes):
+    if any(note.startswith('❌') for note in notes):
         return '❌'
-    if any(n.startswith('⚠️') for n in all_notes):
+    if any(note.startswith('⚠️') for note in notes):
         return '⚠️'
     return '✅'
 
 
-def _render_group_single(type_: str, item: dict, lines: list[str]) -> None:
-    """Render a single-item group as a compact prima/dopo table."""
-    ICON = {'change': '✏️', 'drop': '🗑️', 'add': '➕'}
-    status = _status_icon(item.get('notes', []))
-    tu_id = item.get('tu_id', '?')
-    tid = item['token_id']
+# Plain-text tags, not emoji: emoji glyph width is inconsistent across
+# fonts/renderers (variation selectors, ambiguous East Asian Width), which
+# breaks monospace column alignment in the raw Markdown source. ASCII tags
+# align predictably with any character-counting formatter.
+LIVELLO_LABEL = {
+    '✅': '[OK] gestito automaticamente',
+    '⚠️': '[WARN] verifica manuale',
+    '❌': '[FAIL] conflitto',
+}
 
-    lines.extend([
-        f"## {ICON[type_]} {status} · TU {tu_id} · `{tid}`",
-        "",
-    ])
+TIPO_LABEL = {
+    'change': '[MOD] modifica',
+    'drop':   '[DEL] eliminazione',
+    'add':    '[ADD] aggiunta',
+}
 
+# Columns shown in their own dedicated table columns; everything else that
+# differs lands in "altro".
+_RECAP_OWN_COLS = {'token_id', 'id', 'span', 'form'}
+
+
+def _cell(type_: str, col: str, old_row: dict | None, new_row: dict | None) -> str:
+    """Render one field as a recap table cell: `prima` → `dopo` for a change,
+    a single backticked value for add/drop, or '' if there's nothing to show."""
     if type_ == 'change':
-        old, new = item['old_row'], item['new_row']
-        rows = [
-            (col, old.get(col, '_'), new.get(col, '_'))
-            for col in ['span', 'form', 'jefferson_feats', 'align']
-            if old.get(col, '_') != new.get(col, '_')
-        ]
-        lines.extend(["| campo | prima | dopo |", "|-------|-------|------|"])
-        for col, ov, nv in rows:
-            lines.append(f"| {col} | `{_mc(ov)}` | `{_mc(nv)}` |")
-    elif type_ == 'drop':
-        old = item['old_row']
-        lines.extend(["| campo | valore eliminato |", "|-------|-----------------|"])
-        for col in ['span', 'form', 'jefferson_feats']:
-            v = old.get(col, '_')
-            if v not in ('_', ''):
-                lines.append(f"| {col} | `{_mc(v)}` |")
-    else:  # add
-        new = item['new_row']
-        lines.extend(["| campo | valore aggiunto |", "|-------|----------------|"])
-        for col in ['span', 'form', 'jefferson_feats']:
-            v = new.get(col, '_')
-            if v not in ('_', ''):
-                lines.append(f"| {col} | `{_mc(v)}` |")
-
-    for note in item.get('notes', []):
-        lines.append(f"> {note}")
-    lines.append("")
+        ov, nv = old_row.get(col, '_'), new_row.get(col, '_')
+        if ov == nv:
+            return f'`{_mc(ov)}`' if ov not in ('_', '') else ''
+        return f'`{_mc(ov)}` → `{_mc(nv)}`'
+    row = old_row if type_ == 'drop' else new_row
+    v = row.get(col, '_')
+    return f'`{_mc(v)}`' if v not in ('_', '') else ''
 
 
-def _render_group_multi(group_items: list[tuple[str, dict]], lines: list[str]) -> None:
-    """Render a multi-item group (same tu_id) as a single Markdown table.
+def _altro_cell(type_: str, old_row: dict | None, new_row: dict | None,
+                 tsv_header: list[str], notes: list[str]) -> str:
+    """Everything that changed (or is set) outside token_id/id/span/form,
+    plus any ⚠️/❌ notes, as one cell — one `campo: prima → dopo` per line.
 
-    Each row shows one token.  Changed columns use the notation `prima → dopo`;
-    deleted tokens are shown with strikethrough; added tokens are plain.
-    Columns span and form are always included; jefferson_feats and align are
-    included only when at least one token in the group changes them.
+    ✅ notes (successful automatic Begin/End or positional-feature transfer)
+    are dropped here: what they report is already visible from the field
+    diffs themselves (the receiving token's own row shows the field
+    changing), so repeating it as a note is just noise. ⚠️/❌ notes carry
+    information the diffs don't (why something needs a manual look, or a
+    conflict), so those stay.
     """
-    ICON = {'change': '✏️', 'drop': '🗑️', 'add': '➕'}
-    tu_id = group_items[0][1].get('tu_id', '?')
-    status = _group_status_icon(group_items)
-    all_tids = [item['token_id'] for _, item in group_items]
-    id_range = (f"`{all_tids[0]}` → `{all_tids[-1]}`"
-                if all_tids[0] != all_tids[-1] else f"`{all_tids[0]}`")
-
-    n_change = sum(1 for t, _ in group_items if t == 'change')
-    n_drop   = sum(1 for t, _ in group_items if t == 'drop')
-    n_add    = sum(1 for t, _ in group_items if t == 'add')
-    counts = ', '.join(filter(None, [
-        f"{n_change} modif." if n_change else '',
-        f"{n_drop} elim."   if n_drop   else '',
-        f"{n_add} agg."     if n_add    else '',
-    ]))
-
-    lines.extend([f"## {status} TU {tu_id} · {id_range} · {counts}", ""])
-
-    # Always show span + form; add jefferson_feats / align only if they change.
-    changed = _changed_cols_for_group(group_items)
-    extra = [c for c in ['jefferson_feats', 'align'] if c in changed]
-    show_cols = ['span', 'form'] + extra
-
-    header = '| token_id | tipo | ' + ' | '.join(show_cols) + ' |'
-    sep    = '|' + '---|' * (len(show_cols) + 2)
-    lines.extend([header, sep])
-
-    for type_, item in group_items:
-        tid  = item['token_id']
-        icon = ICON[type_]
-        cells: list[str] = []
-
+    parts: list[str] = []
+    for col in tsv_header:
+        if col in _RECAP_OWN_COLS or col == 'tu_id':
+            continue
         if type_ == 'change':
-            old, new = item['old_row'], item['new_row']
-            for col in show_cols:
-                ov, nv = old.get(col, '_'), new.get(col, '_')
-                if ov != nv:
-                    cells.append(f'`{_mc(ov)}` → `{_mc(nv)}`')
-                else:
-                    cells.append(f'`{_mc(ov)}`' if ov not in ('_', '') else '')
-        elif type_ == 'drop':
-            row = item['old_row']
-            for col in show_cols:
-                v = row.get(col, '_')
-                cells.append(f'`{_mc(v)}`' if v not in ('_', '') else '')
-        else:  # add
-            row = item['new_row']
-            for col in show_cols:
-                v = row.get(col, '_')
-                cells.append(f'`{_mc(v)}`' if v not in ('_', '') else '')
-
-        tid_cell = f'`{_mc(tid)}`'
-        lines.append(f'| {tid_cell} | {icon} | ' + ' | '.join(cells) + ' |')
-
-    lines.append("")
-
-    all_notes = [n for _, item in group_items for n in item.get('notes', [])]
-    for note in all_notes:
-        lines.append(f"> {note}")
-    lines.append("")
+            ov, nv = old_row.get(col, '_'), new_row.get(col, '_')
+            if ov != nv:
+                parts.append(f'{col}: `{_mc(ov)}` → `{_mc(nv)}`')
+        else:
+            row = old_row if type_ == 'drop' else new_row
+            v = row.get(col, '_')
+            if v not in ('_', ''):
+                parts.append(f'{col}: `{_mc(v)}`')
+    parts.extend(_mc(note) for note in notes if not note.startswith('✅'))
+    return ' · '.join(parts)
 
 
 def write_recap(
@@ -679,8 +761,14 @@ def write_recap(
     tsv_header: list[str],
     tsv_ids: list[str],
     csv_ids: list[str],
+    final_rows: list[dict],
 ) -> bool:
-    """Render structured recap data as a Markdown file ordered by row.
+    """Render structured recap data as a single Markdown table, ordered by row.
+
+    Columns: token_id, id, tipo (modifica/aggiunta/eliminazione), livello
+    (gestito automaticamente/verifica manuale/conflitto), span, form,
+    altro (every other field that changed, plus notes). span/form/altro use
+    `prima` → `dopo` for changes.
 
     Returns True if the file was written, False if there is nothing to report.
     """
@@ -691,11 +779,14 @@ def write_recap(
     drop_by_id = {item['token_id']: item for item in drop_items}
     add_by_id = {item['token_id']: item for item in add_items}
 
+    # `id` is recomputed on final_rows after change/add items are built (see
+    # build_new_rows), and 'add' items only hold a snapshot copy — so the
+    # authoritative final id per surviving token has to come from final_rows.
+    final_id_by_token = {r['token_id']: r.get('id', '_') for r in final_rows}
+
     lines: list[str] = [
         f"# Patch recap — {tsv_name}",
         f"Generated: {date.today()}  |  CSV: `{csv_name}`",
-        "",
-        "> ✅ = gestito automaticamente · ⚠️ = verifica manuale · ❌ = conflitto",
         "",
         "| tipo | conteggio |",
         "|------|----------|",
@@ -703,8 +794,8 @@ def write_recap(
         f"| eliminazioni | {len(drop_items)} |",
         f"| aggiunte | {len(add_items)} |",
         "",
-        "---",
-        "",
+        "| token_id | id | tipo | livello | span | form | altro |",
+        "|----------|----|------|---------|------|------|-------|",
     ]
 
     # Build ordered list of (type, item) following TSV/CSV token order.
@@ -727,21 +818,25 @@ def write_recap(
                 if item is not None:
                     ordered.append(('add', item))
 
-    # Group consecutive items that share the same tu_id.
-    groups: list[list[tuple[str, dict]]] = []
     for type_, item in ordered:
-        tu_id = item.get('tu_id', '?')
-        if not groups or groups[-1][0][1].get('tu_id', '?') != tu_id:
-            groups.append([])
-        groups[-1].append((type_, item))
+        tid = item['token_id']
+        old_row = item.get('old_row')
+        new_row = item.get('new_row')
+        notes = item.get('notes', [])
 
-    for group_items in groups:
-        if len(group_items) == 1:
-            _render_group_single(*group_items[0], lines)
-        else:
-            _render_group_multi(group_items, lines)
+        livello = LIVELLO_LABEL[_status_icon(notes)]
+        row_id = (old_row.get('id', '_') if type_ == 'drop'
+                  else final_id_by_token.get(tid, '_'))
+        span_cell = _cell(type_, 'span', old_row, new_row)
+        form_cell = _cell(type_, 'form', old_row, new_row)
+        altro_cell = _altro_cell(type_, old_row, new_row, tsv_header, notes)
 
-    recap_p.write_text('\n'.join(lines), encoding='utf-8')
+        lines.append(
+            f"| `{_mc(tid)}` | {_mc(row_id)} | {TIPO_LABEL[type_]} | {livello} | "
+            f"{span_cell} | {form_cell} | {altro_cell} |"
+        )
+
+    recap_p.write_text('\n'.join(lines) + '\n', encoding='utf-8')
     return True
 
 
@@ -793,8 +888,14 @@ def make_patch(csv_path: str, tsv_path: str, output_patch: str | None = None) ->
         csv_rows, tsv_header, tsv_rows, eol
     )
 
+    # `unit` is a pure duplicate of `tu_id` (superseded by monotonic `id`,
+    # see build_new_rows) — drop it from the output so patched files migrate
+    # off the old schema as they're touched.
+    output_header = [c for c in tsv_header if c != 'unit']
+
     # Serialize new rows back to lines
-    new_lines = [tsv_lines[0]] + [row_to_line(r, tsv_header, eol) for r in new_rows]
+    header_line = '\t'.join(output_header) + eol
+    new_lines = [header_line] + [row_to_line(r, output_header, eol) for r in new_rows]
 
     # Generate unified diff
     tsv_rel = f'tsv/{tsv_p.name}'
@@ -819,7 +920,8 @@ def make_patch(csv_path: str, tsv_path: str, output_patch: str | None = None) ->
     tsv_ids = [row.get('token_id', '') for row in tsv_rows]
     csv_ids = list(csv_rows)
     if write_recap(recap_p, tsv_p.name, csv_p.name,
-                   change_items, drop_items, add_items, tsv_header, tsv_ids, csv_ids):
+                   change_items, drop_items, add_items, tsv_header, tsv_ids, csv_ids,
+                   new_rows):
         print(f"Recap written: {recap_p}  ({n_recap} items)")
     else:
         print("No structural changes — no recap written.")

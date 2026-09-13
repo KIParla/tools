@@ -32,6 +32,13 @@ DEFAULT_ISSUES_BASE_URL = "https://github.com/KIParla"
 # Extra positional (per-token) attributes emitted after `word` and `token_id`,
 # in this order. Empty when the token is not annotated. `upos` also drives the
 # conversation-level `linguistic_annotation` flag.
+#
+# A further `variation` positional attribute is always emitted last (see
+# has_variation()/convert_file() below) — "yes" for a token carrying an
+# explicit '#' marker or belonging to a '#_'-prefixed unit, "" otherwise; for
+# now just a flag, to be extended later with which language the variation is
+# from. Kept separate from LINGUISTIC_ATTRS since it is not read via
+# _pos_value() from a same-named TSV column.
 LINGUISTIC_ATTRS = ("lemma", "upos")
 
 
@@ -166,6 +173,14 @@ def _pos_value(row, key):
     return "" if value == "_" else value
 
 
+def has_variation(row):
+    """True for a token carrying an explicit '#' marker, or one whose whole
+    unit was '#_'-prefixed (tokens.py tags both the same way: Variation=Token
+    in jefferson_feats). '#*' (doubtful) is a separate convention, not
+    included here."""
+    return "Variation=Token" in (row.get("jefferson_feats") or "")
+
+
 def is_shortpause(row):
     return row.get("type") == "shortpause" or (row.get("form") or "").strip() == "(.)"
 
@@ -285,6 +300,9 @@ def convert_file(
         if issues_base_url:
             attrs.append(("report_url", build_report_url(
                 issues_base_url, doc_module, code, tu_id, speaker, doc_url)))
+        tu_variation = (tu_rows[0].get("variation") or "none").strip()
+        if tu_variation != "none":
+            attrs.append(("language_variation", "yes"))
         if tu_id in translations:
             attrs.append(("translation", _xml_attr(translations[tu_id])))
         return "<transcription_unit" + "".join(f' {n}="{v}"' for n, v in attrs) + ">"
@@ -338,9 +356,12 @@ def convert_file(
             if glue_pending and not had_markers:
                 print("<g/>", file=out)
             token_id = row.get("token_id", "") or ""
-            print("\t".join(
-                [form, token_id, *(_pos_value(row, a) for a in LINGUISTIC_ATTRS)]
-            ), file=out)
+            token_has_variation = has_variation(row)
+            word = f"#{form}" if token_has_variation else form
+            print("\t".join([
+                word, token_id, *(_pos_value(row, a) for a in LINGUISTIC_ATTRS),
+                "yes" if token_has_variation else "",
+            ]), file=out)
             glue_pending = has_space_after_no(row)
 
     if open_tu is not None:

@@ -127,6 +127,38 @@ class TestConversationToConll:
         assert by_form["forse"]["guesses"] == "0-5(0)"
         assert "Reduced" not in by_form["forse"]["jefferson_feats"]
 
+    def test_overlaps_field_nvb_and_shortpause_get_X_sentinel(self, tmp_path):
+        """NVB/shortpause tokens participating in a genuine overlap get the
+        "X" sentinel in the overlaps column ("X(id)"), not a char range --
+        they can never be interrupted mid-marker by `[`/`]`, so a range would
+        be meaningless. Ordinary tokens in the same overlap still get a real
+        char range."""
+        t = Transcript("TEST")
+        tu0 = TranscriptionUnit(0, "A", 0.0, 2.0, 2.0, "ciao [come stai]")
+        tu1 = TranscriptionUnit(1, "B", 1.0, 1.5, 0.5, "[((ride))]")
+        for tu in (tu0, tu1):
+            tu.tokenize()
+            t.add(tu)
+        t.sort()
+        t.find_overlaps()
+        t.check_overlaps(duration_threshold=0.1)
+        for tu in (tu0, tu1):
+            tu.add_token_features()
+
+        out = tmp_path / "test.vert.tsv"
+        conversation_to_conll(t, out)
+        rows = _read_vert(out)
+        by_form = {r["form"]: r for r in rows}
+
+        assert by_form["stai"]["overlaps"] != "_"
+        assert by_form["stai"]["overlaps"].startswith("0-4(")
+        nvb_overlap = by_form["((ride))"]["overlaps"]
+        assert nvb_overlap.startswith("X(")
+        # Same clique id on both sides of the overlap.
+        stai_id = by_form["stai"]["overlaps"].split("(")[1].rstrip(")")
+        nvb_id = nvb_overlap.split("(")[1].rstrip(")")
+        assert stai_id == nvb_id
+
     def test_prolongation_field(self, tmp_path):
         t = _make_simple_transcript(["cia::o"])
         out = tmp_path / "test.vert.tsv"

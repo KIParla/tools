@@ -1,0 +1,28 @@
+{
+  "_comment": "Column knowledge for metadata/participants.tsv, consumed by tools/csvw/generate_csvw.py. Column *sets* differ across modules (confirmed: KIP uses school-region, KIPasti/ParlaBO/ParlaTO/Stra-* use birth-region + study-level + L1/mothertongue/age-of-arrival-italy/years-in-italy instead), so this is a lookup of descriptions/datatypes by column name, not a fixed ordered list. The generator reads each module's actual header and applies whatever entries match; unmatched columns pass through undescribed rather than failing.",
+  "known_columns": {
+    "code": { "required": true,
+      "dc:description": "Participant code — matches `speaker` values in vert.tsv." },
+    "occupation": { "null": "_" },
+    "gender": { "null": "_",
+      "dc:description": "Commonly F|M, not enforced as a hard constraint." },
+    "conversations": { "separator": ";",
+      "dc:description": "Semicolon-separated list of conversation codes this participant appears in." },
+    "school-region": { "null": ["_", "N/A"] },
+    "birth-region": { "null": ["_", "N/A"] },
+    "study-level": { "null": ["_", "N/A"] },
+    "age-range": { "null": ["_", "N/A"],
+      "dc:description": "5-year bucket, e.g. 21-25." },
+    "L1": { "null": ["_", "N/A"], "dc:description": "First language." },
+    "mothertongue": { "null": ["_", "N/A"] },
+    "age-of-arrival-italy": { "null": ["_", "N/A"] },
+    "years-in-italy": { "null": ["_", "N/A"] }
+  },
+  "foreignKeys": [
+    {
+      "columnReference": "conversations",
+      "reference": { "resource": "metadata/conversations.tsv", "columnReference": "code" }
+    }
+  ],
+  "primaryKey": "code"
+}

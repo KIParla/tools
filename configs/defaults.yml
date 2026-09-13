@@ -30,11 +30,28 @@ overlaps:
   # Minimum overlap duration (seconds). Shorter overlaps without annotated spans
   # are resolved by nudging TU boundaries rather than being recorded as overlaps.
   duration_threshold: 0.1
-  # When true: nonverbal-behavior TUs participate in overlaps like any other TU
-  # (edges are kept, NVB-adjacent mismatches are not silently removed).
-  # When false (default): edges where one TU is entirely NVB are pruned, and
-  # NVB-adjacent overlaps are treated as removable when resolving mismatches.
+  # Only affects UNANNOTATED overlap events involving only NVB and/or
+  # shortpause tokens (no `[...]` span written for them). An annotated
+  # NVB/shortpause overlap is always matched and featured normally, regardless
+  # of this flag. Shortpause is assimilated to NVB: this single toggle
+  # governs both.
+  # When false (default): such an unannotated event is treated as removable
+  # noise (MISMATCHING_OVERLAPS warning, no feature).
+  # When true: it's treated as a genuine overlap that should have been
+  # annotated (OVERLAPS:MISSING_ANNOTATION error).
   nvb_participates_in_overlaps: false
+  # Opt-in, seconds. When a TU has an annotated `[...]` overlap span but no
+  # actual time-based overlap with any other TU — e.g. an annotator set
+  # matching instead of overlapping boundary timestamps — and it has
+  # exactly one immediate neighbor within this many seconds, nudge both
+  # boundaries symmetrically to create a minimal real overlap instead of
+  # leaving it as an unresolvable OVERLAPS:MISSING_TIME error. If both
+  # neighbors are in range (ambiguous) or the closest one is further than
+  # this, nothing is changed. 0 (default) disables this entirely — unlike
+  # duration_threshold/nvb_participates_in_overlaps, this edits actual
+  # start/end timing, not just how an existing overlap is interpreted, so
+  # keep it small and only raise it after checking what it would stretch.
+  stretch_threshold: 0.0
 
 # Token-level variation markers recognised in this module.
 # A marker not listed as true is stripped by SYMBOL_NOT_ALLOWED and its prefix
@@ -97,6 +114,7 @@ accent_corrections:
   - {wrong: "granchè",   right: "granché"}
   - {wrong: "affinchè",  right: "affinché"}
   - {wrong: "pressochè", right: "pressoché"}
+  - {wrong: "vabbé",     right: "vabbè"}
   - {wrong: "nè",        right: "né"}
   - {wrong: "pò",        right: "po'"}
   - {wrong: "pero'",     right: "però"}
@@ -127,3 +145,4 @@ reduction_words:
   - scuola
   - perché
   - fuori
+  - un'

@@ -50,8 +50,12 @@ class Token:
     # {char_index: colon_count}  — colons stripped from form
     prolongations: dict[int, int] = field(init=False, default_factory=dict)
 
-    # Span features set by add_token_features() — {span_id: (char_start, char_end)}
-    overlaps:   dict[int, tuple[int, int]] = field(init=False, default_factory=dict)
+    # Span features set by add_token_features() — {span_id: (char_start, char_end)}.
+    # overlaps values are "X" instead for NVB/shortpause tokens (see
+    # data.py's add_token_features): they can never be partially inside a
+    # `[...]` span, so there's no char range to record, only whole-token
+    # membership in the overlap.
+    overlaps:   dict[int, tuple[int, int] | str] = field(init=False, default_factory=dict)
     slow_pace:  dict[int, tuple[int, int]] = field(init=False, default_factory=dict)
     fast_pace:  dict[int, tuple[int, int]] = field(init=False, default_factory=dict)
     low_volume: dict[int, tuple[int, int]] = field(init=False, default_factory=dict)
@@ -83,12 +87,29 @@ class Token:
 
         # 0. Shortpause / NVB — checked before the generic bracket strip below,
         # since (.) and ((...)) use the same parens as guess/pace/volume spans.
-        if text == "(.)":
+        #
+        # `[`/`]` are overlap-span position markers, not semantic content: when
+        # a shortpause or NVB tag is the sole content of an overlap span (e.g.
+        # `[(.)]`, or `[((ride))]` when the module's config keeps NVB tags
+        # inside overlap spans — see switch_NVB in normalize.py), it still
+        # arrives here as one token with the brackets attached, since
+        # tokenization only splits on whitespace/`=`. Strip a single
+        # leading `[` / trailing `]` before matching, so classification
+        # doesn't depend on whether the tag happens to be overlap-bracketed.
+        core = text
+        if core.startswith("["):
+            core = core[1:]
+        if core.endswith("]"):
+            core = core[:-1]
+
+        if core == "(.)":
             self.token_type = df.tokentype.shortpause
+            self.form = core
             return
 
-        if text.startswith("((") and text.endswith("))"):
+        if core.startswith("((") and core.endswith("))"):
             self.token_type = df.tokentype.nonverbalbehavior
+            self.form = core
             return
 
         # Strip Jefferson span markers — they are position markers only.
@@ -346,11 +367,15 @@ def tokenize_tu(
         tokens.append(tok)
         char_pos = end_pos
 
-    # 5e. Post-tokenize: language variation for #_-marked TUs
+    # 5e. Post-tokenize: language variation for #_-marked TUs. Each token is
+    # treated exactly as if it had carried an explicit #-prefix (Variation=Token
+    # in jefferson_feats), not just Language= — #_ is shorthand for marking
+    # every word in the unit, not a distinct per-token state.
     if df.languagevariation.all in variation_context:
         for tok in tokens:
             tok.token_type = df.tokentype.linguistic
             tok.set_language("NO_ISO_CODE")
+            tok.variation = df.tokenvariation.token
 
     # PauseAfter pass: mark tokens immediately before a shortpause
     for i, tok in enumerate(tokens):

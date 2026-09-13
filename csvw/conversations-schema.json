@@ -1,0 +1,31 @@
+{
+  "_comment": "Column knowledge for metadata/conversations.tsv, consumed by tools/csvw/generate_csvw.py. Column *sets* differ across modules (confirmed: KIP has 11 columns, KIPasti/ParlaBO/ParlaTO/Stra-* add languages/collection-region/macro-region/etc — see tools/PIPELINE.md 'Known module differences'), so this is a lookup of descriptions/datatypes by column name, not a fixed ordered list. The generator reads each module's actual header and applies whatever entries match; unmatched columns pass through undescribed rather than failing.",
+  "known_columns": {
+    "code": { "required": true,
+      "dc:description": "Conversation code — matches the <code>.vert.tsv filename." },
+    "type": {
+      "dc:description": "Conversation type. Not a closed set across modules — e.g. KIPasti has finer-grained subtypes like 'free-conversation:meal'." },
+    "duration": { "datatype": { "base": "time", "format": "HH:mm:ss" } },
+    "participants-number": { "datatype": "integer" },
+    "participants": { "separator": ";",
+      "dc:description": "Semicolon-separated list of participant codes." },
+    "participants-relationship": {
+      "dc:description": "Commonly asymmetric|symmetric, not enforced as a hard constraint." },
+    "moderator": { "datatype": { "base": "boolean", "format": "yes|no" } },
+    "topic": {},
+    "year": { "datatype": "gYear" },
+    "collection-point": {
+      "dc:description": "Module-specific set of site codes (e.g. BO, TO)." },
+    "collection-region": {},
+    "macro-region": {},
+    "languages": {},
+    "unknown-participant": { "datatype": { "base": "boolean", "format": "yes|no" } }
+  },
+  "foreignKeys": [
+    {
+      "columnReference": "participants",
+      "reference": { "resource": "metadata/participants.tsv", "columnReference": "code" }
+    }
+  ],
+  "primaryKey": "code"
+}

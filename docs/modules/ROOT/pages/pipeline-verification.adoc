@@ -1,0 +1,79 @@
+= Pipeline verification
+
+Running log of a step-by-step, module-by-module audit: for each node in the
+pipeline diagrams (`kiparla_module_dashboard.html` /
+`kiparla_requirements_checklist.html`), confirm what the diagram claims
+against what the code in `tools/` (or `kiparla-tools/`, where that's the live
+implementation instead) actually does, and against real module data under
+`moduli/`. Once a step is confirmed, its *actual* behavior is written up here
+as the reference schema -- this page is meant to eventually supersede the
+diagram's claims with ground truth.
+
+Status legend: ✅ verified match · ⚠️ verified, diagram inaccurate · ❌ not
+implemented / no evidence found · ⏳ not yet checked.
+
+[[step-0]]
+== Step 0 -- Intake & metadata validation
+
+=== Node C -- "Check coherence: metadata vs EAF"
+
+*Diagram claim:* a coherence check runs directly between the raw `.eaf` files
+and `participants_metadata.xlsx` / `conversations_metadata.xlsx`, before any
+TSV exists.
+
+*Actual implementation:* `tools/check_participants.py`
+(xref:scripts.adoc[Scripts]). It does not touch `.eaf` files or `.xlsx`
+metadata at all. Instead, per module it compares:
+
+* `metadata/conversations.tsv` (`participants` column) against the set of
+  `speaker` values found in `tsv/<code>.vert.tsv` -- i.e. against the
+  *already-converted* transcript, not the source EAF.
+* `metadata/participants.tsv` (`code` column) against every speaker seen
+  across all `.vert.tsv` files in the module (unregistered-speaker check).
+* Both metadata files against each other in both directions
+  (`participants` ↔ `conversations` back-reference check).
+
+Module metadata lives as `.tsv`, not `.xlsx`, by the time this check runs.
+Auto-discovers modules under the `KIParla` root (skips known aggregate repos
+via `SKIP_DIRS`), or takes explicit `--modules` paths. Exit code 1 if any
+issue is found; `--add-unknown-participant-column` writes an
+`unknown-participant` yes/no/`_` column back into `conversations.tsv`.
+
+*Verdict:* ⚠️ The coherence-checking *function* the diagram describes exists
+and works, but it runs later in the pipeline than drawn (post-TSV-conversion,
+not pre-conversion against raw EAF) and against `.tsv` metadata, not `.xlsx`.
+No script was found that validates raw `.eaf` against `.xlsx` metadata
+directly -- if that check exists it happens outside `tools/` (manually, or in
+`kiparla-tools/`, not yet checked).
+
+*Verified against:* `moduli/KIP` (121 conversations).
+
+[source,bash]
+----
+$ python tools/check_participants.py --modules moduli/KIP
+
+=== KIP (121 conversations) ===
+  OK  all conversations' participants match their transcripts and metadata
+
+1 module(s) checked, 0 issue(s) found.
+----
+
+No mismatches found for KIP -- consistent with the module's `README.md`
+status as an established, already-cleaned module. Still to check: whether
+`check_participants.py` gets invoked automatically anywhere in the pipeline
+(see `tools/sync.py`, which calls it as part of both `--from-eaf` and
+`--from-vert` one-shot syncs) or only run manually/in CI.
+
+=== Node D -- "Back-and-forth with module creators"
+
+*Diagram claim:* a manual loop with module creators resolves inconsistencies
+found by node C.
+
+*Verdict:* ⏳ not checked -- this is a process/communication step, not
+something with a corresponding script; would need to confirm only that no
+tooling silently auto-resolves what the diagram implies is a human loop.
+
+---
+
+_Other modules (KIPasti, ParlaBO, ParlaBZ, ParlaTO, Stra-ParlaBO,
+Stra-ParlaTO) and remaining pipeline steps (S1 onward) not yet checked._

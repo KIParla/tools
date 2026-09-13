@@ -1,0 +1,45 @@
+{
+  "_comment": "Column knowledge for <code>.vert.tsv, per tools/PIPELINE.md § vert.tsv columns. Consumed by tools/csvw/generate_csvw.py. Column *sets* are not fully uniform even within one directory — e.g. KIParla-collection/tsv has both a 12-column shape and a 13-column shape (with/without `variation`) — so this is a lookup of descriptions/datatypes by column name, not a fixed ordered list. The generator groups files by their real header and builds one schema per distinct shape.",
+  "known_columns": {
+    "token_id": { "required": true,
+      "dc:description": "TU_ID-TOKEN_IDX, assigned at creation. Stable and creation-order — not guaranteed monotonic within a TU after a split/add (use `id` for true order, where present)." },
+    "speaker": { "required": true,
+      "dc:description": "Tier ID / participant code." },
+    "tu_id": { "datatype": "integer", "required": true,
+      "dc:description": "Transcription unit id, 0-based." },
+    "unit": { "datatype": "integer",
+      "dc:description": "DEPRECATED — pure duplicate of tu_id, superseded by `id`. Still present in files no patch has touched yet; dropped by tools/make_patch.py as each conversation is repatched. See tools/PIPELINE.md." },
+    "id": { "datatype": "integer",
+      "dc:description": "Token's true 0-based position within its TU. Recomputed from row order on every patch — always monotonic, unlike token_id." },
+    "span": { "required": true,
+      "dc:description": "Raw Jefferson span (character slice of the original annotation)." },
+    "form": { "required": true,
+      "dc:description": "Normalized form: lowercase, no prolongations, no punctuation." },
+    "lemma": { "null": "_", "dc:description": "Filled by the lemmatization step." },
+    "upos": { "null": "_", "dc:description": "Universal POS tag. Filled by the lemmatization step." },
+    "xpos": { "null": "_" },
+    "feats": { "null": "_" },
+    "deprel": { "null": "_" },
+    "type": { "required": true,
+      "dc:description": "Token type flag (tools/dataflags.py:tokentype). Current code emits linguistic|shortpause|nonverbalbehavior|error|warning|unknown|anonymized, but this is not enforced as a hard constraint — the code enum has drifted before (see `variation` below) and existing files may lag it." },
+    "meta_label": { "null": "_" },
+    "variation": { "null": "_",
+      "dc:description": "Language-variation flag on the TU (tools/dataflags.py:languagevariation). Current code emits none|yes|unspecified|all, but not enforced — files serialized before a since-renamed enum member (`some` → `yes`) still contain the old name, confirmed present in KIPasti/Stra-ParlaBO/Stra-ParlaTO. Not present at all in some KIParla-collection files." },
+    "jefferson_feats": { "null": "_",
+      "dc:description": "Pipe-separated: Intonation=X, Interrupted=Yes, Truncated=Yes, Reduced=Yes, ProsodicLink=Yes, SpaceAfter=No, PauseAfter=Yes, Language=ISO, Orthography=Yes, Volume=X, Variation=X, Syllables=N." },
+    "align": { "null": "_",
+      "dc:description": "Begin=X / End=X / Begin=X|End=X for the first/last token of a TU." },
+    "prolongations": { "null": "_", "dc:description": "e.g. 3x2,7x1 (char_pos x length pairs)." },
+    "pace": { "null": "_", "dc:description": "Slow=0-5(0),... / Fast=..." },
+    "guesses": { "null": "_",
+      "dc:description": "0-3(0),... — genuine 'hard to understand' spans only; see PIPELINE.md for the reduction_words whitelist interaction." },
+    "overlaps": { "null": "_" }
+  },
+  "foreignKeys": [
+    {
+      "columnReference": "speaker",
+      "reference": { "resource": "metadata/participants.tsv", "columnReference": "code" }
+    }
+  ],
+  "primaryKey": "token_id"
+}

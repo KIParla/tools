@@ -14,6 +14,7 @@ import yaml
 import args_check as ac
 import config as config_mod
 import serialize
+import tsv2eaf_layered
 import tsv2tei
 import alignment as align_mod
 from data import Transcript, TranscriptionUnit
@@ -96,6 +97,29 @@ def _vert2eaf(args):
                            translations_path=translations_path)
 
 
+def _vert2eaf_layered(args):
+    input_files = list(args.input_dir.glob("*.vert.tsv")) if args.input_dir else list(args.input_files)
+
+    tdir = pathlib.Path(args.translations_dir) if args.translations_dir else None
+    for filename in tqdm.tqdm(input_files, desc="vert2eaf-layered"):
+        stem = re.sub(r"\.vert$", "", filename.stem)
+        media_file = f"{stem}.wav"
+        if args.audio_dir:
+            media_file = str(args.audio_dir / f"{stem}.wav")
+        translations_path = None
+        if tdir is not None:
+            cand = tdir / f"{stem}.translations.json"
+            translations_path = cand if cand.is_file() else None
+        tsv2eaf_layered.vert2eaf_layered(
+            filename, args.output_dir / f"{stem}.eaf", media_file=media_file,
+            translations_path=translations_path, linguistic=args.linguistic,
+        )
+
+    if args.template:
+        out = tsv2eaf_layered.write_template(input_files, args.template)
+        logger.info("wrote template %s", out)
+
+
 def _process(args):
     input_files = list(args.input_dir.glob("*.csv")) if args.input_dir else list(args.input_files)
 
@@ -121,9 +145,19 @@ def _process(args):
     csv_dir.mkdir(parents=True, exist_ok=True)
     reports_dir.mkdir(parents=True, exist_ok=True)
 
+    # Two EAF renderings of every conversation (unless --no-eaf):
+    #   <module>/eaf/          — one tier per speaker, tier named as the speaker
+    #   <module>/eaf_layered/  — full layered hierarchy + a .etf template
+    eaf_dir = args.eaf_dir or (module_root / "eaf")
+    eaf_layered_dir = args.eaf_layered_dir or (module_root / "eaf_layered")
+    if args.eaf:
+        eaf_dir.mkdir(parents=True, exist_ok=True)
+        eaf_layered_dir.mkdir(parents=True, exist_ok=True)
+
     output_json = reports_dir / "summary.json"
     full_data = []
     transcripts = {}
+    vert_paths = []
 
     for filename in tqdm.tqdm(input_files, desc="process"):
         name = filename.stem
@@ -135,6 +169,21 @@ def _process(args):
         transcripts[name] = transcript
         full_data.append(summary)
         serialize.conversation_to_linear(transcript, csv_dir / f"{name}.csv")
+
+        if args.eaf:
+            vert_path = args.output_dir / f"{name}.vert.tsv"
+            vert_paths.append(vert_path)
+            tjson = translations_dir / f"{name}.translations.json"
+            tjson = tjson if tjson.is_file() else None
+            serialize.vert2eaf(vert_path, f"{name}.wav", eaf_dir / f"{name}.eaf",
+                               translations_path=tjson)
+            tsv2eaf_layered.vert2eaf_layered(
+                vert_path, eaf_layered_dir / f"{name}.eaf", media_file=f"{name}.wav",
+                translations_path=tjson, linguistic=True)
+
+    if args.eaf and vert_paths:
+        template = eaf_layered_dir / f"{args.module or 'corpus'}.etf"
+        tsv2eaf_layered.write_template(vert_paths, template)
 
     with open(output_json, "w", encoding="utf-8") as jf:
         print(json.dumps(full_data, indent=2, ensure_ascii=False), file=jf)
@@ -318,6 +367,23 @@ def main():
     _input_group(p)
     p.set_defaults(func=_vert2eaf)
 
+    # vert2eaf-layered
+    p = sub.add_parser("vert2eaf-layered",
+                       help="convert vert.tsv to a layered EAF (units + transcription "
+                            "+ orthographic + token tiers per speaker)")
+    p.add_argument("-o", "--output-dir", default="output_eaf/", type=ac.valid_dirpath)
+    p.add_argument("-a", "--audio-dir", type=ac.valid_dirpath)
+    p.add_argument("--translations-dir", type=ac.valid_dirpath,
+                   help="directory with <name>.translations.json files to attach "
+                        "as __translation tiers")
+    p.add_argument("--linguistic", action="store_true",
+                   help="also emit per-token lemma/upos/xpos/feats/deprel tiers")
+    p.add_argument("--template", type=pathlib.Path,
+                   help="also write an ELAN .etf template at this path with the full "
+                        "tier set for every speaker seen across the inputs")
+    _input_group(p)
+    p.set_defaults(func=_vert2eaf_layered)
+
     # process
     p = sub.add_parser("process", help="run full processing pipeline on transcripts")
     p.add_argument("-o", "--output-dir", default="output/", type=ac.valid_dirpath,
@@ -337,6 +403,15 @@ def main():
     p.add_argument("--csv-dir", type=ac.valid_dirpath,
                    help="directory for the linear *.csv TU summary. "
                         "Default: <output-dir>/../tmp/process/csv")
+    p.add_argument("--no-eaf", dest="eaf", action="store_false",
+                   help="skip rendering the per-conversation .eaf files")
+    p.add_argument("--eaf-dir", type=ac.valid_dirpath,
+                   help="directory for the plain one-tier-per-speaker .eaf files. "
+                        "Default: <output-dir>/../eaf")
+    p.add_argument("--eaf-layered-dir", type=ac.valid_dirpath,
+                   help="directory for the layered .eaf files + .etf template. "
+                        "Default: <output-dir>/../eaf_layered")
+    p.set_defaults(eaf=True)
     _input_group(p)
     p.set_defaults(func=_process)
 

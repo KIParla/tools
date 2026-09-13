@@ -4,6 +4,7 @@ data.py — TranscriptionUnit and Transcript data structures.
 Pipeline coverage:
     Step 2  — TranscriptionUnit.__post_init__  (preprocess / normalize)
     Step 3  — Transcript.sort
+    Step 3b — Transcript.stretch_missing_overlaps  (optional, config-gated)
     Step 4  — Transcript.find_overlaps
     Step 5  — TranscriptionUnit.tokenize  (delegates to tokens.tokenize_tu)
     Step 6  — Transcript.check_overlaps
@@ -25,6 +26,14 @@ from normalize import validate_and_normalize, _mask_non_guess_parens, is_reducti
 from tokens import Token, tokenize_tu
 
 logger = logging.getLogger(__name__)
+
+
+def _is_nvb_or_pause_token(t: Token) -> bool:
+    """True for NVB and shortpause tokens — the two types whose participation
+    in overlaps is gated together by ``overlaps.nvb_participates_in_overlaps``
+    (shortpause is assimilated to NVB's behavior; see check_overlaps)."""
+    return (df.tokentype.nonverbalbehavior in t.token_type
+            or df.tokentype.shortpause in t.token_type)
 
 
 # ---------------------------------------------------------------------------
@@ -284,6 +293,26 @@ class TranscriptionUnit:
                 for ti, positions in char_ranges.items():
                     self.tokens[ti].overlaps[match_id] = (min(positions), max(positions) + 1)
 
+                # NVB/shortpause tokens are invisible to the pass above: every
+                # character of `(.)`/`((...))` is punctuation under
+                # token_at/form_idx (dots and brackets are stripped as
+                # non-form markers), so they never appear in `covered` even
+                # when they sit inside the overlap span. Detect them directly
+                # via their own character span instead. Unlike ordinary
+                # tokens -- which can straddle an overlap boundary mid-word,
+                # hence the letters-only sub-range above -- NVB/shortpause can
+                # never be interrupted by `[`/`]` (that would be a malformed
+                # annotation): they're always entirely inside or entirely
+                # outside a span, so instead of a char range they get the "X"
+                # sentinel (same convention as their `upos` value) meaning
+                # "whole token", rather than a sub-range that would be
+                # meaningless here.
+                for tok in self.tokens:
+                    if _is_nvb_or_pause_token(tok):
+                        ts, te = tok.span
+                        if ts < b and te > a:
+                            tok.overlaps[match_id] = "X"
+
         # Position flags: first and last token of TU.
         self.tokens[0].set_position(df.position.start)
         self.tokens[-1].set_position(df.position.end)
@@ -326,6 +355,71 @@ class Transcript:
             self.tot_length = self.transcription_units[-1].end
 
     # ------------------------------------------------------------------
+    # Step 3b — Stretch boundaries for annotated-but-missing overlaps
+    # ------------------------------------------------------------------
+
+    def stretch_missing_overlaps(self, stretch_threshold: float):
+        """Nudge TU boundaries to create a real time overlap where one is
+        annotated (`[...]` in the source) but missing purely because of a
+        tiny gap between two TUs — e.g. an annotator set matching instead of
+        overlapping timestamps. Without this, such a TU has no time-based
+        overlap at all and ends up as an unresolvable OVERLAPS:MISSING_TIME
+        error (see check_overlaps).
+
+        Disabled by default (stretch_threshold <= 0 is a no-op) — this
+        edits actual start/end timing, not just how it's interpreted, so
+        it's opt-in per module via overlaps.stretch_threshold.
+
+        Only acts when a TU with an annotated overlap span has *exactly
+        one* immediate neighbor (by sorted start time) within
+        stretch_threshold seconds and not already touching/overlapping.
+        If both neighbors are in range, or the only nearby one is further
+        than the threshold, nothing is changed — picking a partner among
+        multiple candidates would be a guess, and is left for a human
+        (still surfaces as OVERLAPS:MISSING_TIME / MISMATCHING_OVERLAPS).
+
+        Must run after sort() and before find_overlaps(), so the stretched
+        boundaries are picked up as a genuine time-based overlap.
+        """
+        if stretch_threshold <= 0:
+            return
+
+        units = self.transcription_units
+        for i, tu in enumerate(units):
+            if not tu.overlapping_spans:
+                continue
+
+            candidates = []
+            if i > 0:
+                prev = units[i - 1]
+                gap = tu.start - prev.end
+                if 0 <= gap <= stretch_threshold:
+                    candidates.append(("prev", prev, gap))
+            if i + 1 < len(units):
+                nxt = units[i + 1]
+                gap = nxt.start - tu.end
+                if 0 <= gap <= stretch_threshold:
+                    candidates.append(("next", nxt, gap))
+
+            if len(candidates) != 1:
+                continue
+
+            direction, neighbor, gap = candidates[0]
+            # Split the gap so the new overlap is symmetric; if the gap was
+            # exactly 0 (touching, not overlapping), nudge by half the
+            # configured threshold instead so a real overlap actually forms,
+            # still bounded by what the module considers acceptable.
+            half = gap / 2 if gap > 0 else stretch_threshold / 2
+            if direction == "prev":
+                tu.start -= half
+                neighbor.end += half
+            else:
+                tu.end += half
+                neighbor.start -= half
+            tu.warnings["STRETCHED_BOUNDARIES"] += 1
+            neighbor.warnings["STRETCHED_BOUNDARIES"] += 1
+
+    # ------------------------------------------------------------------
     # Step 4 — Find time-based overlaps
     # ------------------------------------------------------------------
 
@@ -362,27 +456,22 @@ class Transcript:
         if relations_to_ignore is None:
             relations_to_ignore = []
 
-        # 6a. Remove NVB-only edges (unless nvb_participates is True).
-        if not nvb_participates:
-            to_remove = [
-                (u, v)
-                for u, v in self.time_based_overlaps.edges()
-                if (all(df.tokentype.nonverbalbehavior in t.token_type
-                        for t in self._tu_by_id[u].tokens) or
-                    all(df.tokentype.nonverbalbehavior in t.token_type
-                        for t in self._tu_by_id[v].tokens))
-            ]
-            for u, v in to_remove:
-                logger.warning("Removing NVB edge %s-%s", u, v)
-                self.time_based_overlaps.remove_edge(u, v)
-
-        # 6b. Remove manually ignored pairs.
+        # 6a. Remove manually ignored pairs.
         for u, v in relations_to_ignore:
             if self.time_based_overlaps.has_edge(u, v):
                 logger.warning("Removing ignored edge %s-%s", u, v)
                 self.time_based_overlaps.remove_edge(u, v)
 
-        # 6c. Remove short unannotated overlaps; nudge TU boundaries.
+        # 6b. Remove short unannotated overlaps; nudge TU boundaries.
+        #
+        # Note: NVB/shortpause-only TUs are *not* pruned from the graph here
+        # (or anywhere before cliques are built) -- a genuinely annotated
+        # `[...]` overlap span on such a TU always gets matched to its real
+        # time-based partner and assigned a proper feature (see 6d), no
+        # matter what nvb_participates_in_overlaps is set to. That flag only
+        # decides, per overlap *event*, whether a clique that's entirely
+        # NVB/shortpause counts as removable noise when there's no annotated
+        # span to back it up (6d).
         to_remove = []
         for u, v in list(self.time_based_overlaps.edges()):
             edge = self.time_based_overlaps[u][v]
@@ -401,7 +490,7 @@ class Transcript:
             logger.warning("Removing short unannotated overlap %s-%s", u, v)
             self.time_based_overlaps.remove_edge(u, v)
 
-        # 6d. Cliques → overlap events.
+        # 6c. Cliques → overlap events.
         cliques = sorted(
             (c for c in nx.find_cliques(self.time_based_overlaps) if len(c) > 1),
             key=len,
@@ -411,9 +500,8 @@ class Transcript:
         for clique_id, clique in enumerate(cliques):
             starts = [self._tu_by_id[n].start for n in clique]
             ends   = [self._tu_by_id[n].end   for n in clique]
-            nvb_in_clique = any(
-                any(df.tokentype.nonverbalbehavior in t.token_type
-                    for t in self._tu_by_id[n].tokens)
+            nvb_or_pause_in_clique = any(
+                any(_is_nvb_or_pause_token(t) for t in self._tu_by_id[n].tokens)
                 for n in clique
             )
             overlap_start = max(starts)
@@ -423,10 +511,10 @@ class Transcript:
             for node in clique:
                 partners = tuple(n for n in clique if n != node)
                 self._tu_by_id[node].overlapping_times[partners] = (
-                    overlap_start, overlap_end, clique_id, nvb_in_clique
+                    overlap_start, overlap_end, clique_id, nvb_or_pause_in_clique
                 )
 
-        # 6e. Match annotated spans to overlap events.
+        # 6d. Match annotated spans to overlap events.
         for tu in self._tu_by_id.values():
             spans   = tu.overlapping_spans
             times   = tu.overlapping_times
@@ -442,9 +530,9 @@ class Transcript:
             elif n_spans == 0:
                 # Record durations and check which events are removable.
                 removable_ids: set[int] = set()
-                for el, (os, oe, cid, nvb) in times.items():
+                for el, (os, oe, cid, nvb_or_pause) in times.items():
                     tu.overlap_duration["+".join(str(x) for x in el)] = oe - os
-                    if (nvb and not nvb_participates) or (oe - os < duration_threshold):
+                    if (nvb_or_pause and not nvb_participates) or (oe - os < duration_threshold):
                         removable_ids.add(cid)
 
                 all_clique_ids = {v[2] for v in times.values()}
@@ -458,16 +546,24 @@ class Transcript:
                 tu.overlapping_matches = {span: "?" for span in spans}
 
             elif n_times > n_spans:
+                # More time-based overlap events than annotated spans: try to
+                # reconcile by dropping the smallest-duration removable
+                # events first (short/nvb-or-pause-ineligible ones are the
+                # most likely to be incidental boundary touches rather than a
+                # real annotated overlap), down to exactly as many events as
+                # there are annotated spans.
                 diff = n_times - n_spans
-                removable_ids = set()
-                for el, (os, oe, cid, nvb) in times.items():
-                    if (oe - os < duration_threshold) or (nvb and not nvb_participates):
-                        removable_ids.add(cid)
+                removable = [
+                    (oe - os, cid)
+                    for el, (os, oe, cid, nvb_or_pause) in times.items()
+                    if (oe - os < duration_threshold) or (nvb_or_pause and not nvb_participates)
+                ]
 
-                if len(removable_ids) == diff:
+                if len(removable) >= diff:
+                    drop_ids = {cid for _, cid in sorted(removable)[:diff]}
                     sorted_times = sorted(times.items(), key=lambda kv: kv[1][0])
                     keep_ids = [kv[1][2] for kv in sorted_times
-                                if kv[1][2] not in removable_ids]
+                                if kv[1][2] not in drop_ids]
                     tu.overlapping_matches = dict(zip(spans, keep_ids))
                     tu.warnings["MISMATCHING_OVERLAPS"] = True
                 else:

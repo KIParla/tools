@@ -394,12 +394,12 @@ def test_switch_symbols_question_before_tilde():
 def test_switch_symbols_no_change():
     assert normalize.switch_symbols("ciao.") == (0, "ciao.")
 
-def test_switch_NVB_overlap_nvb_moves_out():
-    # Non-pause NVB after [ moves out
-    assert normalize.switch_NVB("[((ride))") == (1, "((ride)) [")
+def test_switch_NVB_overlap_nvb_exempt_opening():
+    # NVB immediately after [ stays -- overlap-span edges are always exempt.
+    assert normalize.switch_NVB("[((ride))") == (0, "[((ride))")
 
 def test_switch_NVB_overlap_pause_exempt_opening():
-    # (.) immediately after [ stays (pause inside overlap is valid)
+    # (.) immediately after [ stays (pause inside overlap is valid).
     assert normalize.switch_NVB("[(.)") == (0, "[(.)")
 
 def test_switch_NVB_overlap_pause_exempt_closing():
@@ -410,8 +410,14 @@ def test_switch_NVB_overlap_pause_exempt_full_span():
     # [(.)] must not change at all
     assert normalize.switch_NVB("[(.)]") == (0, "[(.)]")
 
-def test_switch_NVB_overlap_non_pause_closing():
-    assert normalize.switch_NVB("((ride))]") == (1, "] ((ride))")
+def test_switch_NVB_overlap_nvb_exempt_closing():
+    assert normalize.switch_NVB("((ride))]") == (0, "((ride))]")
+
+def test_switch_NVB_overlap_nvb_exempt_full_span():
+    assert normalize.switch_NVB("[((ride))]") == (0, "[((ride))]")
+
+def test_switch_NVB_overlap_nvb_exempt_mixed_span():
+    assert normalize.switch_NVB("[((ride)) ciao]") == (0, "[((ride)) ciao]")
 
 def test_switch_NVB_guess_span():
     # ( ) : all NVBs move out, including (.)
@@ -698,13 +704,21 @@ def test_integration_overlap_pause_results_in_empty_unit():
     assert "EMPTY_UNIT" in warnings
 
 
-def test_integration_nvb_moved_outside_overlap():
-    """A non-pause NVB immediately after [ is relocated outside the span.
-    The trailing space check_spaces pass (after switch_NVB) cleans the stray
-    space that moving the tag leaves inside the bracket.
-    """
+def test_integration_nvb_exempt_inside_overlap():
+    """An NVB tag immediately after [ is always exempt from switch_NVB, same
+    as shortpause -- unconditionally, regardless of nvb_participates_in_overlaps
+    (that flag only governs TU-level overlap participation; see
+    Transcript.check_overlaps in data.py)."""
     normalized, warnings, _ = normalize.validate_and_normalize("[((ride)) ciao]")
-    assert normalized == "((ride)) [ciao]"
+    assert normalized == "[((ride)) ciao]"
+    assert "SWITCHES" not in warnings
+
+
+def test_integration_nvb_moved_outside_guess_span():
+    """Outside overlap brackets -- e.g. a guess span -- NVB is still relocated,
+    same as always."""
+    normalized, warnings, _ = normalize.validate_and_normalize("(((ride)) ciao)")
+    assert normalized == "((ride)) (ciao)"
     assert "SWITCHES" in warnings
 
 
@@ -752,13 +766,20 @@ def test_integration_config_disables_accents():
     assert "ACCENTS" not in warnings
 
 
-def test_integration_empty_span_from_nvb_removal():
-    """[((ride))] → switch_NVB moves ((ride)) out → [] → removed by EMPTY_SPANS."""
+def test_integration_overlap_span_nvb_preserved():
+    """[((ride))] is left untouched: an NVB tag at the edge of an overlap span
+    is always exempt from switch_NVB (unconditionally, same as shortpause),
+    so the span survives intact and stays detectable as an overlap.
+
+    Whether an NVB-only TU actually *participates* in the overlap graph is a
+    separate, TU-level decision gated by overlaps.nvb_participates_in_overlaps
+    -- see Transcript.check_overlaps in data.py -- not something this
+    normalization step decides.
+    """
     normalized, warnings, _ = normalize.validate_and_normalize("[((ride))]")
-    assert normalized == "((ride))"
-    assert "SWITCHES" in warnings
-    assert "EMPTY_SPANS" in warnings
-    assert "EMPTY_UNIT" not in warnings   # ((ride)) is content
+    assert normalized == "[((ride))]"
+    assert "SWITCHES" not in warnings
+    assert "EMPTY_SPANS" not in warnings
 
 
 def test_integration_empty_unit_excluded():

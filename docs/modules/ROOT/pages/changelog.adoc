@@ -38,6 +38,52 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 * `WORD_CORRECTIONS`: added `ceh` → `c(io)è` and `mmh` → `mhmh`. Each
   occurrence is reported as a `WORD_CORRECTIONS` warning like the existing
   interjection spellings.
+* new `vert2eaf-layered` command (`tsv2eaf_layered.py`): renders a `.vert.tsv`
+  to a layered ELAN `.eaf` with a per-speaker tier hierarchy named in the
+  Toolbox/ELAN interlinear `<code>@<speaker>` convention — `ref@` (units) ▸
+  `ft@` (translation), `tx@` (Jefferson), `tx_ortho@` (orthographic) ▸ `tok@`
+  (tokens) ▸ `nvb@`, `sent_id@` (many-to-many syntactic-sentence link) and,
+  with `--linguistic`, `lemma@ / pos@ / xpos@ / feats@ / dep@`. Empty leaf
+  tiers are pruned; `--template` writes an `.etf` with the full tier set for
+  every speaker. `process` now also emits both a plain (`eaf/`, one tier per
+  speaker) and a layered (`eaf_layered/` + `<module>.etf`) rendering of every
+  conversation, unless `--no-eaf`.
+* reworked NVB/shortpause overlap handling into two clearly separated concerns:
+** **Bracket-edge position** (`switch_NVB` in `normalize.py`): an NVB tag or
+   shortpause `(.)` immediately after `[` or before `]` now *always* stays in
+   place, unconditionally — `nvb_participates_in_overlaps` no longer has any
+   effect here (the parameter was removed from `switch_NVB` and
+   `validate_and_normalize`). Previously NVB was relocated out of `[...]`
+   unless the flag was set; shortpause was already always kept.
+** **Token-feature encoding** (`TranscriptionUnit.add_token_features` in
+   `data.py`): NVB and shortpause tokens now correctly get an `overlaps`
+   feature at all when they genuinely sit inside a matched overlap span —
+   previously they were entirely invisible to the character-to-token mapping
+   (every character of `((laugh))`/`(.)` is a bracket/dot marker, i.e. has no
+   "form character" under that mapping's definition, so it silently never
+   matched). Since NVB/shortpause can never be interrupted by `[`/`]`
+   mid-marker (unlike ordinary tokens, which can straddle an overlap
+   boundary mid-word), a char range doesn't mean anything for them either:
+   detected via the token's own character span rather than the letters-only
+   index, and rendered in the `overlaps` column as the sentinel `X(id)`
+   (e.g. `((ride))` → `X(0)`) instead of a `cs-ce(id)` char range — same
+   convention as their `upos` value. Every existing downstream consumer of
+   this column (`tsv2tei.py`, `tsv2chat_bak.py`, `make_patch.py`) only ever
+   extracts the id via `\((\d+)\)`, so `X(id)` is a drop-in match.
+** **TU/clique-level participation** (`Transcript.check_overlaps` in
+   `data.py`): removed the old step 6a that pruned every graph edge touching
+   an NVB/shortpause-only TU *before* cliques were even built — that meant a
+   genuinely annotated `[...]` overlap on such a TU (and its overlap partner)
+   lost its match entirely and fell through to an `OVERLAPS:MISSING_TIME`
+   error with a `"?"` placeholder instead of a real feature. Now every edge
+   survives into clique-building regardless of token type, so an annotated
+   NVB/shortpause overlap always gets matched and featured correctly.
+   `overlaps.nvb_participates_in_overlaps` now controls exactly one thing:
+   whether an *unannotated* overlap event involving only NVB/shortpause
+   tokens counts as removable noise (`false`, default) or as a genuine
+   overlap that should have been annotated (`true`, now an
+   `OVERLAPS:MISSING_ANNOTATION` error). Shortpause is assimilated to NVB
+   here, gated by the same toggle.
 * added an Antora documentation component for `tools`
 * documented the standalone scripts with concrete command examples
 * documented the test workflow

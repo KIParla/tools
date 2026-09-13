@@ -83,9 +83,15 @@ def feats_from_span(span: str) -> dict[str, str]:
     if '°' in span:
         feats['Volume'] = 'Low'
 
-    # Strip ° and overlap brackets for further analysis
+    # Strip °, overlap brackets, guess parens, pace markers and variation
+    # prefixes for further analysis — these are structural position/prefix
+    # markers, not content, and can otherwise hide the actual trailing/
+    # leading char being checked below (e.g. "vede'<)" is a truncated
+    # "vede'" inside a pace span and a guess span; "inserito.)" is
+    # "inserito." inside a guess span; "#'mbusse" is a truncated "'mbusse"
+    # with a variation marker prefix).
     core = re.sub(r'°', '', span)
-    core = re.sub(r'[\[\]]', '', core)
+    core = re.sub(r'[\[\]()<>#$]', '', core)
 
     # Volume=High: uppercase alphabetic letters (overrides Low; shouldn't coexist)
     if any(c.isupper() for c in core if c.isalpha()):
@@ -105,10 +111,12 @@ def feats_from_span(span: str) -> dict[str, str]:
     # Strip intonation punctuation to check for truncation/interruption markers
     core_base = core.rstrip('.,?')
 
+    # Independent checks: a token can be both truncated at one end and
+    # interrupted at the other (e.g. "'sti~").
     if (core_base.endswith('-') or core_base.endswith('~') or
             core_base.startswith('-') or core_base.startswith('~')):
         feats['Interrupted'] = 'Yes'
-    elif core_base.endswith("'") or core_base.startswith("'"):
+    if core_base.endswith("'") or core_base.startswith("'"):
         alpha = ''.join(c for c in core_base if c.isalpha())
         if alpha not in ('po',):      # "po'" is not a truncation
             feats['Truncated'] = 'Yes'
