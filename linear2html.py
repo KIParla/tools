@@ -390,7 +390,10 @@ def markup_jefferson(text):
     t = mark_variation(t, store)
 
     t = html.escape(t)
-    for token, fragment in placeholders.items():
+    # Reverse insertion order: a "#_" unit's outer span (stored last, by
+    # mark_variation) is resolved first, exposing the inner tokens it
+    # wraps so their own (earlier-inserted) entries can resolve next.
+    for token, fragment in reversed(list(placeholders.items())):
         t = t.replace(token, fragment)
     return t
 
@@ -399,16 +402,31 @@ def mark_variation(text, store):
     """Wrap markers in dedicated spans: code-switching ('# '/'#_' TU
     prefixes, per-word '#word'/'#*word') as 'variation'; '$word' (emerging,
     non-standard orthography — a different phenomenon, not code-switching)
-    as 'emerging'."""
+    as 'emerging'.
+
+    A "#_"-prefixed unit is entirely non-Italian, so the whole line is
+    wrapped in one outer 'variation' span (not just the "#_ " prefix) —
+    this nests any inner spans (per-word "#"/"$", or already-store()'d
+    fragments earlier in the pipeline) inside it, which works because the
+    final placeholder substitution in markup_jefferson/markup_orthographic
+    resolves tokens in reverse (outer-to-inner) insertion order."""
+    if text.startswith("#_ "):
+        prefix, rest = text[:3], text[3:]
+        inner = html.escape(prefix) + _mark_variation_words(rest, store)
+        return store(f'<span class="variation">{inner}</span>')
     t = re.sub(
-        r'^(#_ |# )',
+        r'^(# )',
         lambda m: store(f'<span class="variation">{html.escape(m.group(1))}</span>'),
         text,
     )
+    return _mark_variation_words(t, store)
+
+
+def _mark_variation_words(text, store):
     t = re.sub(
         r'#\S+',
         lambda m: store(f'<span class="variation">{html.escape(m.group(0))}</span>'),
-        t,
+        text,
     )
     t = re.sub(
         r'\$\S+',
@@ -429,7 +447,7 @@ def markup_orthographic(text):
 
     t = mark_variation(text, store)
     t = html.escape(t)
-    for token, fragment in placeholders.items():
+    for token, fragment in reversed(list(placeholders.items())):
         t = t.replace(token, fragment)
     return t
 
