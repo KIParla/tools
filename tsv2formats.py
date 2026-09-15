@@ -68,10 +68,15 @@ def tsv2linear(input_files_paths, output_jefferson_path, output_orthographic_pat
 				elif row['type'] in ['linguistic']:
 					text_jefferson.append(row['span'])
 					word = row['form']
+					feats = row['jefferson_feats']
 					# Per-word "#" marker: skip when the whole unit is already
 					# "#_"-prefixed above, to avoid marking every word twice.
-					if tu_variation != 'all' and 'Variation=Token' in row['jefferson_feats']:
+					if tu_variation != 'all' and 'Variation=Token' in feats:
 						word = '#' + word
+					elif 'Variation=Doubtful' in feats:
+						word = '#*' + word
+					elif 'Variation=Emerging' in feats:
+						word = '$' + word
 					text_orthographic.append(word)
 
 				elif row['type'] in ['error']:

@@ -33,11 +33,17 @@ DEFAULT_ISSUES_BASE_URL = "https://github.com/KIParla"
 # in this order. Empty when the token is not annotated. `upos` also drives the
 # conversation-level `linguistic_annotation` flag.
 #
-# A further `variation` positional attribute is always emitted last (see
-# has_variation()/convert_file() below) — "yes" for a token carrying an
-# explicit '#' marker or belonging to a '#_'-prefixed unit, "" otherwise; for
-# now just a flag, to be extended later with which language the variation is
-# from. Kept separate from LINGUISTIC_ATTRS since it is not read via
+# Two further positional attributes are always emitted last (see
+# variation_kind()/is_emerging()/convert_file() below), in this order:
+#   variation         — "token" for an explicit '#' marker or a token
+#                        belonging to a '#_'-prefixed unit, "doubtful" for
+#                        '#*', "" otherwise. To be extended later with which
+#                        language the variation is from.
+#   non_standard_form  — "yes" for a '$' (emerging) marker, "" otherwise.
+#                        Not code-switching — a different phenomenon
+#                        (non-standard/emerging spelling) — so tracked apart
+#                        from `variation`.
+# Kept separate from LINGUISTIC_ATTRS since they are not read via
 # _pos_value() from a same-named TSV column.
 LINGUISTIC_ATTRS = ("lemma", "upos")
 
@@ -173,12 +179,23 @@ def _pos_value(row, key):
     return "" if value == "_" else value
 
 
-def has_variation(row):
-    """True for a token carrying an explicit '#' marker, or one whose whole
-    unit was '#_'-prefixed (tokens.py tags both the same way: Variation=Token
-    in jefferson_feats). '#*' (doubtful) is a separate convention, not
-    included here."""
-    return "Variation=Token" in (row.get("jefferson_feats") or "")
+def variation_kind(row):
+    """Word-level code-switching kind, from jefferson_feats: 'token' for an
+    explicit '#' marker or a token whose whole unit was '#_'-prefixed
+    (tokens.py tags both the same way: Variation=Token), 'doubtful' for
+    '#*', '' otherwise."""
+    feats = row.get("jefferson_feats") or ""
+    if "Variation=Doubtful" in feats:
+        return "doubtful"
+    if "Variation=Token" in feats:
+        return "token"
+    return ""
+
+
+def is_emerging(row):
+    """True for a '$word' token — a non-standard/emerging spelling, not
+    code-switching, so tracked separately from variation_kind()."""
+    return "Variation=Emerging" in (row.get("jefferson_feats") or "")
 
 
 def is_shortpause(row):
@@ -356,11 +373,18 @@ def convert_file(
             if glue_pending and not had_markers:
                 print("<g/>", file=out)
             token_id = row.get("token_id", "") or ""
-            token_has_variation = has_variation(row)
-            word = f"#{form}" if token_has_variation else form
+            kind = variation_kind(row)
+            emerging = is_emerging(row)
+            word = form
+            if kind == "token":
+                word = f"#{word}"
+            elif kind == "doubtful":
+                word = f"#*{word}"
+            elif emerging:
+                word = f"${word}"
             print("\t".join([
                 word, token_id, *(_pos_value(row, a) for a in LINGUISTIC_ATTRS),
-                "yes" if token_has_variation else "",
+                kind, "yes" if emerging else "",
             ]), file=out)
             glue_pending = has_space_after_no(row)
 

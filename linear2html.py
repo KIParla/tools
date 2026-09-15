@@ -159,6 +159,10 @@ def _append_unit_text(text_jefferson, text_orthographic, row):
         word = form
         if tu_variation != "all" and "Variation=Token" in feats:
             word = "#" + word
+        elif "Variation=Doubtful" in feats:
+            word = "#*" + word
+        elif "Variation=Emerging" in feats:
+            word = "$" + word
         text_orthographic.append(word)
     elif rtype in ["error"]:
         text_jefferson.append(span)
@@ -392,17 +396,23 @@ def markup_jefferson(text):
 
 
 def mark_variation(text, store):
-    """Wrap language-variation markers ('# '/'#_' TU prefixes and per-word
-    '#word') in a single 'variation' span. '#*word' (doubtful) is a separate,
-    not-yet-styled convention and is left untouched."""
+    """Wrap markers in dedicated spans: code-switching ('# '/'#_' TU
+    prefixes, per-word '#word'/'#*word') as 'variation'; '$word' (emerging,
+    non-standard orthography — a different phenomenon, not code-switching)
+    as 'emerging'."""
     t = re.sub(
         r'^(#_ |# )',
         lambda m: store(f'<span class="variation">{html.escape(m.group(1))}</span>'),
         text,
     )
     t = re.sub(
-        r'#(?!\*)\S+',
+        r'#\S+',
         lambda m: store(f'<span class="variation">{html.escape(m.group(0))}</span>'),
+        t,
+    )
+    t = re.sub(
+        r'\$\S+',
+        lambda m: store(f'<span class="emerging">{html.escape(m.group(0))}</span>'),
         t,
     )
     return t
@@ -792,6 +802,7 @@ tbody td {
 .trunc   { color: #999; }
 .length  { color: #b05010; }
 .variation { color: var(--brand); font-weight: 600; }
+.emerging  { color: #7a3a8a; font-weight: 600; }
 
 /* ── scroll timeline ── */
 .timeline {
