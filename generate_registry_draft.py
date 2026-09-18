@@ -25,6 +25,7 @@ CUSTOM_LABELS = {
     "code": "Codice conversazione",
     "full_conversation": "Trascrizione completa",
     "duration": "Durata",
+    "duration_range": "Fascia di durata",
     "topic": "Argomento",
     "participants": "Partecipanti",
     "participant_code": "Codice partecipante",
@@ -95,6 +96,10 @@ def main():
     conversation_attrs.extend(
         normalize_attr_name(h) for h in conv_headers if h != "code"
     )
+
+    # tsv2vert_v2.py derives duration_range (duration bands) from duration
+    if "duration" in conversation_attrs:
+        conversation_attrs.insert(conversation_attrs.index("duration") + 1, "duration_range")
 
     tu_attrs = ["participant_code", "begin", "end", "audio_file"]
     tu_attrs.extend(

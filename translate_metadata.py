@@ -38,6 +38,11 @@ MULTIVALUED: set[str] = {"languages"}
 # Columns whose values are colon-separated tokens (type subtypes)
 COLON_SEPARATED: set[str] = {"type"}
 
+# Open-vocabulary columns: only a few placeholder values need a translation
+# (e.g. '_' -> 'N/A'), every other value legitimately passes through, so
+# unmapped values are not reported as missing translations.
+OPEN_COLUMNS: set[str] = {"age-range", "gender", "birth-region", "school-region"}
+
 
 def load_translations(path: str) -> dict[str, dict[str, dict[str, str]]]:
     """Load translations.tsv → {table: {column: {en: it}}}."""
@@ -87,7 +92,7 @@ def translate_file(
             original = row[col]
             row[col] = translate_value(original, mapping, col)
             # Flag values that passed through unchanged and have no mapping entry
-            if row[col] == original:
+            if row[col] == original and col not in OPEN_COLUMNS:
                 tokens = (
                     original.split(";") if col in MULTIVALUED
                     else original.split(":") if col in COLON_SEPARATED

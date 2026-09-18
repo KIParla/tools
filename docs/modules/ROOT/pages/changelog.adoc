@@ -4,6 +4,13 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* `tsv2vert_v2.py`: new derived `duration_range` conversation attribute (`0-15 min`,
+  `15-30 min`, `30-60 min`, `60-90 min`, `90+ min`, `N/A`), computed from
+  `duration` so the otherwise-continuous duration is usable as a filter and in
+  charts (`DURATION_BANDS`). `generate_registry_draft.py` emits it.
+* `translate_metadata.py`: `age-range`, `gender`, `birth-region` and
+  `school-region` are open-vocabulary columns (`OPEN_COLUMNS`): only placeholder
+  values (`_`, `over 85`) are mapped and unmapped values are not reported.
 * `tsv2vert_v2.py`: the `participants` column of `conversations.tsv` is no
   longer dropped; it is written as a comma-separated multivalue
   `<conversation participants="BO026,BO020">` attribute (registries declare it

@@ -163,6 +163,30 @@ def module_version_for(module_versions, doc_module):
     return module_versions.get(doc_module) or module_versions.get(None) or "N/A"
 
 
+# Upper bounds (minutes, exclusive) and labels of the duration bands. The labels
+# sort correctly as plain strings, which is how NoSketch orders attribute values.
+DURATION_BANDS = ((15, "0-15 min"), (30, "15-30 min"), (60, "30-60 min"), (90, "60-90 min"))
+DURATION_BAND_LAST = "90+ min"
+
+
+def duration_range(duration):
+    """Band label for an 'H:MM:SS' duration, or 'N/A' if it is missing/malformed.
+
+    NoSketch structure attributes are strings, so a continuous value such as the
+    duration cannot be filtered or charted usefully; this derived attribute
+    gives it a handful of readable categories.
+    """
+    try:
+        hours, minutes, seconds = (float(part) for part in duration.split(":"))
+    except (AttributeError, ValueError):
+        return "N/A"
+    total = hours * 60 + minutes + seconds / 60
+    for limit, label in DURATION_BANDS:
+        if total < limit:
+            return label
+    return DURATION_BAND_LAST
+
+
 def iter_conversation_attrs(conv, code, doc_url):
     yield ("code", code)
     yield ("full_conversation", doc_url)
@@ -177,6 +201,9 @@ def iter_conversation_attrs(conv, code, doc_url):
         attr_value = normalize_multivalue_value(value)
 
         yield (attr_name, attr_value)
+
+        if key == "duration":
+            yield ("duration_range", duration_range(value))
 
 
 def iter_participant_attrs(part, attr_keys):
