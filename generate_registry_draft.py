@@ -26,6 +26,7 @@ CUSTOM_LABELS = {
     "full_conversation": "Trascrizione completa",
     "duration": "Durata",
     "topic": "Argomento",
+    "participants": "Partecipanti",
     "participant_code": "Codice partecipante",
     "begin": "Inizio",
     "end": "Fine",
@@ -34,6 +35,7 @@ CUSTOM_LABELS = {
 
 MULTIVALUE_ATTRS = {
     "languages",
+    "participants",
 }
 
 EXCLUDED_SUBCORPATTRS = {
@@ -91,7 +93,7 @@ def main():
 
     conversation_attrs = ["code", "full_conversation"]
     conversation_attrs.extend(
-        normalize_attr_name(h) for h in conv_headers if h not in {"code", "participants"}
+        normalize_attr_name(h) for h in conv_headers if h != "code"
     )
 
     tu_attrs = ["participant_code", "begin", "end", "audio_file"]
@@ -146,7 +148,6 @@ def main():
     print('    DISPLAYTAG 0')
     print('    DISPLAYBEGIN "·[%(participant_code)]·"')
     print('    DISPLAYEND   ""')
-    print('    NESTED 1')
     print("}")
     print()
     print(f'SUBCORPATTRS "{",".join(subcorpattrs)}"')

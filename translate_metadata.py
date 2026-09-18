@@ -76,6 +76,11 @@ def translate_file(
     untranslated: dict[str, set] = defaultdict(set)
 
     for row in rows:
+        # Stray leading/trailing whitespace in source metadata would defeat the
+        # translation lookup and end up as a trailing space in attribute values.
+        for key, value in row.items():
+            if isinstance(value, str):
+                row[key] = value.strip()
         for col, mapping in table_trans.items():
             if col not in row:
                 continue

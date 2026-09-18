@@ -4,6 +4,30 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* `tsv2vert_v2.py`: the `participants` column of `conversations.tsv` is no
+  longer dropped; it is written as a comma-separated multivalue
+  `<conversation participants="BO026,BO020">` attribute (registries declare it
+  `MULTIVALUE "1"`, `MULTISEP ","`), so whole conversations can be selected by
+  participant. The per-turn `participant_code` remains for selecting a
+  participant's own turns.
+* `tsv2vert_v2.py`: in a run with several input files each conversation code is
+  written once — the first input file that has it wins, and later duplicates are
+  reported on stderr (`skipping duplicate conversation …`). Needed for the
+  aggregated `KIParla` corpus, where `TOD2001`–`TOD2016` are in both `KIP` and
+  `ParlaTO`. List the preferred module first.
+* `tsv2vert_v2.py`: `module_for_code` now also maps `BXA/BZA` → `ParlaBZ`,
+  `SBC/SBI` → `Stra-ParlaBO` and `STC/STI` → `Stra-ParlaTO`, so `full_conversation`
+  and `report_url` point at the right module in the aggregate corpus. For a
+  corpus whose NoSketch name differs from the module name (`StraParlaBO` vs
+  `Stra-ParlaBO`) pass `--artifacts-module`.
+* `translate_metadata.py`: values are stripped of leading/trailing whitespace
+  before translation (a trailing space in `3-Technicians ` in a source table
+  broke the lookup and leaked into the vertical file).
+* `generate_registry_draft.py`: no longer excludes `participants`; it is
+  emitted as a multivalue conversation attribute labelled "Partecipanti", and
+  the draft no longer emits `NESTED 1` on `transcription_unit` (units never
+  nest).
+
 * `tsv2vert_v2.py`: each `<transcription_unit>` now carries a `report_url`
   attribute — a prefilled "open a GitHub issue about this turn" link targeting
   the conversation's module repository (`--issues-base-url`, default
