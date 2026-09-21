@@ -1700,6 +1700,22 @@ def ensure_pdfs(
     return pdf_links
 
 
+# Branch on which each module's linear-* files are published (default: main).
+TXT_REPO_BRANCH = {"Stra-ParlaBO": "dev", "Stra-ParlaTO": "dev"}
+
+
+def txt_repo_links(module_name, code, has_orth, has_jeff):
+    """Return raw GitHub URLs of the linear .txt files in the module's repository."""
+    base = (f"https://raw.githubusercontent.com/KIParla/{module_name}/"
+            f"{TXT_REPO_BRANCH.get(module_name, 'main')}")
+    links = {}
+    if has_orth:
+        links["orthographic"] = f"{base}/linear-orthographic/{code}.txt"
+    if has_jeff:
+        links["jefferson"] = f"{base}/linear-jefferson/{code}.txt"
+    return links
+
+
 def ensure_shared_assets(output_path):
     """Write shared CSS/JS assets next to the HTML output tree and return relative hrefs."""
     output_path = Path(output_path).resolve()
@@ -1727,7 +1743,7 @@ def ensure_shared_assets(output_path):
 def build_html(
     code, conv, participants_map, all_turns, orth_turns, jeff_turns,
     orth_timings=None, jeff_timings=None, timeline_units=None,
-    css_href="css/linear2html.css", js_href="js/linear2html.js", pdf_links=None,
+    css_href="css/linear2html.css", js_href="js/linear2html.js", pdf_links=None, txt_links=None,
     translations_map=None,
 ):
     e = lambda s: html.escape(str(s)) if s else ""
@@ -1795,6 +1811,11 @@ def build_html(
         download_items.append(f'<a href="{e(pdf_links["orthographic"])}" download>{e(code)} ortografico PDF</a>')
     if pdf_links.get("jefferson"):
         download_items.append(f'<a href="{e(pdf_links["jefferson"])}" download>{e(code)} Jefferson PDF</a>')
+    txt_links = txt_links or {}
+    if txt_links.get("orthographic"):
+        download_items.append(f'<a href="{e(txt_links["orthographic"])}" target="_blank" rel="noopener">{e(code)} ortografico TXT</a>')
+    if txt_links.get("jefferson"):
+        download_items.append(f'<a href="{e(txt_links["jefferson"])}" target="_blank" rel="noopener">{e(code)} Jefferson TXT</a>')
     if download_items:
         downloads_html = f'<div class="download-links">{"".join(download_items)}</div>'
 
@@ -2055,10 +2076,12 @@ def main():
         translations_map=translations_map,
     )
 
+    txt_links = txt_repo_links(module_name, code, args.orthographic, args.jefferson)
+
     out = build_html(
         code, conv, participants, all_turns, orth_turns, jeff_turns,
         orth_timings=orth_timings, jeff_timings=jeff_timings, timeline_units=timeline_units,
-        css_href=css_href, js_href=js_href, pdf_links=pdf_links,
+        css_href=css_href, js_href=js_href, pdf_links=pdf_links, txt_links=txt_links,
         translations_map=translations_map,
     )
 
