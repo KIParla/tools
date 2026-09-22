@@ -14,7 +14,6 @@ Usage:
     python tools/tsv2vert_v2.py [--base-url BASE_URL] [--artifacts-base-url ARTIFACTS_BASE_URL]
     [--artifacts-module ARTIFACTS_MODULE] [--issues-base-url ISSUES_BASE_URL]
     [--translations-dir TRANSLATIONS_DIR]
-    [--module-version [MODULE=]VERSION ...]
     CONVERSATIONS_TSV PARTICIPANTS_TSV INPUT_TSV [INPUT_TSV ...]
 """
 
@@ -139,28 +138,6 @@ def has_space_after_no(row):
         if value and "SpaceAfter=No" in value:
             return True
     return False
-
-
-def parse_module_versions(values):
-    """Turn repeated --module-version values into {module: version}.
-
-    Each value is either 'MODULE=VERSION' (e.g. 'ParlaBO=v1.3.0') or a bare
-    'VERSION', stored under the key None as a fallback applied to any module
-    without an explicit entry — the common case for a single-module run,
-    where naming the module again would be redundant.
-    """
-    mapping = {}
-    for value in values or []:
-        module, sep, version = value.partition("=")
-        if sep:
-            mapping[module] = version
-        else:
-            mapping[None] = module
-    return mapping
-
-
-def module_version_for(module_versions, doc_module):
-    return module_versions.get(doc_module) or module_versions.get(None) or "N/A"
 
 
 # Upper bounds (minutes, exclusive) and labels of the duration bands. The labels
@@ -317,7 +294,6 @@ def build_report_url(issues_base_url, module, code, tu_id, speaker, doc_url):
 def convert_file(
     tsv_path, conversations, participants, participant_attr_keys, out, base_url,
     artifacts_base_url, artifacts_module, issues_base_url, translations_dir,
-    module_versions,
 ):
     code = Path(tsv_path).stem.split(".")[0]
 
@@ -337,7 +313,6 @@ def convert_file(
         for name, value in [
             *iter_conversation_attrs(conv, code, doc_url),
             ("linguistic_annotation", "yes" if has_linguistic else "no"),
-            ("module_version", module_version_for(module_versions, doc_module)),
         ]
     )
     print(f"<conversation{conversation_attrs}>", file=out)
@@ -504,22 +479,6 @@ def main():
             "'tsv/' directory."
         ),
     )
-    parser.add_argument(
-        "--module-version",
-        action="append",
-        metavar="[MODULE=]VERSION",
-        help=(
-            "GitHub release tag of the module a conversation's data was "
-            "generated from, written to the 'module_version' conversation "
-            "attribute. Repeatable. A bare VERSION (no '=') applies to any "
-            "conversation whose module has no explicit entry — the normal "
-            "case for a single-module run, e.g. --module-version v1.3.0. "
-            "For the aggregated KIParla corpus, where one run covers several "
-            "modules, pass one MODULE=VERSION per module instead, e.g. "
-            "--module-version KIP=v1.4.0 --module-version ParlaBO=v1.3.0. "
-            "A conversation whose module has no matching entry gets 'N/A'."
-        ),
-    )
     parser.add_argument("conversations", help="Path to conversations.tsv metadata file")
     parser.add_argument("participants", help="Path to participants.tsv metadata file")
     parser.add_argument("input", nargs="+", help="Input vert.tsv file(s)")
@@ -529,7 +488,6 @@ def main():
     participants_data, participant_attr_keys = load_participants(args.participants)
     artifacts_base_url = args.artifacts_base_url or args.base_url
     artifacts_module = args.artifacts_module or infer_artifacts_module(args.conversations)
-    module_versions = parse_module_versions(args.module_version)
 
     # The same conversation can ship in more than one module (e.g. TOD20xx in
     # both KIP and ParlaTO). In an aggregated run each code is emitted once:
@@ -552,7 +510,6 @@ def main():
             artifacts_module,
             args.issues_base_url,
             args.translations_dir,
-            module_versions,
         )
 
 
