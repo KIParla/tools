@@ -4,7 +4,7 @@ generate_registry_draft.py - Generate a draft NoSketch Engine registry from
 KIParla metadata headers.
 
 This script is intentionally conservative: it emits a usable draft aligned with
-the attribute names produced by tsv2vert_v2.py, but it does not try to guess
+the attribute names produced by tsv2vert.py, but it does not try to guess
 all UI choices perfectly.
 """
 
@@ -97,7 +97,7 @@ def main():
         normalize_attr_name(h) for h in conv_headers if h != "code"
     )
 
-    # tsv2vert_v2.py derives duration_range (duration bands) from duration
+    # tsv2vert.py derives duration_range (duration bands) from duration
     if "duration" in conversation_attrs:
         conversation_attrs.insert(conversation_attrs.index("duration") + 1, "duration_range")
 
