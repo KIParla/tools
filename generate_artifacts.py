@@ -46,6 +46,12 @@ def main():
                      help="Root of KIParla-artifacts")
     ap.add_argument("--module",
                      help="Module name for artifacts layout. Defaults to --module-root's directory name.")
+    ap.add_argument("--release-label",
+                     help="Module release these pages/PDFs were generated from, e.g. "
+                          "'ParlaBO@v1.4.0'. Forwarded to linear2html.py; omitted for a "
+                          "local/manual run.")
+    ap.add_argument("--release-url",
+                     help="Link target for --release-label. Forwarded to linear2html.py.")
     args = ap.parse_args()
 
     module_root = args.module_root
@@ -72,6 +78,10 @@ def main():
             "--artifacts-root", args.artifacts_root,
             "--module", module_name,
         ]
+        if args.release_label:
+            cmd += ["--release-label", args.release_label]
+        if args.release_url:
+            cmd += ["--release-url", args.release_url]
 
         orth_file = orth_dir / f"{code}.txt"
         jeff_file = jeff_dir / f"{code}.txt"

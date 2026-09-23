@@ -75,6 +75,13 @@ def is_unknown_speaker(spk):
     spk = (spk or "").strip()
     return bool(spk) and set(spk) == {"?"}
 
+
+# Same license across every KIParla module (confirmed against each module's
+# own LICENSE file) — one constant shared by the HTML footer and the PDF
+# metadata table rather than hardcoded twice.
+LICENSE_LABEL = "CC BY-NC-SA 4.0"
+LICENSE_URL = "https://creativecommons.org/licenses/by-nc-sa/4.0/"
+
 # ── Italian labels for metadata fields ────────────────────────────────────────
 TYPE_LABELS = {
     "office-hours":             "ricevimento",
@@ -1588,7 +1595,8 @@ def _latex_transcript_table(turns, timings, translations_map=None):
 """
 
 
-def build_pdf_markdown(code, label, turns, timings, conv, participants_map, speaker_order, translations_map=None):
+def build_pdf_markdown(code, label, turns, timings, conv, participants_map, speaker_order,
+                        translations_map=None, release_label=None, release_url=None):
     meta_items = [
         ("Codice", code),
         ("Tipo", tr(conv.get("type", ""), TYPE_LABELS)),
@@ -1599,6 +1607,10 @@ def build_pdf_markdown(code, label, turns, timings, conv, participants_map, spea
         ("Argomento", tr(conv.get("topic", ""), TOPIC_LABELS)),
         ("Anno", conv.get("year", "")),
         ("Punto di raccolta", conv.get("collection-point", conv.get("point", ""))),
+        ("Licenza", f"{LICENSE_LABEL} — {LICENSE_URL}"),
+        # Which module release this PDF was generated from — omitted (not
+        # "N/A") when generated outside the release pipeline, e.g. local dev.
+        ("Release", f"{release_label} — {release_url}" if release_label and release_url else (release_label or "")),
     ]
     participant_rows = []
     for spk in speaker_order:
@@ -1653,7 +1665,7 @@ def build_pdf_markdown(code, label, turns, timings, conv, participants_map, spea
 def ensure_pdfs(
     output_path, code, conv, participants_map, speaker_order,
     orth_turns=None, jeff_turns=None, orth_timings=None, jeff_timings=None,
-    translations_map=None,
+    translations_map=None, release_label=None, release_url=None,
 ):
     """Generate transcript PDFs next to the HTML output tree and return relative hrefs."""
     output_path = Path(output_path).resolve()
@@ -1673,14 +1685,20 @@ def ensure_pdfs(
             continue
         md_path = pdf_dir / f"{code}-{slug}.md"
         pdf_path = pdf_dir / f"{code}-{slug}.pdf"
-        if pdf_path.is_file():
-            # Already built and nothing about the PDF's content (turn text,
-            # timings, participant table) has a reason to differ — rebuilding
-            # here would only be for an HTML/CSS/JS-only regeneration pass.
+        # Skip rebuilding an existing PDF only outside the release pipeline
+        # (no release_label): nothing about its content has a reason to
+        # differ then, so this is purely for an HTML/CSS/JS-only regeneration
+        # pass. When release_label is given, the release tag is new by
+        # definition on every real invocation, so always rebuild — otherwise
+        # a cached PDF would keep citing whatever release first created it.
+        if pdf_path.is_file() and not release_label:
             pdf_links[slug] = os.path.relpath(pdf_path, start=html_dir).replace(os.sep, "/")
             continue
         md_path.write_text(
-            build_pdf_markdown(code, label, turns, timings, conv, participants_map, speaker_order, translations_map),
+            build_pdf_markdown(
+                code, label, turns, timings, conv, participants_map, speaker_order,
+                translations_map, release_label=release_label, release_url=release_url,
+            ),
             encoding="utf-8",
         )
         subprocess.run(
@@ -1744,9 +1762,18 @@ def build_html(
     code, conv, participants_map, all_turns, orth_turns, jeff_turns,
     orth_timings=None, jeff_timings=None, timeline_units=None,
     css_href="css/linear2html.css", js_href="js/linear2html.js", pdf_links=None, txt_links=None,
-    translations_map=None,
+    translations_map=None, release_label=None, release_url=None,
 ):
     e = lambda s: html.escape(str(s)) if s else ""
+
+    # Which module release this page was generated from — omitted entirely
+    # (not "N/A") when generated outside the release pipeline, e.g. local dev.
+    release_html = ""
+    if release_label:
+        release_html = (
+            f'· <a href="{e(release_url)}">{e(release_label)}</a>' if release_url
+            else f"· {e(release_label)}"
+        )
 
     # colour map across all speakers from both transcripts, keyed to a CSS
     # class (.spk-0.. / .spk-unknown) rather than a hex value — no per-turn
@@ -1980,7 +2007,8 @@ def build_html(
   <footer>
     KIParla – <a href="https://www.kiparla.it/">kiparla.it</a>
     · <a href="https://github.com/KIParla/KIParla-artifacts">GitHub</a>
-    · <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">CC BY-NC-SA 4.0</a>
+    · <a href="{e(LICENSE_URL)}">{e(LICENSE_LABEL)}</a>
+    {release_html}
   </footer>
 
 </div>
@@ -2014,6 +2042,17 @@ def main():
     ap.add_argument(
         "--module",
         help="Module name for artifacts layout, e.g. KIP or ParlaTO. Defaults to metadata directory name.",
+    )
+    ap.add_argument(
+        "--release-label",
+        help="Module release this page/PDF was generated from, e.g. 'ParlaBO@v1.4.0' "
+             "(shown in the HTML footer and PDF metadata table; omitted entirely, not "
+             "shown as N/A, when not given — e.g. a local/manual run).",
+    )
+    ap.add_argument(
+        "--release-url",
+        help="Link target for --release-label, e.g. the GitHub release page. "
+             "Ignored if --release-label is not also given.",
     )
     args = ap.parse_args()
 
@@ -2074,6 +2113,7 @@ def main():
         orth_turns=orth_turns, jeff_turns=jeff_turns,
         orth_timings=orth_timings, jeff_timings=jeff_timings,
         translations_map=translations_map,
+        release_label=args.release_label, release_url=args.release_url,
     )
 
     txt_links = txt_repo_links(module_name, code, args.orthographic, args.jefferson)
@@ -2083,6 +2123,7 @@ def main():
         orth_timings=orth_timings, jeff_timings=jeff_timings, timeline_units=timeline_units,
         css_href=css_href, js_href=js_href, pdf_links=pdf_links, txt_links=txt_links,
         translations_map=translations_map,
+        release_label=args.release_label, release_url=args.release_url,
     )
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
