@@ -238,6 +238,10 @@ def is_nvb(row):
     )
 
 
+def is_anonymized(row):
+    return row.get("type") == "anonymized" or "Anonymized=Yes" in (row.get("jefferson_feats") or "")
+
+
 def nvb_descr(form):
     """'((versa_il_tè))' -> 'versa_il_tè'; '((_ride))' -> 'ride'.
 
@@ -404,7 +408,7 @@ def convert_file(
             token_id = row.get("token_id", "") or ""
             kind = variation_kind(row)
             emerging = is_emerging(row)
-            word = form
+            word = form[1:] if is_anonymized(row) and form.startswith("@") else form
             if kind == "token":
                 word = f"#{word}"
             elif kind == "doubtful":

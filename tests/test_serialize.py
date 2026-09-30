@@ -110,6 +110,15 @@ class TestConversationToConll:
         rows = _read_vert(out)
         assert "Intonation" not in rows[0]["jefferson_feats"]
 
+    def test_anonymized_token_gets_feature_flag(self, tmp_path):
+        t = _make_simple_transcript(["@nome"])
+        out = tmp_path / "test.vert.tsv"
+        conversation_to_conll(t, out)
+        rows = _read_vert(out)
+        assert rows[0]["type"] == "anonymized"
+        assert "Anonymized=Yes" in rows[0]["jefferson_feats"]
+        assert rows[0]["form"] == "@nome"
+
     def test_whitelisted_reduction_is_a_feature_not_a_guess(self, tmp_path):
         t = Transcript("TEST")
         tu = TranscriptionUnit(0, "SPK0", 0.0, 1.5, 1.5, "c(io)è ho detto (forse)",

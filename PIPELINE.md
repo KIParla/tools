@@ -491,7 +491,7 @@ schema file to regenerate every module's copy.
 | `type`          | token type flag (`linguistic`, `shortpause`, `nonverbalbehavior`, …) |
 | `meta_label`    | `_` |
 | `variation`     | language variation flag on the TU |
-| `jefferson_feats` | pipe-separated: `Intonation=X`, `Interrupted=Yes`, `Truncated=Yes`, `Reduced=Yes`, `ProsodicLink=Yes`, `SpaceAfter=No`, `PauseAfter=Yes`, `Language=ISO`, `Orthography=Yes`, `Volume=X`, `Variation=X`, `Syllables=N` |
+| `jefferson_feats` | pipe-separated: `Intonation=X`, `Interrupted=Yes`, `Truncated=Yes`, `Reduced=Yes`, `ProsodicLink=Yes`, `SpaceAfter=No`, `PauseAfter=Yes`, `Language=ISO`, `Orthography=Yes`, `Anonymized=Yes`, `Volume=X`, `Variation=X`, `Syllables=N` |
 | `align`         | `Begin=X` / `End=X` / `Begin=X\|End=X` for first/last token of TU |
 | `prolongations` | e.g. `3x2,7x1` (char_pos × length pairs) |
 | `pace`          | `Slow=0-5(0),…` / `Fast=…` |

@@ -163,6 +163,9 @@ def _jefferson_feats(tok) -> str:
     if tok.non_ortho:
         parts.append("Orthography=Yes")
 
+    if tok.token_type == df.tokentype.anonymized:
+        parts.append("Anonymized=Yes")
+
     if tok.volume is not None:
         parts.append(f"Volume={tok.volume.name}")
 
