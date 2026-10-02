@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 build_explorer.py — build the KIParla corpus explorer, a small static site
-(index.html, explorer.css, core.js, app.js, data.js), from the modules'
+(index.html, explorer.css, core.js, app.js, data.json), from the modules'
 summaries/snapshot.json (see summarize.py).
 
 The page lets you filter the corpus by conversation metadata, speaker
@@ -12,15 +12,17 @@ CSV, a script that copies the files).
 Usage:
     python build_explorer.py --modules KIP KIPasti ParlaBO ParlaTO ParlaBZ \\
         Stra-ParlaBO Stra-ParlaTO --output-dir KIParla-artifacts/explorer \\
-        [--artifacts-url URL] [--zip kiparla-explorer.zip]
+        [--artifacts-url URL] [--offline] [--zip kiparla-explorer.zip]
 
 Run summarize.py on the modules first. The explorer reads only the snapshots,
 so it can be rebuilt without the vert.tsv files. A conversation that appears in
 more than one module (KIP and ParlaTO share 16) is listed once, under the first
 module given, and records the others in `modules`.
 
-The files work when index.html is opened from disk (no server needed): the data
-is a classic script (data.js), not fetched. Links to the transcription pages use
+In production the page fetches data.json at load time, so the data can be cached
+and updated without touching the code, and is usable directly for analysis. A page
+opened from disk cannot fetch, so --offline (and --zip, which always does this)
+embeds the data as a classic script, data.js, instead. Links to the transcription pages use
 --artifacts-url (default: the published KIParla-artifacts site) so they work
 wherever the folder is; pass ../ to link to a sibling checkout instead.
 
@@ -44,6 +46,7 @@ UNKNOWN = "unknown"
 DEFAULT_ARTIFACTS_URL = "https://kiparla.github.io/KIParla-artifacts/"
 SEARCH_URL = "https://search.corpuskiparla.it/"
 SITE_FILES = ("index.html", "explorer.css", "core.js", "app.js")   # copied as they are
+DATA_SCRIPT_MARKER = "<!--__DATA_SCRIPT__-->"
 
 # Conversation-level measured features. `get` builds the value from a snapshot
 # row; `unit` and `decimals` drive how the page formats it.
@@ -242,36 +245,64 @@ def build_dataset(module_dirs: list[Path], artifacts_url: str = DEFAULT_ARTIFACT
     }
 
 
+def data_json(dataset: dict) -> str:
+    return json.dumps(dataset, ensure_ascii=False, separators=(",", ":")) + "\n"
+
+
 def data_script(dataset: dict) -> str:
-    """data.js: the dataset as a classic script, so index.html works from a file."""
-    data = json.dumps(dataset, ensure_ascii=False, separators=(",", ":"))
-    return "/* KIParla corpus explorer: data, built by build_explorer.py */\nwindow.KIPARLA_DATA = " + data + ";\n"
+    """data.js: the dataset as a classic script, for the offline bundle."""
+    return ("/* KIParla corpus explorer: data, built by build_explorer.py */\n"
+            "window.KIPARLA_DATA = " + data_json(dataset).rstrip("\n") + ";\n")
 
 
-def write_site(dataset: dict, out_dir: Path) -> list[Path]:
-    """Write the explorer into *out_dir*; return the files written."""
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    written = []
+DATA_SCRIPT_TAG = '<script src="data.js"></script>'
+
+
+def site_files(dataset: dict, offline: bool = False) -> dict[str, str]:
+    """File name -> text of the explorer. Production loads data.json at run
+    time; the offline bundle embeds the data as data.js (a page opened from
+    disk cannot fetch)."""
+    files = {}
     for name in SITE_FILES:
         src = EXPLORER_DIR / ("template.html" if name == "index.html" else name)
         if not src.is_file():
             raise SystemExit(f"{src} is missing")
+        files[name] = src.read_text(encoding=ENCODING_READ)
+    if DATA_SCRIPT_MARKER not in files["index.html"]:
+        raise SystemExit(f"template.html has no {DATA_SCRIPT_MARKER} marker")
+    files["index.html"] = files["index.html"].replace(
+        DATA_SCRIPT_MARKER, DATA_SCRIPT_TAG if offline else "")
+    if offline:
+        files["data.js"] = data_script(dataset)
+    else:
+        files["data.json"] = data_json(dataset)
+    return files
+
+
+def write_files(files: dict[str, str], out_dir: Path) -> list[Path]:
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    for name, text in files.items():
         dest = out_dir / name
         with dest.open("w", encoding=ENCODING_WRITE, newline="\n") as f:
-            f.write(src.read_text(encoding=ENCODING_READ))
+            f.write(text)
         written.append(dest)
-    data_path = out_dir / "data.js"
-    with data_path.open("w", encoding=ENCODING_WRITE, newline="\n") as f:
-        f.write(data_script(dataset))
-    written.append(data_path)
     return written
 
 
-def write_zip(files: list[Path], zip_path: Path, folder: str = "kiparla-explorer") -> None:
+def write_site(dataset: dict, out_dir: Path, offline: bool = False) -> list[Path]:
+    """Write the explorer into *out_dir*; return the files written."""
+    return write_files(site_files(dataset, offline), out_dir)
+
+
+def write_zip(dataset: dict, zip_path: Path, folder: str = "kiparla-explorer") -> list[str]:
+    """The offline bundle (data built in, opens from disk) as a zip."""
+    files = site_files(dataset, offline=True)
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in files:
-            z.write(f, f"{folder}/{f.name}")
+        for name, text in files.items():
+            z.writestr(f"{folder}/{name}", text.encode(ENCODING_WRITE))
+    return list(files)
 
 
 def main():
@@ -284,18 +315,17 @@ def main():
     ap.add_argument("--artifacts-url", default=DEFAULT_ARTIFACTS_URL,
                     help="Where the HTML transcription pages are (default: the published "
                          "KIParla-artifacts site). Use ../ to link to a sibling checkout.")
-    ap.add_argument("--zip", type=Path, help="Also write the explorer as a zip, ready to send")
-    ap.add_argument("--data-json", type=Path,
-                    help="Also write the dataset as JSON (for analysis outside the page)")
+    ap.add_argument("--offline", action="store_true",
+                    help="Embed the data as data.js instead of data.json, so index.html opens "
+                         "from disk (production should load data.json)")
+    ap.add_argument("--zip", type=Path,
+                    help="Also write the offline bundle as a zip, ready to send")
     args = ap.parse_args()
 
     dataset = build_dataset(args.modules, args.artifacts_url)
-    files = write_site(dataset, args.output_dir)
+    files = write_site(dataset, args.output_dir, args.offline)
     if args.zip:
-        write_zip(files, args.zip)
-    if args.data_json:
-        with args.data_json.open("w", encoding=ENCODING_WRITE, newline="\n") as f:
-            json.dump(dataset, f, ensure_ascii=False, separators=(",", ":"))
+        write_zip(dataset, args.zip)
     size = sum(f.stat().st_size for f in files) / 1024
     print(f"{args.output_dir}: {len(dataset['conversations'])} conversations, "
           f"{len(dataset['speakers'])} speaker rows, {len(files)} files, {size:.0f} KiB"

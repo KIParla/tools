@@ -443,17 +443,17 @@ people = rows[rows["in_participants_metadata"]]
 [[build_explorer]]
 == `build_explorer.py`
 
-Builds the *corpus explorer*, a small static site (`index.html`, `explorer.css`, `core.js`, `app.js`, `data.js`) for browsing KIParla and assembling a sub-corpus. It reads only the `summaries/snapshot.json` of each module (see <<summarize>>), so run `summarize.py` first; it needs no `vert.tsv` files.
+Builds the *corpus explorer*, a small static site (`index.html`, `explorer.css`, `core.js`, `app.js`, `data.json`) for browsing KIParla and assembling a sub-corpus. It reads only the `summaries/snapshot.json` of each module (see <<summarize>>), so run `summarize.py` first; it needs no `vert.tsv` files.
 
 [source,bash]
 ----
 python build_explorer.py \
     --modules KIP KIPasti ParlaBO ParlaTO ParlaBZ Stra-ParlaBO Stra-ParlaTO \
     --output-dir KIParla-artifacts/explorer \\
-    [--artifacts-url URL] [--zip kiparla-explorer.zip] [--data-json explorer-data.json]
+    [--artifacts-url URL] [--offline] [--zip kiparla-explorer.zip]
 ----
 
-The order of `--modules` matters for a conversation present in more than one module (KIP and ParlaTO share 16): it is listed once, under the first module, and the others are recorded in `modules`. The site works from a file (open `index.html`, no server needed) or any static host. The data (about 650 KiB) is a classic script, `data.js`, not a fetched file. `--artifacts-url` is where the transcription pages are (default: the published KIParla-artifacts site, so the links work wherever the folder is; use `../` for a sibling checkout). `--zip` also writes the files as a zip to send to someone, and `--data-json` writes the same dataset for analysis outside the page.
+The order of `--modules` matters for a conversation present in more than one module (KIP and ParlaTO share 16): it is listed once, under the first module, and the others are recorded in `modules`. In production (any static host, e.g. GitHub Pages) the page fetches `data.json` (about 650 KiB) when it loads, so the data can be cached and updated without touching the code, and the same file is the dataset for analysis outside the page. A page opened from disk cannot fetch, so `--offline` embeds the data as a classic script, `data.js`, instead (the page uses it when present), and `--zip` always writes that offline bundle as a zip to send to someone. `--artifacts-url` is where the transcription pages are (default: the published KIParla-artifacts site, so links work wherever the folder is; use `../` for a sibling checkout).
 
 *What the page does*
 

@@ -27,7 +27,7 @@ Standalone scripts to handle and transform KIParla data.
   `python summarize.py <module_dir> ...`; `--check` reports summaries that are missing or older than
   their `tsv/` file. See `docs/modules/ROOT/pages/scripts.adoc`.
 - `build_explorer.py`: build the corpus explorer, a small static site (`index.html`, `explorer.css`,
-  `core.js`, `app.js`, `data.js`; in `KIParla-artifacts/explorer/`) from the modules' `summaries/snapshot.json`. It filters
+  `core.js`, `app.js`, `data.json`; in `KIParla-artifacts/explorer/`) from the modules' `summaries/snapshot.json`. It filters
   the conversations by metadata, speaker attributes and measured features (overlap shares, token/time
   rates, ...), shows figures for the resulting sub-corpus and exports it (code list, CSV, a script that
   copies the files). Run `summarize.py` first. See `docs/modules/ROOT/pages/scripts.adoc`.

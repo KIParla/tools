@@ -1,7 +1,9 @@
-/* KIParla corpus explorer: interface. Needs core.js (KiparlaCore) and data.js (KIPARLA_DATA). */
+/* KIParla corpus explorer: interface. Needs core.js (KiparlaCore) and the data: data.json, fetched,
+ * or data.js (window.KIPARLA_DATA) in the offline bundle. */
 (function () {
 "use strict";
-var DATA = window.KIPARLA_DATA;
+
+function run(DATA) {
 var LINKS = DATA.links || { artifacts: "", search: "" };
 var K = KiparlaCore;
 var ix = K.buildIndex(DATA);
@@ -478,4 +480,19 @@ function init() {
   update();
 }
 init();
+}
+
+/* ---- load the data: embedded (offline bundle) or fetched (production) ---- */
+function fail(html) { document.getElementById("panel").innerHTML = '<p class="empty">' + html + "</p>"; }
+if (window.KIPARLA_DATA) {
+  run(window.KIPARLA_DATA);
+} else {
+  fail("Loading the corpus data…");
+  fetch("data.json", { cache: "no-cache" })
+    .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+    .then(run)
+    .catch(function (e) {
+      fail("Could not load <code>data.json</code> (" + String(e.message || e).replace(/[<>&]/g, "") + "). If you opened <code>index.html</code> straight from disk, use the offline bundle, which has the data built in, or serve this folder, for example with <code>python3 -m http.server</code>.");
+    });
+}
 })();

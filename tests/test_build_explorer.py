@@ -100,58 +100,68 @@ class TestDataset:
 
 class TestSite:
 
-    def _site(self, tmp_path, **kw):
-        d = build_explorer.build_dataset(_modules(tmp_path / "mods"), **kw)
-        out = tmp_path / "site"
-        return d, out, build_explorer.write_site(d, out)
-
-    def test_writes_the_five_files(self, tmp_path):
+    def _dataset(self, tmp_path, **kw):
         (tmp_path / "mods").mkdir()
-        _d, out, files = self._site(tmp_path)
-        assert sorted(f.name for f in files) == ["app.js", "core.js", "data.js", "explorer.css", "index.html"]
-        assert all((out / f.name).is_file() for f in files)
+        return build_explorer.build_dataset(_modules(tmp_path / "mods"), **kw)
 
-    def test_index_loads_every_other_file_and_has_no_leftover_markers(self, tmp_path):
-        (tmp_path / "mods").mkdir()
-        _d, out, _f = self._site(tmp_path)
-        html = (out / "index.html").read_text(encoding="utf-8")
-        for name in ("explorer.css", "core.js", "data.js", "app.js"):
-            assert name in html
-        assert "__CORE__" not in html and "__DATA__" not in html
+    def test_production_site_loads_data_json(self, tmp_path):
+        d = self._dataset(tmp_path)
+        files = build_explorer.write_site(d, tmp_path / "site")
+        names = sorted(f.name for f in files)
+        assert names == ["app.js", "core.js", "data.json", "explorer.css", "index.html"]
+        html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+        assert "data.js" not in html and "__DATA_SCRIPT__" not in html
+        assert json.loads((tmp_path / "site" / "data.json").read_text(encoding="utf-8")) == d
+        assert "data.json" in (tmp_path / "site" / "app.js").read_text(encoding="utf-8")
+
+    def test_offline_site_embeds_the_data_as_a_script(self, tmp_path):
+        d = self._dataset(tmp_path)
+        files = build_explorer.write_site(d, tmp_path / "site", offline=True)
+        names = sorted(f.name for f in files)
+        assert names == ["app.js", "core.js", "data.js", "explorer.css", "index.html"]
+        html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
         assert html.index("core.js") < html.index("data.js") < html.index("app.js")
-
-    def test_data_js_is_a_script_holding_the_dataset(self, tmp_path):
-        (tmp_path / "mods").mkdir()
-        d, out, _f = self._site(tmp_path)
-        text = (out / "data.js").read_text(encoding="utf-8")
+        text = (tmp_path / "site" / "data.js").read_text(encoding="utf-8")
         prefix = "window.KIPARLA_DATA = "
         payload = text[text.index(prefix) + len(prefix):].rstrip().removesuffix(";")
         assert json.loads(payload) == d
 
+    def test_index_references_only_files_that_exist(self, tmp_path):
+        import re
+        d = self._dataset(tmp_path)
+        for offline in (False, True):
+            out = tmp_path / ("off" if offline else "prod")
+            build_explorer.write_site(d, out, offline=offline)
+            html = (out / "index.html").read_text(encoding="utf-8")
+            for ref in re.findall(r'(?:src|href)="([^"#]+\.(?:js|css))"', html):
+                assert (out / ref).is_file(), ref
+
     def test_transcription_links_default_to_the_published_site_and_can_be_relative(self, tmp_path):
-        (tmp_path / "mods").mkdir()
-        d, _o, _f = self._site(tmp_path)
+        d = self._dataset(tmp_path)
         assert d["links"]["artifacts"] == "https://kiparla.github.io/KIParla-artifacts/"
         (tmp_path / "mods2").mkdir()
         d2 = build_explorer.build_dataset(_modules(tmp_path / "mods2"), "..")
         assert d2["links"]["artifacts"] == "../"
 
-    def test_zip_holds_the_files_in_one_folder(self, tmp_path):
+    def test_zip_is_the_offline_bundle_in_one_folder(self, tmp_path):
         import zipfile
-        (tmp_path / "mods").mkdir()
-        _d, _o, files = self._site(tmp_path)
+        d = self._dataset(tmp_path)
         z = tmp_path / "x.zip"
-        build_explorer.write_zip(files, z)
+        build_explorer.write_zip(d, z)
         names = sorted(zipfile.ZipFile(z).namelist())
         assert names == [f"kiparla-explorer/{n}" for n in
                          ["app.js", "core.js", "data.js", "explorer.css", "index.html"]]
 
-    def test_missing_source_file_is_refused(self, tmp_path, monkeypatch):
+    def test_missing_source_file_or_marker_is_refused(self, tmp_path, monkeypatch):
         (tmp_path / "explorer").mkdir()
-        (tmp_path / "explorer" / "template.html").write_text("<html></html>", encoding="utf-8")
         monkeypatch.setattr(build_explorer, "EXPLORER_DIR", tmp_path / "explorer")
         with pytest.raises(SystemExit, match="is missing"):
-            build_explorer.write_site({"conversations": []}, tmp_path / "out")
+            build_explorer.site_files({"conversations": []})
+        for n in ("explorer.css", "core.js", "app.js"):
+            (tmp_path / "explorer" / n).write_text("", encoding="utf-8")
+        (tmp_path / "explorer" / "template.html").write_text("<html></html>", encoding="utf-8")
+        with pytest.raises(SystemExit, match="marker"):
+            build_explorer.site_files({"conversations": []})
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
