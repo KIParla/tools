@@ -25,6 +25,21 @@ tiers_to_extract: []
 # (e.g. "PSB033_trad") rather than with a single fixed tier name.
 tiers_to_extract_suffixes: []
 
+# Audio length check (audio_check.py): is the end of the last annotation
+# compatible with the length of the recording? Both rules are warnings.
+# The length is measured on the audio file when an audio directory is given
+# (--audio-dir), else read from `duration` in metadata/conversations.tsv.
+audio_check:
+  enabled: true
+  # AUDIO_OVERRUN: last annotation ends more than this many seconds AFTER the audio.
+  max_overrun: 1.0
+  # AUDIO_UNDERRUN: last annotation ends more than this many seconds BEFORE the audio
+  # (incomplete transcription, or a long silent tail).
+  max_underrun: 120.0
+  # Metadata durations are often rounded to the minute: extra overrun allowed
+  # when the length comes from the metadata instead of the audio file.
+  metadata_slack: 60.0
+
 # Overlap handling
 overlaps:
   # Minimum overlap duration (seconds). Shorter overlaps without annotated spans
@@ -98,7 +113,7 @@ normalization:
   MULTIPLE_SPACES: true      # collapse double spaces / tabs / newlines
   ACCENTS: true              # normalize accent errors (see accent_corrections below)
   NUMBERS: true              # replace Arabic numerals with Italian words
-  HASH_UNIT_SPACE: false     # ensure #_ at start of unit has a space (StraParlaBO, StraParlaTO)
+  HASH_UNIT_SPACE: false     # make #_ a standalone token: #_word, word#_, [#_ w] -> #_ [w] (StraParlaBO, StraParlaTO)
   HASH_PREFIX_SPACE: false   # move # to front of unit and add space (KIPasti)
 
 # Word-level accent corrections applied by the ACCENTS rule.

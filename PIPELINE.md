@@ -92,22 +92,24 @@ in all downstream steps.
 
 ### 2b. Language variation markers
 
-| prefix | meaning                        | action                        |
-|--------|--------------------------------|-------------------------------|
-| `# `   | some tokens are non-Italian, unspecified which | strip prefix, set `non_ita=unspecified` |
-| `#_`   | entire TU is non-Italian       | strip prefix, set `non_ita=all`, **return early** (no further normalization) |
+| prefix | meaning | action |
+|--------|---------|--------|
+| `# `   | the unit contains another variety, unspecified which words | strip prefix (kept as `unit_marker`), set `non_ita=unspecified` |
+| `#_`   | non-Italian from here to the end of the TU (a unit-initial `#_` = the entire TU) | unit-initial: strip prefix (kept as `unit_marker`), set `non_ita=all`, no further normalization (overlap spans are still extracted). Mid-unit: normalize only the part before the marker; the marker stays in the annotation until tokenization |
 
-When `non_ita=all` the annotation is not normalized and tokenization assigns
-`Language=NO_ISO_CODE` to every token.
+The unit-initial marker is stripped from `annotation` so that normalization and
+tokenization see plain text, but it is remembered in `TranscriptionUnit.unit_marker`
+and written back in front of the **first token's `span`** (`token_span_text()`). A
+mid-unit `#_` is consumed by tokenization (it never becomes a token) and stays in the
+span of the first token it covers. So **every variation marker can be read back from the
+`span` column alone**: `vert2eaf`, the linear files and the HTML view need no
+unit-level flag to rebuild `# `, `#_ `, `#word`, `#*word` or `$word`.
 
-`non_ita=unspecified` (step 2b) and `non_ita=yes` (derived bottom-up in step 5e from
-individually-`#`/`$`/`#*`-marked tokens) are tracked as distinct `languagevariation`
-values, not merged — `unspecified` is never downgraded to `yes` by step 5e, even if the
-TU happens to also contain individually-marked tokens. This distinction is what lets
-`vert2eaf` losslessly reconstruct the `"# "` prefix only when it was actually present in
-the source (see `serialize.vert_to_linear_rows`): `unspecified` means "there's no other
-record of this marker, reconstruct the prefix"; `yes` means "each contributing token
-already carries its own marker in `span`, reconstructing the prefix would duplicate it."
+When `non_ita=all` the annotation is not normalized and tokenization labels every
+token `Variety=Other` (plus `Language=NO_ISO_CODE`). `non_ita=unspecified` labels every
+token that has no marker of its own `Variety=Unsure`. `non_ita` itself is only the
+parser's record of how the unit was written; the output columns are derived from the
+tokens (the `variation` column, below).
 
 ### 2c. Normalization (warning) rules
 
@@ -127,29 +129,89 @@ The count is accumulated in `tu.warnings[RULE_NAME]`.
 | 9 | `ACCENTS`             | `apply_accent_corrections` | Apply word-boundary-aware substitutions from `accent_corrections` (config list). |
 | 10| `WORD_CORRECTIONS`    | `apply_word_corrections`  | Replace known misspelled discourse markers/interjections (`WORD_CORRECTIONS` list, e.g. `mha`→`mah`, `va beh`→`vabbè`) — full word/phrase matches on space/`=`/string-edge boundaries only, not Jefferson-marker-tolerant like `ACCENTS`. |
 | 11| `NUMBERS`             | `check_numbers`           | Replace Arabic numerals with Italian words (`num2words`). |
-| 12| `HASH_UNIT_SPACE`     | `normalize_hash_unit_space` | **Default off.** Ensure `#_` at start of unit has a space: `#_word` → `#_ word`. (StraParlaBO, StraParlaTO) |
+| 12| `HASH_UNIT_SPACE`     | `hash_unit_space` | **Default off.** Make `#_` a standalone token anywhere in the unit: `#_word` → `#_ word`, `word#_` → `word #_`, `[#_ word]` → `#_ [word]`. Applied in step 2b, before the `#_` detection (not part of the ordered rule list). (StraParlaBO, StraParlaTO) |
 | 13| `HASH_PREFIX_SPACE`   | `normalize_hash_prefix`    | **Default off.** Move `#` to front of unit with a space. (KIPasti) |
 
 **Config:** rules are toggled per module; `allowed_symbols`, `accent_corrections`, and
 `reduction_words` are lists in `defaults.yml` that modules may override.
 
+## Text encoding conventions
+
+Everything the tools read or write follows the same rules as Universal
+Dependencies files: **UTF-8, no BOM, LF line endings, Unicode Normalization
+Form C (NFC)**. Helpers live in `textutil.py`.
+
+* Text is NFC-normalized once, where it enters the pipeline: `eaf2csv`
+  (speaker/tier IDs and annotation text, including translation tiers) and
+  `TranscriptionUnit` (step 2, for any other caller). This matters for
+  tokenization: a decomposed `ṭ` (`t` + U+0323) is not a single letter to the
+  `\p{L}` word regex, while the composed `ṭ` (U+1E6D) is.
+* Inputs are read as `utf-8-sig` (a BOM is tolerated and dropped); outputs are
+  written as plain `utf-8`, never with a BOM.
+* All `csv.DictWriter`s use `lineterminator="\n"` and text files are opened
+  with `newline="\n"` (or `newline=""` for csv), so output is LF on every OS.
+
 ### Variation markers
 
-Token-level and TU-level variation is signalled by prefixes on tokens or units.
-The prefix is stripped during tokenization and a `Variation=` label is written to
-`jefferson_feats` (token level) or the `variation` column (TU level).
+All variation information of a token is exported in **one feature-list column of the
+vert.tsv, `variation`** (pipe-separated `Key=Value`, CoNLL-U style). It holds the unit-level
+flag and every token-level variation feature; none of them is in `jefferson_feats`.
 
-| prefix | scope | label | modules |
-|--------|-------|-------|---------|
-| `# ` at start of TU | TU | `Variation=Unit` | KIPasti, StraParlaBO, StraParlaTO |
-| `#_ ` at start of TU | TU | `Variation=Unit` (all tokens) | StraParlaBO, StraParlaTO |
-| `#word` | token | `Variation=Token` | StraParlaBO, StraParlaTO |
-| `$word` | token | `Variation=Emerging` | StraParlaBO, StraParlaTO |
-| `#*word` | token | `Variation=Doubtful` | StraParlaBO, StraParlaTO |
+| written as | in the `variation` column | modules |
+|------------|---------------------------|---------|
+| `#word` | `Variety=Other`, `Language=NO_ISO_CODE` | StraParlaBO, StraParlaTO |
+| `#_ ` anywhere in a TU | `Variety=Other`, `Language=NO_ISO_CODE` on every token from the marker to the end of the TU (a unit-initial `#_ ` covers the whole TU) | StraParlaBO, StraParlaTO |
+| `#*word` | `Variety=Unassignable`, `Language=NO_ISO_CODE` | StraParlaBO, StraParlaTO |
+| `# ` at the start of a TU | `Variety=Unsure` on every token that has no marker of its own (no `Language`: it is unknown) | KIPasti, StraParlaBO, StraParlaTO |
+| `$word` | `Nonce=Yes` (a nonce / non-standard form; independent of `Variety`) | StraParlaBO, StraParlaTO |
+| any token of a unit with at least one `Variety` | `ContainsVariation=Yes`, repeated on every token row of the unit | all |
 
-The dataflags enum `tokenvariation` carries `token`, `emerging`, `doubtful` values.
-TU-level variation (`languagevariation.yes` / `.unspecified` / `.all`) is rendered as-is
-(`tu.non_ita.name`) in the `variation` output column.
+`ContainsVariation=Yes|No` is always the first feature, so the column is never empty:
+`ContainsVariation=No` is the value of an ordinary Italian token. A `$` form alone does not
+make it `Yes`: it is not another variety. Pauses, non-verbal tags, anonymized names and
+`xxx` never carry a variety. Example values:
+
+    ContainsVariation=No
+    ContainsVariation=Yes
+    ContainsVariation=Yes|Variety=Other|Language=NO_ISO_CODE
+    ContainsVariation=Yes|Variety=Unsure
+    ContainsVariation=No|Nonce=Yes
+
+The dataflags enum `tokenvariety` carries `other`, `unassignable`, `unsure`; the unit-level
+`languagevariation` enum is the parser's internal record of how the unit was written.
+`variety.py` is the one place that reads the column (`row_variety`, `row_nonce`,
+`row_language`, `row_contains_variation`, `iter_vert_rows`).
+
+#### Format change (breaking)
+
+Older vert.tsv files differ in four ways. Everything below is a rename or a move: no
+information was dropped, and the `variation` column is the only column whose name is reused.
+
+| before | now |
+|--------|-----|
+| column `variation`: one label per unit — `none` / `yes` / `unspecified` (`# `) / `all` (`#_`) (older files: `some`) | column `variation`: a feature list (above). The unit-level part is `ContainsVariation=Yes\|No`; *how* the unit was written (`# `, `#_ `) is read from the spans |
+| `jefferson_feats`: `Variation=Token` | `variation`: `Variety=Other` |
+| `jefferson_feats`: `Variation=Doubtful` | `variation`: `Variety=Unassignable` |
+| `jefferson_feats`: `Variation=Emerging` **and** `Orthography=Yes` (`$word`) | `variation`: `Nonce=Yes` |
+| `jefferson_feats`: `Language=<code>` | `variation`: `Language=<code>` |
+| tokens of a unit starting with `# `: no token-level information | `variation`: `Variety=Unsure` |
+| tokens of a unit starting with `#_`: `Variation=Token` | `variation`: `Variety=Other` (unchanged meaning) |
+| `span`: the unit-initial `# ` / `#_ ` was **not** in any span (it was rebuilt from the `variation` label) | `span` of the unit's first token starts with `# ` / `#_ `, so every marker is in the spans |
+| NoSketch: positional `variation`, `non_standard_form`; unit attribute `language_variation` | positional `variety`, `nonce`; unit attribute `contains_variation` (see `KIParla-NoSketch-Data`) |
+| linear-orthographic: a unit-initial `#_ ` was written once; a *mid-unit* `#_` had no meaning | `#_ ` is written once where it occurs and the words it covers are not re-marked with `#` |
+
+The column count is unchanged (20). The tools **refuse to read** an old-format vert.tsv
+(`variety.iter_vert_rows` raises "old-format vert.tsv"): its unit-initial markers are not in
+the spans, so reading it would silently drop them. Regenerate it:
+`python sync.py --from-eaf <X.eaf>` (or the `cli.py eaf2csv` + `process` pair). Regenerating
+everything is therefore a prerequisite for every consumer — `tsv2formats.py`,
+`vert2eaf`, `linear2html.py`, `tsv2vert.py`, `tsv2tei.py`, the collection rebuild and the
+NoSketch corpora (`KIParla-NoSketch-Data` registries use the new attribute names).
+
+**Release impact:** the vert.tsv schema, the `csv-metadata.json` of every module and the
+NoSketch attributes change, so each already-released module needs a **major** version when
+it is regenerated. A module that has not been released yet (Stra-ParlaBO, Stra-ParlaTO) simply
+ships the new format as its first release.
 
 ### 2d. Error checks
 
@@ -251,9 +313,8 @@ In order of priority:
 Modules that do not use `$` should not have it stripped.
 
 **Variation downgrade:** if a token falls through to `error` and it is in a variation
-context — either the token itself carried a `#` or `$` prefix (`Variation=Token`,
-`Variation=Emerging`, `Variation=Doubtful`) or the TU is marked `non_ita=all`
-(`Variation=Unit`) — the `error` is downgraded to a `warning`. Foreign-variety tokens
+context — either the token itself carried a `#`, `#*` or `$` prefix (`Variety=Other`,
+`Variety=Unassignable`, `Nonce=Yes`) — the `error` is downgraded to a `warning`. Foreign-variety tokens
 may legitimately not match the Italian word regex.
 
 Word regex: `r"['~-]?(\p{L}+:*[-]?)*\p{L}+:*[-'~]?[.,?]?"` (Unicode letters, optional
@@ -292,12 +353,14 @@ Colons are stripped from the form. (Linguistic tokens only.)
 **PauseAfter=Yes** — set on any token immediately followed by a `shortpause` token in
 the token list. Assigned in a post-tokenization pass over the token sequence.
 
-### 5e. Post-tokenize: language variation
+### 5e. Post-tokenize: variety
 
-If the TU was marked `non_ita=all` in step 2b, every token gets `Language=NO_ISO_CODE`.
-Otherwise, `non_ita` on the TU is updated to `all` (every token carries the `non_ita`
-flag) or `yes` (some do) — unless it's already `unspecified` (explicit TU-level `"# "`
-prefix from step 2b), which is preserved rather than downgraded to `yes`.
+* A `#_` marker (unit-initial: `non_ita=all`; mid-unit: found by the tokenizer) turns every
+  token from the marker on into `Variety=Other` with `Language=NO_ISO_CODE`, exactly as if each
+  had carried an explicit `#`. Pauses, non-verbal tags, anonymized names and `xxx` keep their type.
+* A unit-initial `# ` (`non_ita=unspecified`) makes every remaining token `Variety=Unsure`
+  (no `Language`: the language is unknown). An explicit `#word`/`#*word` keeps its own label.
+* `non_ita` on the TU is then updated to `all` or `yes`, unless it is `unspecified`, which is preserved.
 
 ---
 
@@ -490,8 +553,8 @@ schema file to regenerate every module's copy.
 | `deprel`        | `_` |
 | `type`          | token type flag (`linguistic`, `shortpause`, `nonverbalbehavior`, …) |
 | `meta_label`    | `_` |
-| `variation`     | language variation flag on the TU |
-| `jefferson_feats` | pipe-separated: `Intonation=X`, `Interrupted=Yes`, `Truncated=Yes`, `Reduced=Yes`, `ProsodicLink=Yes`, `SpaceAfter=No`, `PauseAfter=Yes`, `Language=ISO`, `Orthography=Yes`, `Anonymized=Yes`, `Volume=X`, `Variation=X`, `Syllables=N` |
+| `variation`     | variation features of the token and unit: `ContainsVariation=Yes\|No`, `Variety=Other\|Unassignable\|Unsure`, `Language=ISO`, `Nonce=Yes` |
+| `jefferson_feats` | pipe-separated: `Intonation=X`, `Interrupted=Yes`, `Truncated=Yes`, `Reduced=Yes`, `ProsodicLink=Yes`, `SpaceAfter=No`, `PauseAfter=Yes`, `Anonymized=Yes`, `Volume=X`, `Syllables=N` |
 | `align`         | `Begin=X` / `End=X` / `Begin=X\|End=X` for first/last token of TU |
 | `prolongations` | e.g. `3x2,7x1` (char_pos × length pairs) |
 | `pace`          | `Slow=0-5(0),…` / `Fast=…` |
@@ -505,6 +568,38 @@ a patch runs against them. Planned: `UD_sent`/`UD_id` columns for a
 different, sentence-level unit granularity (distinct from the Jefferson TU).
 
 ---
+
+## Audio length check (`audio_check.py`)
+
+After a transcript is processed, the end of its **last annotation** is compared with the
+**length of its recording**, to spot problematic files: a wrong or swapped recording, a
+truncated or unfinished transcription, a time-shifted tier, or a wrong `duration` in
+`conversations.tsv`.
+
+The audio length comes from, in order: (1) the audio file (`<audio_dir>/<code>.mp3|wav|flac|m4a|ogg|aac`,
+measured with `ffprobe`) when an audio directory is given (`--audio-dir`); (2) otherwise
+the `duration` column of `metadata/conversations.tsv`. The check records which one it used.
+
+| rule | fires when | severity |
+|------|------------|----------|
+| `AUDIO_OVERRUN` | the last annotation ends more than `max_overrun` (1 s) **after** the audio ends | warning |
+| `AUDIO_UNDERRUN` | the last annotation ends more than `max_underrun` (120 s) **before** the audio ends | warning |
+
+Both are warnings: they never block the pipeline and show up in the *Warnings* counts and in
+a dedicated *Audio length* section of the module's validation page. Metadata durations are
+often rounded to the minute, so when the source is the metadata, `max_overrun` is widened
+by `metadata_slack` (60 s). Thresholds are in the `audio_check` block of `configs/defaults.yml`
+and can be overridden per module (`enabled: false` switches the check off).
+
+It runs automatically in `sync.py --from-eaf` and `cli.py process` (both accept `--audio-dir`) and
+writes `AUDIO_CHECK` (`status`, `source`, `audio_seconds`, `last_annotation_seconds`,
+`difference_seconds`) into the conversation's entry of `tmp/process/json/summary.json`. It can also
+be run over whole modules, from the `vert.tsv` files, without reprocessing:
+
+    python audio_check.py <module_dir> [...] [--audio-dir DIR] [--all] [--update-summary]
+
+`--update-summary` writes the results into `summary.json` so that the validation page can be
+regenerated (`generate_validation_report.py`) for modules processed before this check existed.
 
 ## Known module differences (to drive config design)
 

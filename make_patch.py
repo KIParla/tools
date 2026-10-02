@@ -258,7 +258,7 @@ def update_jefferson_feats(tsv_value: str, csv_value: str, span_changed: bool,
       sits inside (only that span's boundary tokens carry a literal `°` — see
       feats_from_span); in that case this token-local edit tells us nothing new
       about it, so it's carried over rather than silently dropped.
-    - Non-span features (ProsodicLink, SpaceAfter, Orthography, …) are always
+    - Non-span features (ProsodicLink, SpaceAfter, Nonce, Variety, …) are always
       preserved from the TSV.
     - Lang from CSV is merged in last, overriding any Lang already present.
     """

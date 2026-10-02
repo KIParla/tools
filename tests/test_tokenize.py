@@ -159,7 +159,7 @@ class TestTokenClassification:
     def test_hash_token_variation_when_enabled(self):
         cfg = {"hash_token": True}
         t = Token("#ciao", _cfg_variation=cfg)
-        assert t.variation == df.tokenvariation.token
+        assert t.variety == df.tokenvariety.other
         assert t.non_ita is True
         assert t.iso_code == "NO_ISO_CODE"
         assert "ciao" in t.form
@@ -172,20 +172,22 @@ class TestTokenClassification:
     def test_dollar_variation_when_enabled(self):
         cfg = {"dollar": True}
         t = Token("$ciao", _cfg_variation=cfg)
-        assert t.variation == df.tokenvariation.emerging
-        assert t.non_ortho is True
+        # $word is a nonce form, not a variety, and not another language.
+        assert t.nonce is True
+        assert t.variety == df.tokenvariety.none
+        assert t.non_ita is False
         assert "ciao" in t.form
 
     def test_hash_doubtful_variation_when_enabled(self):
         cfg = {"hash_doubtful": True}
         t = Token("#*ciao", _cfg_variation=cfg)
-        assert t.variation == df.tokenvariation.doubtful
+        assert t.variety == df.tokenvariety.unassignable
         assert t.non_ita is True
 
     def test_hash_doubtful_takes_priority_over_hash_token(self):
         cfg = {"hash_token": True, "hash_doubtful": True}
         t = Token("#*ciao", _cfg_variation=cfg)
-        assert t.variation == df.tokenvariation.doubtful
+        assert t.variety == df.tokenvariety.unassignable
 
 
 # ===========================================================================
@@ -262,8 +264,36 @@ class TestTokenizeTU:
             assert tok.iso_code == "NO_ISO_CODE"
             assert tok.non_ita is True
 
+    # --- variation_context: unspecified ("# " unit) ---
+    def test_unspecified_variation_marks_tokens_unsure(self):
+        tokens = tokenize_tu(
+            "scherzando davvero", tu_id=0,
+            variation_context=df.languagevariation.unspecified,
+        )
+        assert all(t.variety == df.tokenvariety.unsure for t in tokens)
+        # unsure means "not Italian, language unknown": no Language feature
+        assert not any(t.non_ita for t in tokens)
+
+    def test_explicit_marker_wins_over_unsure(self):
+        cfg = {"hash_token": True, "hash_doubtful": True}
+        tokens = tokenize_tu(
+            "ciao #hola #*mah", tu_id=0, cfg_variation=cfg,
+            variation_context=df.languagevariation.unspecified,
+        )
+        assert [t.variety for t in tokens] == [
+            df.tokenvariety.unsure, df.tokenvariety.other, df.tokenvariety.unassignable]
+
+    def test_unsure_skips_language_neutral_tokens(self):
+        tokens = tokenize_tu(
+            "ciao (.) @sara xxx", tu_id=0,
+            variation_context=df.languagevariation.unspecified,
+        )
+        assert [t.variety for t in tokens] == [
+            df.tokenvariety.unsure, df.tokenvariety.none,
+            df.tokenvariety.none, df.tokenvariety.none]
+
     # --- config variation markers ---
     def test_variation_marker_in_token(self):
         cfg = {"hash_token": True}
         tokens = tokenize_tu("#ciao mondo", tu_id=0, cfg_variation=cfg)
-        assert tokens[0].variation == df.tokenvariation.token
+        assert tokens[0].variety == df.tokenvariety.other

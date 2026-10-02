@@ -20,25 +20,29 @@ Standalone scripts to handle and transform KIParla data.
   directions. Runs across all modules by default (auto-discovered), or pass
   `--modules <dir> ...`. Pass `--add-unknown-participant-column` to add/refresh an
   `unknown-participant` column (`yes`/`no`) in each module's `conversations.tsv`.
-- `generate_validation_report.py`: build two validation pages (published as part of the
+- `generate_validation_report.py`: build the validation pages (published as part of the
   KIParla docs site), combining `check_participants.py`'s metadata-consistency results
   with per-conversation pipeline warnings/errors from each module's
-  `tmp/process/json/summary.json`:
-  - `docs/modules/ROOT/pages/validation-log.adoc`: a diary of every warning the pipeline
-    auto-fixed per conversation — informational, not actionable.
-  - `docs/modules/ROOT/pages/validation-errors.adoc`: an interactive, filterable table
-    (filter by module / issue type, search by code) of only real errors, metadata
-    cross-reference gaps, and missing transcripts — the actionable list, with GitHub
-    links (`dev` branch) to jump straight to each file's `vert.tsv`/`eaf`.
+  `tmp/process/json/summary.json`. One page per module,
+  `docs/modules/ROOT/pages/validation-<module>.adoc`, with two sections:
+  - *Errors*: an interactive, filterable table (filter by issue type, search by code) of
+    only real errors, metadata cross-reference gaps, and missing transcripts — the
+    actionable list, with GitHub links (`dev` branch) to jump straight to each file's
+    `vert.tsv`/`eaf`.
+  - *Warnings*: a diary of every warning the pipeline auto-fixed per conversation —
+    informational, not actionable.
 
-  Run again (and commit) after reprocessing a module, or via `sync.py`, to keep both
-  pages current.
+  `docs/modules/ROOT/pages/validation.adoc` is the index linking to every module page.
+  Regenerating one module (e.g. from `sync.py`) only rewrites that module's page and keeps
+  the other modules' rows in the index.
+
+  Run again (and commit) after reprocessing a module, or via `sync.py`, to keep the pages current.
 - `sync.py`: one-shot, one-directional sync for a single edited file — run manually
   after opening/saving a `.eaf` in ELAN, or hand-editing a `.vert.tsv`:
   - `python sync.py --from-eaf <path/to/X.eaf>`: eaf2csv → process (updates
     `tsv/X.vert.tsv`, `translations/`, `tmp/process/{csv,json}/`, `tmp/process/json/summary.json`)
     → `tsv2formats` (linear-jefferson/orthographic) → `check_participants` (this module)
-    → `generate_validation_report` (all modules).
+    → `generate_validation_report` (this module's page).
   - `python sync.py --from-vert <path/to/X.vert.tsv>`: `vert2eaf` (overwrites `eaf/X.eaf`
     in place) → `tsv2formats` → `check_participants` → `generate_validation_report`.
     Pipeline warnings/errors in the report are *not* refreshed for this file (that would
@@ -68,6 +72,27 @@ python -m pytest tests/test_tsv2eaf.py
 ```
 
 ## Notes
+
+- **Audio length check:** `audio_check.py` compares the end of each transcript's last annotation with the length of
+  its recording (audio file via `--audio-dir`, else `duration` in `conversations.tsv`) and warns on
+  `AUDIO_OVERRUN` / `AUDIO_UNDERRUN`. It runs in `sync.py --from-eaf` and `cli.py process`, and standalone:
+  `python audio_check.py <module_dir> --audio-dir <dir>`. See PIPELINE.md.
+
+- **Rebuilding EAFs from TSVs:** `python sync.py --from-vert <X.vert.tsv> --audio-ext mp3`
+  overwrites `eaf/X.eaf` (translations reattached from `translations/`, audio linked by the
+  relative path `X.mp3`, no empty `default` tier). Keep the transcribers' files elsewhere first
+  (e.g. `original/`): the rebuilt EAF contains the *normalized* text. Re-processing rebuilt EAFs
+  reproduces the TSVs except for a handful of tokens next to brackets/intonation marks
+  (39 of 629,677 tokens in Stra-ParlaBO).
+- **Validation report:** `sync.py` refreshes the synced module's page
+  (`validation-<module>.adoc`) and the index; to rebuild several modules at once run
+  `python generate_validation_report.py --modules <module dirs>`.
+
+- **Encoding:** all inputs/outputs are UTF-8 (no BOM), LF line endings, Unicode NFC — the same
+  requirements as Universal Dependencies. Text is NFC-normalized on entry (`eaf2csv`,
+  `TranscriptionUnit`); see `textutil.py` and PIPELINE.md.
+- **`#_`** means "non-Italian from this point to the end of the unit" (the whole unit when it is at
+  the start); `[#_ w]` is rewritten to `#_ [w]` (`HASH_UNIT_SPACE`). See PIPELINE.md.
 
 - `tsv2eaf.py` is deprecated: it expects the historical TSV column names `iu_id` and
   `iu_align`, which don't exist in the current `.vert.tsv` schema, and it has no knowledge

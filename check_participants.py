@@ -58,7 +58,10 @@ SKIP_DIRS = {
 # and annotator meta-tiers (comments, background sounds). These are excluded
 # from the "speaks in transcript but not listed as participant" check so
 # genuine mismatches aren't drowned out.
-NON_PARTICIPANT_TIERS = {"commenti", "suoni", "sottofondo", "gruppo", "video", "trad_video"}
+# "environment" is the standard tier for everything that is not a participant's turn
+# (noise, music, group actions, speech from a video/TV/radio). The other names are
+# older tier names kept so that modules not yet regenerated still pass.
+NON_PARTICIPANT_TIERS = {"environment", "commenti", "suoni", "sottofondo", "gruppo", "video", "trad_video"}
 
 
 def is_placeholder_speaker(speaker: str) -> bool:
@@ -70,7 +73,7 @@ def is_placeholder_speaker(speaker: str) -> bool:
 def discover_modules(root: Path) -> list[Path]:
     modules = []
     for d in sorted(root.iterdir()):
-        if not d.is_dir() or d.name in SKIP_DIRS or d.name.startswith("."):
+        if not d.is_dir() or d.name in SKIP_DIRS or d.name.startswith((".", "_")):
             continue
         conv_path = d / "metadata" / "conversations.tsv"
         tsv_dir = d / "tsv"

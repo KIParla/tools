@@ -20,6 +20,8 @@ import sys
 from pathlib import Path
 from urllib.parse import urlencode
 from xml.sax.saxutils import escape
+from textutil import ENCODING_READ, ENCODING_WRITE
+from variety import iter_vert_rows, row_contains_variation, row_nonce, row_variety
 
 
 DEFAULT_BASE_URL = "https://search.corpuskiparla.it/corpus"
@@ -30,17 +32,19 @@ DEFAULT_ISSUES_BASE_URL = "https://github.com/KIParla"
 # conversation-level `linguistic_annotation` flag.
 #
 # Two further positional attributes are always emitted last (see
-# variation_kind()/is_emerging()/convert_file() below), in this order:
-#   variation         — "token" for an explicit '#' marker or a token
-#                        belonging to a '#_'-prefixed unit, "doubtful" for
-#                        '#*', "" otherwise. To be extended later with which
-#                        language the variation is from.
-#   non_standard_form  — "yes" for a '$' (emerging) marker, "" otherwise.
-#                        Not code-switching — a different phenomenon
-#                        (non-standard/emerging spelling) — so tracked apart
-#                        from `variation`.
+# variation_kind()/is_nonce()/convert_file() below), in this order:
+#   variety  — "other" for a '#' marker or a token covered by a '#_' marker,
+#              "unassignable" for '#*', "unsure" for a token in a unit that
+#              starts with '# ', "" otherwise. To be extended later with which
+#              language the variety is from.
+#   nonce    — "yes" for a '$' marker, "" otherwise. Not a variety — a
+#              different phenomenon (nonce / non-standard form) — so tracked
+#              apart from `variety`.
 # Kept separate from LINGUISTIC_ATTRS since they are not read via
 # _pos_value() from a same-named TSV column.
+#
+# The transcription_unit structure carries contains_variation="yes" when any
+# of its tokens has a variety.
 LINGUISTIC_ATTRS = ("lemma", "upos")
 
 
@@ -77,12 +81,12 @@ def module_for_code(code, default_module):
 
 
 def load_conversations(path):
-    with open(path) as f:
+    with open(path, encoding=ENCODING_READ, newline="") as f:
         return {row["code"]: row for row in csv.DictReader(f, delimiter="\t")}
 
 
 def load_participants(path):
-    with open(path) as f:
+    with open(path, encoding=ENCODING_READ, newline="") as f:
         reader = csv.DictReader(f, delimiter="\t")
         by_code = {row["code"]: row for row in reader}
         attr_keys = [k for k in (reader.fieldnames or []) if k not in ("code", "conversations")]
@@ -209,22 +213,16 @@ def _pos_value(row, key):
 
 
 def variation_kind(row):
-    """Word-level code-switching kind, from jefferson_feats: 'token' for an
-    explicit '#' marker or a token whose whole unit was '#_'-prefixed
-    (tokens.py tags both the same way: Variation=Token), 'doubtful' for
-    '#*', '' otherwise."""
-    feats = row.get("jefferson_feats") or ""
-    if "Variation=Doubtful" in feats:
-        return "doubtful"
-    if "Variation=Token" in feats:
-        return "token"
-    return ""
+    """Word-level variety from the variation column (Variety=...): 'other' for a
+    '#' marker or a token covered by '#_', 'unassignable' for '#*', 'unsure'
+    for a token in a '# ' unit, '' otherwise."""
+    return row_variety(row)
 
 
-def is_emerging(row):
-    """True for a '$word' token — a non-standard/emerging spelling, not
-    code-switching, so tracked separately from variation_kind()."""
-    return "Variation=Emerging" in (row.get("jefferson_feats") or "")
+def is_nonce(row):
+    """True for a '$word' token (Nonce=Yes in the variation column) — a nonce / non-standard form,
+    not a variety, so tracked separately from variation_kind()."""
+    return row_nonce(row)
 
 
 def is_shortpause(row):
@@ -268,7 +266,7 @@ def load_translations(tsv_path, translations_dir):
         return {}
 
     out = {}
-    for row in json.loads(path.read_text()):
+    for row in json.loads(path.read_text(encoding=ENCODING_READ)):
         parent = row.get("parent_tu_id")
         text = (row.get("text") or "").strip()
         if not parent or not text:
@@ -302,8 +300,8 @@ def convert_file(
     doc_url = build_url(artifacts_base_url, f"{doc_module}/html/{code}.html")
     translations = load_translations(tsv_path, translations_dir)
 
-    with open(tsv_path) as f:
-        rows = list(csv.DictReader(f, delimiter="\t"))
+    with open(tsv_path, encoding=ENCODING_READ, newline="") as f:
+        rows = list(iter_vert_rows(f, tsv_path))
 
     # A conversation is "annotated" when any of its tokens carries a UPOS tag.
     has_linguistic = any(_pos_value(row, "upos") for row in rows)
@@ -350,9 +348,8 @@ def convert_file(
         if issues_base_url:
             attrs.append(("report_url", build_report_url(
                 issues_base_url, doc_module, code, tu_id, speaker, doc_url)))
-        tu_variation = (tu_rows[0].get("variation") or "none").strip()
-        if tu_variation != "none":
-            attrs.append(("language_variation", "yes"))
+        if row_contains_variation(tu_rows[0]):
+            attrs.append(("contains_variation", "yes"))
         if tu_id in translations:
             attrs.append(("translation", _xml_attr(translations[tu_id])))
         return "<transcription_unit" + "".join(f' {n}="{v}"' for n, v in attrs) + ">"
@@ -407,17 +404,17 @@ def convert_file(
                 print("<g/>", file=out)
             token_id = row.get("token_id", "") or ""
             kind = variation_kind(row)
-            emerging = is_emerging(row)
+            nonce = is_nonce(row)
             word = form[1:] if is_anonymized(row) and form.startswith("@") else form
-            if kind == "token":
+            if kind == "other":
                 word = f"#{word}"
-            elif kind == "doubtful":
+            elif kind == "unassignable":
                 word = f"#*{word}"
-            elif emerging:
+            elif nonce:
                 word = f"${word}"
             print("\t".join([
                 word, token_id, *(_pos_value(row, a) for a in LINGUISTIC_ATTRS),
-                kind, "yes" if emerging else "",
+                kind, "yes" if nonce else "",
             ]), file=out)
             glue_pending = has_space_after_no(row)
 

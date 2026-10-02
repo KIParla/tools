@@ -216,7 +216,7 @@ class TestConversationToConll:
         types = [r["type"] for r in rows]
         assert "shortpause" in types
 
-    def test_variation_column_is_tu_non_ita_name(self, tmp_path):
+    def test_variation_column_groups_all_variation_features(self, tmp_path):
         t = Transcript("T")
         tu = TranscriptionUnit(0, "A", 0, 1, 1, "# hola")
         tu.tokenize()
@@ -225,7 +225,47 @@ class TestConversationToConll:
         out = tmp_path / "test.vert.tsv"
         conversation_to_conll(t, out)
         rows = _read_vert(out)
-        assert rows[0]["variation"] == "unspecified"
+        assert rows[0]["variation"] == "ContainsVariation=Yes|Variety=Unsure"
+        assert "contains_variation" not in rows[0]
+        # the unit-initial marker is part of the first token's span
+        assert rows[0]["span"] == "# hola"
+
+    def test_other_variety_carries_language_in_variation_column(self, tmp_path):
+        cfg = {"variation_markers": {"hash_token": True}}
+        t = Transcript("T")
+        tu = TranscriptionUnit(0, "A", 0, 1, 1, "ciao #hola", cfg=cfg)
+        tu.tokenize(cfg)
+        t.add(tu)
+        t.sort()
+        out = tmp_path / "test.vert.tsv"
+        conversation_to_conll(t, out)
+        rows = _read_vert(out)
+        # unit-level flag on every token row of the unit; Language only on the #word
+        assert rows[0]["variation"] == "ContainsVariation=Yes"
+        assert rows[1]["variation"] == "ContainsVariation=Yes|Variety=Other|Language=NO_ISO_CODE"
+        # none of it is left in jefferson_feats
+        for r in rows:
+            for key in ("Variety", "Language", "Nonce", "ContainsVariation"):
+                assert key not in r["jefferson_feats"]
+
+    def test_variation_no_without_variety(self, tmp_path):
+        t = _make_simple_transcript(["ciao", "mondo"])
+        out = tmp_path / "test.vert.tsv"
+        conversation_to_conll(t, out)
+        assert {r["variation"] for r in _read_vert(out)} == {"ContainsVariation=No"}
+
+    def test_nonce_is_a_feature_not_a_variety(self, tmp_path):
+        cfg = {"variation_markers": {"dollar": True}}
+        t = Transcript("T")
+        tu = TranscriptionUnit(0, "A", 0, 1, 1, "$ciao mondo", cfg=cfg)
+        tu.tokenize(cfg)
+        t.add(tu)
+        t.sort()
+        out = tmp_path / "test.vert.tsv"
+        conversation_to_conll(t, out)
+        rows = _read_vert(out)
+        assert rows[0]["variation"] == "ContainsVariation=No|Nonce=Yes"
+        assert "Orthography" not in rows[0]["jefferson_feats"]
 
     def test_lemma_upos_xpos_feats_deprel_are_underscore(self, tmp_path):
         t = _make_simple_transcript(["ciao"])

@@ -5,7 +5,8 @@
 #   #word  → Variation=Token  (specific token is foreign variety)
 #   $word  → Variation=Emerging  (non-existent in Italian but potentially so)
 #   #*word → Variation=Doubtful  (probably Italian)
-#   #_ at start of TU → Variation=Unit  (all linguistic tokens are foreign variety)
+#   #_ → from this point to the end of the TU is foreign variety (Variation=Token on each
+#        following token); at the start of a TU it covers the whole TU
 
 # Translation tiers are per-speaker child tiers named "<speaker>_trad"
 # (e.g. "PSB033_trad") — extract to translations TSV, not ignored.
@@ -19,4 +20,4 @@ variation_markers:
   hash_doubtful: true
 
 normalization:
-  HASH_UNIT_SPACE: true  # #_word at start → #_ word
+  HASH_UNIT_SPACE: true  # #_ standalone: #_word → #_ word, [#_ w] → #_ [w]

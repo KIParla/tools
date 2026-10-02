@@ -10,19 +10,22 @@ Combines two data sources, across all auto-discovered KIParla modules:
   2. Pipeline warnings/errors (module/tmp/process/json/summary.json, produced
      by `cli.py process`): per-conversation counts from serialize.build_json.
 
-Writes two AsciiDoc pages (published as part of the shared KIParla docs-site):
+Writes AsciiDoc pages (published as part of the shared KIParla docs-site) into
+docs/modules/ROOT/pages/:
 
-  - docs/modules/ROOT/pages/validation-log.adoc: a diary of every WARNING the
-    pipeline auto-fixed per conversation. Informational, not actionable.
-  - docs/modules/ROOT/pages/validation-errors.adoc: an interactive, filterable
-    table of only real ERRORS, metadata-consistency gaps, and missing
-    transcripts -- the actionable "go fix this" list, with GitHub links
-    (dev branch) to jump straight to each file.
+  - validation-<module>.adoc, one per module, with two sections:
+      Errors:   an interactive, filterable table of only real ERRORS,
+                metadata-consistency gaps, and missing transcripts -- the
+                actionable "go fix this" list, with GitHub links (dev branch)
+                to jump straight to each file.
+      Warnings: a diary of every WARNING the pipeline auto-fixed per
+                conversation. Informational, not actionable.
+  - validation.adoc: index of the module pages, with per-module counts.
 
 Usage:
     python generate_validation_report.py
     python generate_validation_report.py --modules /path/to/KIP ...
-    python generate_validation_report.py --log-output custom/log.adoc --errors-output custom/errors.adoc
+    python generate_validation_report.py --output-dir custom/pages
 
 Note: pipeline warnings/errors are only available for a module if it has been
 run through `cli.py process` (module/tmp/process/json/summary.json present).
@@ -34,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -118,6 +122,7 @@ def build_rows(module_dir: Path) -> tuple[list[dict], bool]:
             "error_tokens": error_tokens,
             "warnings": warnings,
             "tokens_err": tokens_err,
+            "audio": (entry or {}).get("AUDIO_CHECK"),
             "has_pipeline_data": entry is not None,
         })
 
@@ -143,141 +148,228 @@ def _fmt_counts(d: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
-# validation-log.adoc — the auto-fix diary (informational, not actionable)
+# Pages
+#
+#   validation.adoc              index: one row per module, linking to its page
+#   validation-<module>.adoc     one page per module: the actionable errors
+#                                (interactive table) + the auto-fix warnings
+#                                diary (informational)
 # ---------------------------------------------------------------------------
 
-def render_log_adoc(module_reports: list[tuple[str, list[dict], bool]]) -> str:
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    lines = []
-    lines.append("= Validation log")
-    lines.append("")
-    lines.append(f"Generated {now} by `tools/generate_validation_report.py`. "
-                  "Regenerate after reprocessing a module to refresh this page.")
-    lines.append("")
-    lines.append("A diary of every warning the pipeline auto-fixed while processing each "
-                  "conversation (accent corrections, number-to-words, boundary nudges on "
-                  "short overlaps, and so on) -- already resolved, not action items. "
-                  "Browse this if you're curious what happened to a file. "
-                  "For files that actually need a human fix, see "
-                  "xref:validation-errors.adoc[Validation errors].")
-    lines.append("")
-
-    lines.append("== Overview")
-    lines.append("")
-    lines.append('[cols="1,1,1"]')
-    lines.append("|===")
-    lines.append("|Module |Conversations |With warnings")
-    for name, rows, _has_pipeline in module_reports:
-        n_with = sum(1 for r in rows if r["warnings"] or r["tokens_err"])
-        lines.append(f"|{name} |{len(rows)} |{n_with}")
-    lines.append("|===")
-    lines.append("")
-
-    for name, rows, has_pipeline in module_reports:
-        anchor = name.lower().replace(" ", "-")
-        lines.append(f"[[{anchor}]]")
-        lines.append(f"== {name}")
-        lines.append("")
-        if not has_pipeline:
-            lines.append("CAUTION: no `tmp/process/json/summary.json` found for this module — "
-                          "pipeline warnings are unavailable.")
-            lines.append("")
-        lines.append('[cols="1,4,1"]')
-        lines.append("|===")
-        lines.append("|Code |Warnings |Error tokens")
-        for r in rows:
-            if not (r["warnings"] or r["tokens_err"]):
-                continue
-            lines.append(
-                f"|{r['code']} |{_fmt_counts(r['warnings'])} "
-                f"|{r['tokens_err'] if r['tokens_err'] else '_'}"
-            )
-        lines.append("|===")
-        lines.append("")
-
-    return "\n".join(lines)
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
-# ---------------------------------------------------------------------------
-# validation-errors.adoc — the actionable, filterable list
-# ---------------------------------------------------------------------------
+def slug(module_name: str) -> str:
+    return module_name.lower().replace(" ", "-")
+
+
+def page_name(module_name: str) -> str:
+    return f"validation-{slug(module_name)}.adoc"
+
+
+def _hms(seconds) -> str:
+    s = int(round(seconds or 0))
+    return f"{s // 3600:d}:{s % 3600 // 60:02d}:{s % 60:02d}"
+
+
+def _is_actionable(r: dict) -> bool:
+    return bool(r["missing_transcript"] or r["errors"] or r["metadata_issues"]
+                or r["error_tokens"])
+
 
 def _gh_urls(module_name: str, code: str) -> tuple[str, str]:
     base = f"https://github.com/KIParla/{module_name}/blob/dev"
     return f"{base}/tsv/{code}.vert.tsv", f"{base}/eaf/{code}.eaf"
 
 
-def render_errors_page(module_reports: list[tuple[str, list[dict], bool]]) -> str:
-    """Build validation-errors.adoc. One record per *occurrence*, not per
-    conversation: each real error carries the actual TU text it fired on
-    (tu_id, speaker, text), so the offending span is visible right in the
-    page instead of just a rule-name count."""
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
+def _error_records(module_name: str, rows: list[dict]) -> list[dict]:
+    """One record per *occurrence*, not per conversation: each real error
+    carries the actual TU text it fired on (tu_id, speaker, text), so the
+    offending span is visible right in the page instead of just a rule-name
+    count."""
     records = []
-    for name, rows, _has_pipeline in module_reports:
-        for r in rows:
-            if not (r["missing_transcript"] or r["errors"] or r["metadata_issues"]):
-                continue
-            tsv_url, eaf_url = _gh_urls(name, r["code"])
+    for r in rows:
+        if not (r["missing_transcript"] or r["errors"] or r["metadata_issues"]):
+            continue
+        tsv_url, eaf_url = _gh_urls(module_name, r["code"])
 
-            if r["missing_transcript"]:
-                records.append({
-                    "module": name, "code": r["code"], "kind": "no-transcript",
-                    "rule": None, "tuId": None, "speaker": None, "text": None,
-                    "detail": "no transcript found for this conversation",
-                    "tsvUrl": None, "eafUrl": None,
-                })
-                continue
+        if r["missing_transcript"]:
+            records.append({
+                "module": module_name, "code": r["code"], "kind": "no-transcript",
+                "rule": None, "tuId": None, "speaker": None, "text": None,
+                "detail": "no transcript found for this conversation",
+                "tsvUrl": None, "eafUrl": None,
+            })
+            continue
 
-            for issue in r["metadata_issues"]:
-                records.append({
-                    "module": name, "code": r["code"], "kind": "metadata",
-                    "rule": None, "tuId": None, "speaker": None, "text": None,
-                    "detail": issue,
-                    "tsvUrl": tsv_url, "eafUrl": eaf_url,
-                })
+        for issue in r["metadata_issues"]:
+            records.append({
+                "module": module_name, "code": r["code"], "kind": "metadata",
+                "rule": None, "tuId": None, "speaker": None, "text": None,
+                "detail": issue,
+                "tsvUrl": tsv_url, "eafUrl": eaf_url,
+            })
 
-            for occ in r["error_details"]:
-                records.append({
-                    "module": name, "code": r["code"], "kind": "error",
-                    "rule": occ["rule"], "tuId": occ["tu_id"], "speaker": occ["speaker"],
-                    "text": occ["text"], "span": None, "detail": None,
-                    "tsvUrl": tsv_url, "eafUrl": eaf_url,
-                })
+        for occ in r["error_details"]:
+            records.append({
+                "module": module_name, "code": r["code"], "kind": "error",
+                "rule": occ["rule"], "tuId": occ["tu_id"], "speaker": occ["speaker"],
+                "text": occ["text"], "span": None, "detail": None,
+                "tsvUrl": tsv_url, "eafUrl": eaf_url,
+            })
 
-            for occ in r["error_tokens"]:
-                records.append({
-                    "module": name, "code": r["code"], "kind": "error",
-                    "rule": "TOKEN_TYPE_ERROR", "tuId": occ["tu_id"], "speaker": occ["speaker"],
-                    "text": occ["context"], "span": occ["span"], "detail": None,
-                    "tsvUrl": tsv_url, "eafUrl": eaf_url,
-                })
+    # Tokens the tokenizer could not parse (listed separately because they
+    # are not rule violations on the TU text).
+    for r in rows:
+        if r["missing_transcript"]:
+            continue
+        tsv_url, eaf_url = _gh_urls(module_name, r["code"])
+        for occ in r["error_tokens"]:
+            records.append({
+                "module": module_name, "code": r["code"], "kind": "error",
+                "rule": "TOKEN_TYPE_ERROR", "tuId": occ["tu_id"], "speaker": occ["speaker"],
+                "text": occ["context"], "span": occ["span"], "detail": None,
+                "tsvUrl": tsv_url, "eafUrl": eaf_url,
+            })
+    return records
 
-    data_json = json.dumps(records, ensure_ascii=False).replace("</", "<\\/")
 
-    html = _ERRORS_PAGE_TEMPLATE.replace("__DATA__", data_json)
+def render_module_page(name: str, rows: list[dict], has_pipeline: bool) -> str:
+    """Build validation-<module>.adoc."""
+    records = _error_records(name, rows)
+    n_conv = len(rows)
+    n_err_conv = sum(1 for r in rows if _is_actionable(r))
+    n_warn_conv = sum(1 for r in rows if r["warnings"] or r["tokens_err"])
 
-    lines = []
-    lines.append("= Validation errors")
+    lines = [f"= Validation: {name}", ""]
+    lines.append(f"Generated {_now()} by `tools/generate_validation_report.py`. "
+                 f"Regenerate after reprocessing {name}, or after `sync.py --from-eaf`, "
+                 "to refresh this page. All modules: xref:validation.adoc[Validation].")
     lines.append("")
-    lines.append(f"Generated {now} by `tools/generate_validation_report.py`. "
-                  "Regenerate after reprocessing a module, or after `sync.py --from-eaf`, "
-                  "to refresh this page.")
+    if not has_pipeline:
+        lines.append("CAUTION: no `tmp/process/json/summary.json` found for this module — "
+                     "pipeline warnings and errors are unavailable; only metadata "
+                     "consistency was checked.")
+        lines.append("")
+    lines.append(f"{n_conv} conversations: {n_err_conv} with errors or metadata gaps, "
+                 f"{n_warn_conv} with auto-fixed warnings.")
+    lines.append("")
+
+    lines.append("== Errors")
     lines.append("")
     lines.append("Only real problems: malformed Jefferson notation the pipeline couldn't "
-                  "auto-fix, a word the tokenizer couldn't parse at all (`TOKEN_TYPE_ERROR`), "
-                  "a missing source recording, or a metadata cross-reference gap. One row per "
-                  "*occurrence* (not per file) — each shows the actual transcription-unit text "
-                  "it fired on, with the offending marker or word highlighted, so you can see "
-                  "exactly what to fix without opening the file first. For the pipeline's "
-                  "routine auto-fix diary, see xref:validation-log.adoc[Validation log].")
+                 "auto-fix, a word the tokenizer couldn't parse at all (`TOKEN_TYPE_ERROR`), "
+                 "a missing source recording, or a metadata cross-reference gap. One row per "
+                 "*occurrence* (not per file) — each shows the actual transcription-unit text "
+                 "it fired on, with the offending marker or word highlighted, so you can see "
+                 "exactly what to fix without opening the file first.")
     lines.append("")
-    lines.append("++++")
-    lines.append(html)
-    lines.append("++++")
+    if records:
+        data_json = json.dumps(records, ensure_ascii=False).replace("</", "<\\/")
+        lines.append("++++")
+        lines.append(_ERRORS_PAGE_TEMPLATE.replace("__DATA__", data_json))
+        lines.append("++++")
+    else:
+        lines.append("No errors.")
+    lines.append("")
+
+    audio_rows = [r for r in rows
+                  if r.get("audio") and r["audio"].get("status") in ("overrun", "underrun")]
+    checked = sum(1 for r in rows if r.get("audio") and r["audio"].get("status") != "unavailable")
+    lines.append("== Audio length")
+    lines.append("")
+    lines.append("The last annotation of each transcript is compared with the length of its "
+                 "recording (`audio_check.py`): `overrun` means it ends after the audio, "
+                 "`underrun` that it ends well before the end of the audio (incomplete "
+                 "transcription or a long silent tail). Both are warnings. The length is "
+                 "measured on the audio file when it was available (`audio`), otherwise "
+                 "taken from `duration` in `conversations.tsv` (`metadata`).")
+    lines.append("")
+    if not checked:
+        lines.append("Not checked: no audio length available (reprocess the module, "
+                     "optionally with `--audio-dir`).")
+    elif not audio_rows:
+        lines.append(f"All {checked} checked conversations are compatible with their audio length.")
+    else:
+        lines.append('[cols="1,1,1,1,1,1"]')
+        lines.append("|===")
+        lines.append("|Code |Status |Audio |Last annotation |Difference (audio − annotation) |Length from")
+        for r in audio_rows:
+            a = r["audio"]
+            lines.append(f"|{r['code']} |{a['status']} |{_hms(a['audio_seconds'])} "
+                         f"|{_hms(a['last_annotation_seconds'])} "
+                         f"|{a['difference_seconds']:+.0f} s |{a['source']}")
+        lines.append("|===")
+    lines.append("")
+
+    lines.append("== Warnings")
+    lines.append("")
+    lines.append("Every warning the pipeline auto-fixed while processing each conversation "
+                 "(accent corrections, number-to-words, boundary nudges on short overlaps, "
+                 "and so on) -- already resolved, not action items.")
+    lines.append("")
+    lines.append('[cols="1,4,1"]')
+    lines.append("|===")
+    lines.append("|Code |Warnings |Error tokens")
+    for r in rows:
+        if not (r["warnings"] or r["tokens_err"]):
+            continue
+        lines.append(
+            f"|{r['code']} |{_fmt_counts(r['warnings'])} "
+            f"|{r['tokens_err'] if r['tokens_err'] else '_'}"
+        )
+    lines.append("|===")
     lines.append("")
     return "\n".join(lines)
+
+
+def _summary(name: str, rows: list[dict], has_pipeline: bool) -> dict:
+    return {
+        "name": name, "conversations": len(rows), "has_pipeline": has_pipeline,
+        "with_errors": sum(1 for r in rows if _is_actionable(r)),
+        "with_warnings": sum(1 for r in rows if r["warnings"] or r["tokens_err"]),
+    }
+
+
+def render_index(summaries: list[dict]) -> str:
+    lines = ["= Validation", ""]
+    lines.append(f"Generated {_now()} by `tools/generate_validation_report.py`. "
+                 "One page per module, combining `check_participants.py`'s metadata-consistency "
+                 "results with the pipeline's per-conversation warnings and errors "
+                 "(`tmp/process/json/summary.json`). Each module page has the actionable errors "
+                 "(an interactive, filterable table) and the diary of auto-fixed warnings.")
+    lines.append("")
+    lines.append('[cols="2,1,1,1"]')
+    lines.append("|===")
+    lines.append("|Module |Conversations |With errors / gaps |With warnings")
+    for m in sorted(summaries, key=lambda m: m["name"].lower()):
+        note = "" if m["has_pipeline"] else " (no pipeline data)"
+        lines.append(f"|xref:{page_name(m['name'])}[{m['name']}]{note} "
+                     f"|{m['conversations']} |{m['with_errors']} |{m['with_warnings']}")
+    lines.append("|===")
+    lines.append("")
+    return "\n".join(lines)
+
+
+_INDEX_ROW_RE = re.compile(
+    r"^\|xref:validation-[^\[]+\.adoc\[(?P<name>[^\]]+)\](?P<note> \(no pipeline data\))? "
+    r"\|(?P<n>\d+) \|(?P<err>\d+) \|(?P<warn>\d+)$", re.M)
+
+
+def _existing_summaries(output_dir: Path, exclude: set[str]) -> list[dict]:
+    """Index rows already on disk for modules that are not being regenerated now,
+    so regenerating one module doesn't drop the others from the index."""
+    index = output_dir / "validation.adoc"
+    if not index.is_file():
+        return []
+    out = []
+    for m in _INDEX_ROW_RE.finditer(index.read_text(encoding="utf-8")):
+        if m["name"] in exclude or not (output_dir / page_name(m["name"])).is_file():
+            continue
+        out.append({"name": m["name"], "conversations": int(m["n"]), "with_errors": int(m["err"]),
+                    "with_warnings": int(m["warn"]), "has_pipeline": m["note"] is None})
+    return out
 
 
 _ERRORS_PAGE_TEMPLATE = """
@@ -483,56 +575,59 @@ table.vr-table tr:hover td { background: #f0f2fa; }
 
 
 _PAGES_DIR = Path(__file__).parent / "docs/modules/ROOT/pages"
-DEFAULT_LOG_OUTPUT = _PAGES_DIR / "validation-log.adoc"
-DEFAULT_ERRORS_OUTPUT = _PAGES_DIR / "validation-errors.adoc"
 
 
 def generate_report(
     modules: list[Path],
-    log_output: Path = DEFAULT_LOG_OUTPUT,
-    errors_output: Path = DEFAULT_ERRORS_OUTPUT,
+    output_dir: Path = _PAGES_DIR,
     verbose: bool = True,
-) -> tuple[Path, Path]:
-    """Build both validation pages for *modules*. Returns (log_path, errors_path).
+) -> list[Path]:
+    """Write one validation-<module>.adoc per module, plus the validation.adoc
+    index, into *output_dir*. Returns the written paths.
 
     Shared by ``main()`` (CLI) and ``sync.py`` (called after a single-file
-    sync, to keep the pages current without a full module reprocess).
+    sync, to keep the pages current without a full module reprocess). Each
+    module page is built from that module's own data, so regenerating one
+    module never touches another module's page; the index keeps the rows of
+    modules that already have a page and aren't part of this run.
     """
-    module_reports = []
+    output_dir.mkdir(parents=True, exist_ok=True)
+    summaries, written = [], []
     for module_dir in modules:
         rows, has_pipeline = build_rows(module_dir)
-        module_reports.append((module_dir.name, rows, has_pipeline))
+        summaries.append(_summary(module_dir.name, rows, has_pipeline))
+        path = output_dir / page_name(module_dir.name)
+        path.write_text(render_module_page(module_dir.name, rows, has_pipeline), encoding="utf-8")
+        written.append(path)
         if verbose:
-            n_actionable = sum(1 for r in rows
-                                if r["missing_transcript"] or r["errors"] or r["metadata_issues"]
-                                or r["error_tokens"])
-            print(f"{module_dir.name}: {len(rows)} conversations, {n_actionable} need review")
+            print(f"{module_dir.name}: {len(rows)} conversations, "
+                  f"{summaries[-1]['with_errors']} need review -> {path.name}")
 
-    for output, render in ((log_output, render_log_adoc), (errors_output, render_errors_page)):
-        adoc = render(module_reports)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        output.write_text(adoc, encoding="utf-8")
-        if verbose:
-            print(f"wrote {output}")
-
-    return log_output, errors_output
+    summaries += _existing_summaries(output_dir, {m["name"] for m in summaries})
+    index = output_dir / "validation.adoc"
+    index.write_text(render_index(summaries), encoding="utf-8")
+    written.append(index)
+    if verbose:
+        print(f"wrote {index}")
+    return written
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--modules", nargs="+", type=Path,
                      help="Paths to module root directories. Default: auto-discover.")
-    ap.add_argument("--log-output", type=Path, default=DEFAULT_LOG_OUTPUT,
-                     help="Output path for the warnings diary page.")
-    ap.add_argument("--errors-output", type=Path, default=DEFAULT_ERRORS_OUTPUT,
-                     help="Output path for the filterable errors page.")
+    ap.add_argument("--output-dir", type=Path, default=_PAGES_DIR,
+                     help="Directory for validation.adoc and validation-<module>.adoc.")
     args = ap.parse_args()
 
-    modules = args.modules or discover_modules(Path(__file__).resolve().parent.parent)
+    root = Path(__file__).resolve().parent.parent
+    # Modules live next to the tools checkout, or in a sibling "moduli/" folder.
+    modules = args.modules or discover_modules(root) or (
+        discover_modules(root / "moduli") if (root / "moduli").is_dir() else [])
     if not modules:
         raise SystemExit("No modules found.")
 
-    generate_report(modules, args.log_output, args.errors_output)
+    generate_report(modules, args.output_dir)
 
 
 if __name__ == "__main__":

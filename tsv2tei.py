@@ -12,6 +12,8 @@ import re
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
+from variety import feat_value, feats_dict, iter_vert_rows
+
 TEI_NS = "http://www.tei-c.org/ns/1.0"
 XML_NS = "http://www.w3.org/XML/1998/namespace"
 T = f"{{{TEI_NS}}}"
@@ -80,7 +82,7 @@ def _with_prolongations(form: str, prolongations_field: str) -> str:
 def _units_from_vert(fobj) -> list[tuple[str, list[dict]]]:
     units: dict[str, list[dict]] = {}
     order: list[str] = []
-    for row in csv.DictReader(fobj, delimiter="\t"):
+    for row in iter_vert_rows(fobj, getattr(fobj, "name", "vert.tsv")):
         uid = row["tu_id"]
         if uid not in units:
             units[uid] = []
@@ -140,7 +142,7 @@ def _xid(val: str) -> str:
 
 # jefferson_feats keys encoded via dedicated attributes or structural elements
 _HANDLED_JF_KEYS = frozenset({
-    "Truncated", "Volume", "Language",
+    "Truncated", "Volume",
     "Intonation", "SpaceAfter", "ProsodicLink",
 })
 
@@ -204,10 +206,16 @@ def _add_feature_struct(w: ET.Element, tok: dict) -> None:
         if val and val not in ("_", ""):
             features.append((col, val))
 
-    for col in ("variation", "meta_label"):
-        val = tok.get(col, "_")
-        if val and val not in ("_", "", "none"):
-            features.append((col, val))
+    val = tok.get("meta_label", "_")
+    if val and val not in ("_", ""):
+        features.append(("meta_label", val))
+
+    # variation column: Language becomes xml:lang (see the <w> attributes);
+    # ContainsVariation=No is the default and carries no information here.
+    for k, v in feats_dict(tok.get("variation")).items():
+        if k == "Language" or (k == "ContainsVariation" and v == "No"):
+            continue
+        features.append((f"var.{k}", v))
 
     for k, v in _parse_kv(tok.get("jefferson_feats", "_")).items():
         if k not in _HANDLED_JF_KEYS:
@@ -263,7 +271,7 @@ def _add_token(parent: ET.Element, tok: dict, unit_id: str, idx: int) -> ET.Elem
     elif tok_type == "error":
         attribs["type"] = "error"
 
-    lang = jf.get("Language")
+    lang = feat_value(tok.get("variation"), "Language")
     if lang and lang != "ita":
         attribs[f"{X}lang"] = lang
 

@@ -556,6 +556,32 @@ def flag_empty_unit(annotation: str) -> tuple[int, str]:
     return 0, annotation
 
 
+def hash_unit_space(annotation: str) -> tuple[int, str]:
+    """Make the ``#_`` marker a standalone, whitespace-delimited token.
+
+    ``#_`` means "from here to the end of the unit is non-Italian", so it
+    has to be recognisable as its own token wherever it appears:
+
+      * ``[#_ word]``  -> ``#_ [word]``  (the overlap bracket moves after
+        the marker, so the marker itself is never inside an overlap span)
+      * ``word#_``     -> ``word #_``
+      * ``#_word``     -> ``#_ word``
+
+    Not part of WARNING_RULES: it must run *before* the TU-level ``#_``
+    detection in ``TranscriptionUnit.__post_init__`` (step 2b), which
+    otherwise skips normalization for non-Italian text. Applied there,
+    gated by the ``HASH_UNIT_SPACE`` normalization key.
+    """
+    count = 0
+    annotation, n = re.subn(r"\[#_ ?", "#_ [", annotation)
+    count += n
+    annotation, n = re.subn(r"(?<=\S)#_(?=\s|$)", " #_", annotation)
+    count += n
+    annotation, n = re.subn(r"(?<!\S)#_(?=\S)", "#_ ", annotation)
+    count += n
+    return count, annotation
+
+
 # ---------------------------------------------------------------------------
 # Rule registry
 #

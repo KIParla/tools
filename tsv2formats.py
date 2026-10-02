@@ -3,6 +3,8 @@ import sys
 import re
 import os
 import pathlib
+from textutil import ENCODING_READ, ENCODING_WRITE
+from variety import OrthographicMarkers, iter_vert_rows
 
 # orthographic = []
 # jefferson = []
@@ -13,11 +15,12 @@ def tsv2linear(input_files_paths, output_jefferson_path, output_orthographic_pat
 		p = pathlib.Path(filename)
 		basename = p.name.replace(".vert.tsv", "")
 
-		with open(filename) as fin, \
-			open(output_jefferson_path / f"{basename}.txt", "w") as fout_jeff, \
-			open(output_orthographic_path / f"{basename}.txt", "w") as fout_ortho:
+		with open(filename, encoding=ENCODING_READ, newline="") as fin, \
+			open(output_jefferson_path / f"{basename}.txt", "w", encoding=ENCODING_WRITE, newline="\n") as fout_jeff, \
+			open(output_orthographic_path / f"{basename}.txt", "w", encoding=ENCODING_WRITE, newline="\n") as fout_ortho:
 
-			csvFile = csv.DictReader(fin, delimiter='\t')
+			csvFile = iter_vert_rows(fin, filename)
+			markers = OrthographicMarkers()
 			tu_id = 0
 			tu_speaker = None
 			text_jefferson = []
@@ -26,7 +29,6 @@ def tsv2linear(input_files_paths, output_jefferson_path, output_orthographic_pat
 			for row in csvFile:
 				current_id = int(row['tu_id'])
 				current_speaker = row['speaker']
-				tu_variation = row.get('variation', 'none')
 				if tu_speaker is None:
 					tu_speaker = current_speaker
 
@@ -46,17 +48,15 @@ def tsv2linear(input_files_paths, output_jefferson_path, output_orthographic_pat
 					tu_speaker = current_speaker
 					text_jefferson = []
 					text_orthographic = []
+					markers = OrthographicMarkers()
 
-				# TU-level "# "/"#_" prefix: reconstruct it once, at the very
-				# first token of the unit (it is stripped before tokenization
-				# and otherwise never appears in either linear output).
-				if not text_jefferson and not text_orthographic:
-					if tu_variation == 'unspecified':
-						text_jefferson.append('# ')
-						text_orthographic.append('# ')
-					elif tu_variation == 'all':
-						text_jefferson.append('#_ ')
-						text_orthographic.append('#_ ')
+				# Variation markers live in the token spans, so the Jefferson
+				# text already contains them; for the orthographic text, put
+				# the unit-level "# "/"#_ " back once and the per-word
+				# "#"/"#*"/"$" in front of the word.
+				unit_prefix, word_prefix = markers.next(row)
+				if unit_prefix:
+					text_orthographic.append(unit_prefix)
 
 				if row['type'] in ['nonverbalbehavior', 'shortpause']:
 					text_jefferson.append(row['span'])
@@ -67,17 +67,7 @@ def tsv2linear(input_files_paths, output_jefferson_path, output_orthographic_pat
 
 				elif row['type'] in ['linguistic']:
 					text_jefferson.append(row['span'])
-					word = row['form']
-					feats = row['jefferson_feats']
-					# Per-word "#" marker: skip when the whole unit is already
-					# "#_"-prefixed above, to avoid marking every word twice.
-					if tu_variation != 'all' and 'Variation=Token' in feats:
-						word = '#' + word
-					elif 'Variation=Doubtful' in feats:
-						word = '#*' + word
-					elif 'Variation=Emerging' in feats:
-						word = '$' + word
-					text_orthographic.append(word)
+					text_orthographic.append(word_prefix + row['form'])
 
 				elif row['type'] in ['error']:
 					text_jefferson.append(row['span'])

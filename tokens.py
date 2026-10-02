@@ -26,14 +26,20 @@ class Token:
     # Text as it appears in the annotation (before feature extraction).
     orig_text: str
 
-    # Character span of orig_text within the TU annotation string.
+    # Character span of orig_text within the TU annotation string. When the
+    # token is the first one after a mid-unit "#_ " marker, the span starts at
+    # the marker (so the marker survives in the vert.tsv `span` column) and
+    # `marker_prefix` holds the marker text that precedes orig_text.
     span: tuple[int, int] = field(default_factory=lambda: (0, 0))
+    marker_prefix: str = field(default="", repr=False)
 
     # Normalized form: lowercase, no prolongations, no intonation punctuation.
     form: str = field(init=False)
 
     token_type: df.tokentype = field(init=False)
-    variation:  df.tokenvariation = field(init=False, default=df.tokenvariation.none)
+    variety:    df.tokenvariety = field(init=False, default=df.tokenvariety.none)
+    # "$word": a nonce / non-standard form (Nonce=Yes). Not a variety.
+    nonce:         bool           = field(init=False, default=False)
 
     # Feature flags
     intonation:    df.intonation  = field(init=False, default=df.intonation.plain)
@@ -45,7 +51,6 @@ class Token:
     volume:        Optional[df.volume] = field(init=False, default=None)
     non_ita:       bool           = field(init=False, default=False)
     iso_code:      str            = field(init=False, default="ita")
-    non_ortho:     bool           = field(init=False, default=False)
 
     # {char_index: colon_count}  — colons stripped from form
     prolongations: dict[int, int] = field(init=False, default_factory=dict)
@@ -148,28 +153,27 @@ class Token:
             self._extract_features()
             return
 
-        # 5. Doubtful variation (#*word) — checked before plain #
+        # 5. Unassignable variety (#*word) — checked before plain #
         if self._cfg_variation.get("hash_doubtful") and text.startswith("#*"):
-            self.variation = df.tokenvariation.doubtful
+            self.variety = df.tokenvariety.unassignable
             self.non_ita = True
             self.iso_code = "NO_ISO_CODE"
             text = text[2:]
 
-        # 6. Token variation (#word)
+        # 6. Other variety (#word)
         elif self._cfg_variation.get("hash_token") and text.startswith("#"):
-            self.variation = df.tokenvariation.token
+            self.variety = df.tokenvariety.other
             self.non_ita = True
             self.iso_code = "NO_ISO_CODE"
             text = text[1:]
 
-        # 7. Emerging variation ($word)
+        # 7. Nonce form ($word)
         elif self._cfg_variation.get("dollar") and text.startswith("$"):
-            self.variation = df.tokenvariation.emerging
-            self.non_ortho = True
+            self.nonce = True
             text = text[1:]
 
         # 8. Word regex
-        in_variation_context = self.variation != df.tokenvariation.none
+        in_variation_context = self.variety != df.tokenvariety.none or self.nonce
 
         word_re = re.compile(r"['~-]?(\p{L}+:*[-]?)*\p{L}+:*[-'~]?[.,?]?")
         po_re   = re.compile(r"po':*[.,?]?")
@@ -297,6 +301,10 @@ class Token:
 # Tokenization (step 5)
 # ---------------------------------------------------------------------------
 
+# Token types that are never reclassified by a #_ (non-Italian) marker.
+_LANGUAGE_NEUTRAL = (df.tokentype.shortpause | df.tokentype.nonverbalbehavior
+                     | df.tokentype.anonymized | df.tokentype.unknown)
+
 _WORD_RE = re.compile(r"['~-]?(\p{L}+:*[-]?)*\p{L}+:*[-'~]?[.,?]?")
 
 
@@ -325,11 +333,22 @@ def tokenize_tu(
 
     tokens: list[Token] = []
     char_pos = 0
+    # Mid-unit "#_": everything after the marker, to the end of the unit, is
+    # non-Italian. Remember where the marker starts and how many tokens
+    # precede it; the marker itself never becomes a token.
+    hash_unit_start: int | None = None
+    hash_unit_first_token = 0
 
     for part in parts:
         end_pos = char_pos + len(part)
 
         if part == " ":
+            char_pos = end_pos
+            continue
+
+        if part == "#_" and hash_unit_start is None:
+            hash_unit_start = char_pos
+            hash_unit_first_token = len(tokens)
             char_pos = end_pos
             continue
 
@@ -367,15 +386,38 @@ def tokenize_tu(
         tokens.append(tok)
         char_pos = end_pos
 
-    # 5e. Post-tokenize: language variation for #_-marked TUs. Each token is
-    # treated exactly as if it had carried an explicit #-prefix (Variation=Token
-    # in jefferson_feats), not just Language= — #_ is shorthand for marking
-    # every word in the unit, not a distinct per-token state.
+    # 5e. Post-tokenize: variety for marker-covered text.
+    #   "#_"  -> every token from the marker on is treated exactly as if it had
+    #            carried an explicit #-prefix (Variety=Other, plus Language=),
+    #            not a distinct per-token state. A unit-initial "#_"
+    #            (variation_context=all) covers the whole unit; a mid-unit "#_"
+    #            covers the tokens after it.
+    #   "# "  -> (unit-initial only; variation_context=unspecified) every token
+    #            not individually marked is Variety=Unsure.
+    foreign_from = None
     if df.languagevariation.all in variation_context:
-        for tok in tokens:
+        foreign_from = 0
+    elif hash_unit_start is not None and hash_unit_first_token < len(tokens):
+        foreign_from = hash_unit_first_token
+        first = tokens[foreign_from]
+        first.marker_prefix = annotation[hash_unit_start:first.span[0]]
+        first.span = (hash_unit_start, first.span[1])
+    if foreign_from is not None:
+        for tok in tokens[foreign_from:]:
+            # Pauses, non-verbal tags, anonymized names and unintelligible
+            # spans are not speech in any language: keep their type.
+            if tok.token_type & _LANGUAGE_NEUTRAL:
+                continue
             tok.token_type = df.tokentype.linguistic
             tok.set_language("NO_ISO_CODE")
-            tok.variation = df.tokenvariation.token
+            tok.variety = df.tokenvariety.other
+
+    if df.languagevariation.unspecified in variation_context:
+        for tok in tokens:
+            # An explicit #word / #*word keeps its own, more specific variety.
+            if tok.token_type & _LANGUAGE_NEUTRAL or tok.variety != df.tokenvariety.none:
+                continue
+            tok.variety = df.tokenvariety.unsure
 
     # PauseAfter pass: mark tokens immediately before a shortpause
     for i, tok in enumerate(tokens):

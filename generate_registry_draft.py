@@ -11,6 +11,7 @@ all UI choices perfectly.
 import argparse
 import csv
 from pathlib import Path
+from textutil import ENCODING_READ, ENCODING_WRITE
 
 
 MAXLISTSIZE_ZERO = {
@@ -50,7 +51,7 @@ EXCLUDED_SUBCORPATTRS = {
 
 
 def read_headers(path):
-    with open(path) as f:
+    with open(path, encoding=ENCODING_READ, newline="") as f:
         return next(csv.reader(f, delimiter="\t"))
 
 

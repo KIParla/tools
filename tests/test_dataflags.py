@@ -24,9 +24,9 @@ def test_languagevariation_all_values():
         assert hasattr(df.languagevariation, name)
 
 
-def test_tokenvariation_all_values():
-    for name in ("none", "token", "emerging", "doubtful"):
-        assert hasattr(df.tokenvariation, name)
+def test_tokenvariety_all_values():
+    for name in ("none", "other", "unassignable", "unsure"):
+        assert hasattr(df.tokenvariety, name)
 
 
 def test_volume_high_and_low_distinct():

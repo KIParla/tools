@@ -1,10 +1,9 @@
 """Tests for vert.tsv -> eaf reconstruction (serialize.vert_to_linear_rows / vert2eaf).
 
-TU-level "# " (variation=unspecified) and "#_" (variation=all) markers both
-round-trip losslessly — see the docstring of vert_to_linear_rows. This relies
-on `unspecified` (explicit TU-level marker) and `yes` (derived bottom-up from
-individually-marked tokens) being tracked as distinct languagevariation
-values; collapsing them back into one would reintroduce the ambiguity.
+Every variation marker round-trips losslessly — "#word", "#*word", "$word",
+a unit-initial "# " or "#_ ", and a mid-unit "#_ " — because each one is kept
+in the `span` of the token it precedes (see vert_to_linear_rows). The unit-level
+`contains_variation` column is only yes/no and is not needed for this.
 """
 
 import json
@@ -94,12 +93,45 @@ class TestVertToLinearRows:
 
     def test_tu_level_unspecified_prefix_reconstructed(self, tmp_path):
         """Explicit TU-level '# ' (undecidable attribution, no individually-
-        marked tokens) round-trips: variation=unspecified tells vert2eaf to
-        reconstruct the prefix."""
+        marked tokens) round-trips: the marker is in the first token's span."""
         t = _make_transcript(["# ciao come stai"])
         vert = _write_vert(t, tmp_path)
         rows = vert_to_linear_rows(vert)
         assert rows[0]["text"] == "# ciao come stai"
+
+    def test_every_marker_kind_round_trips_exactly(self, tmp_path):
+        texts = [
+            "#_ ciao come stai",                 # unit-initial #_
+            "# ciao come stai",                  # unit-initial "# "
+            "ciao #_ hola que tal",              # mid-unit #_
+            "ciao #word dopo",                   # #word
+            "ciao #*word dopo",                  # #*word
+            "ciao $word dopo",                   # $word
+            "# ciao #word $form #*mah",          # "# " unit with every explicit marker
+            "#_ hola $forma que",                # nonce inside a #_ stretch
+            "ciao #_ [hola] que",                # overlap bracket after the marker
+            "# ciao (.) mondo",                  # pause inside a "# " unit
+        ]
+        t = _make_transcript(texts)
+        vert = _write_vert(t, tmp_path)
+        rows = vert_to_linear_rows(vert)
+        assert [r["text"] for r in rows] == texts
+
+    def test_old_format_vert_is_rejected(self, tmp_path):
+        import pytest
+        vert = tmp_path / "old.vert.tsv"
+        vert.write_text("token_id\tspeaker\ttu_id\tvariation\n0-0\tA\t0\tall\n",
+                        encoding="utf-8")
+        with pytest.raises(SystemExit, match="old-format"):
+            vert_to_linear_rows(vert)
+
+    def test_interim_format_vert_is_rejected(self, tmp_path):
+        import pytest
+        vert = tmp_path / "interim.vert.tsv"
+        vert.write_text("token_id\tspeaker\ttu_id\tcontains_variation\n0-0\tA\t0\tyes\n",
+                        encoding="utf-8")
+        with pytest.raises(SystemExit, match="old-format"):
+            vert_to_linear_rows(vert)
 
     def test_tu_level_yes_not_re_prefixed(self, tmp_path):
         """A TU with no explicit '# ' prefix, only an individually-marked
@@ -220,3 +252,4 @@ class TestRoundTripIdempotency:
             assert r1["type"] == r2["type"]
             assert r1["jefferson_feats"] == r2["jefferson_feats"]
             assert r1["variation"] == r2["variation"]
+            assert r1["span"] == r2["span"]

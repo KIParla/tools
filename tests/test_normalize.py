@@ -1,3 +1,5 @@
+import pytest
+
 from conftest import load_tool_module
 
 normalize = load_tool_module("normalize")
@@ -795,3 +797,19 @@ def test_integration_warnings_accumulate_across_rules_with_same_label():
     # "[ ciao ]" triggers check_spaces (opening bracket) and check_spaces (closing bracket)
     _, warnings, _ = normalize.validate_and_normalize("[ ciao ]")
     assert warnings.get("UNEVEN_SPACES", 0) >= 2
+
+
+# ---------------------------------------------------------------------------
+# hash_unit_space  ("#_" as a standalone token)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("text, expected, count", [
+    ("[#_ xshshiti]",          "#_ [xshshiti]",          1),
+    ("ciao [#_ lavage] bella", "ciao #_ [lavage] bella", 1),
+    ("pisa.#_ hola",           "pisa. #_ hola",          1),
+    ("#_word che",             "#_ word che",            1),
+    ("#_ già ok",              "#_ già ok",              0),
+    ("a b #_",                 "a b #_",                 0),
+])
+def test_hash_unit_space(text, expected, count):
+    assert normalize.hash_unit_space(text) == (count, expected)

@@ -25,6 +25,8 @@ from typing import Optional
 
 import dataflags as df
 from data import Transcript, TranscriptionUnit
+from textutil import nfc, ENCODING_READ, ENCODING_WRITE
+from variety import iter_vert_rows
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +86,7 @@ def read_csv(
     transcript   = Transcript(path.stem)
     translations: list[dict] = []
 
-    with path.open(encoding="utf-8", newline="") as f:
+    with path.open(encoding=ENCODING_READ, newline="") as f:
         reader = csv.DictReader(f, delimiter="\t")
         for row in reader:
             speaker = row.get("speaker", "")
@@ -131,6 +133,20 @@ def read_csv(
 # Step 8a — Write vert.tsv
 # ---------------------------------------------------------------------------
 
+def _variation_feats(tok, tu) -> str:
+    """The ``variation`` column: every variation feature of a token, plus the
+    unit-level flag (see variety.py). Never empty: ContainsVariation is always
+    present."""
+    parts = [f"ContainsVariation={'Yes' if tu.contains_variation else 'No'}"]
+    if tok.variety != df.tokenvariety.none:
+        parts.append(f"Variety={tok.variety.name.capitalize()}")
+    if tok.non_ita:
+        parts.append(f"Language={tok.iso_code}")
+    if tok.nonce:
+        parts.append("Nonce=Yes")
+    return "|".join(parts)
+
+
 def _jefferson_feats(tok) -> str:
     """Render the pipe-separated jefferson_feats string for one token."""
     parts = []
@@ -157,20 +173,11 @@ def _jefferson_feats(tok) -> str:
     if tok.pauseafter:
         parts.append("PauseAfter=Yes")
 
-    if tok.non_ita:
-        parts.append(f"Language={tok.iso_code}")
-
-    if tok.non_ortho:
-        parts.append("Orthography=Yes")
-
     if tok.token_type == df.tokentype.anonymized:
         parts.append("Anonymized=Yes")
 
     if tok.volume is not None:
         parts.append(f"Volume={tok.volume.name}")
-
-    if tok.variation != df.tokenvariation.none:
-        parts.append(f"Variation={tok.variation.name.capitalize()}")
 
     if tok.syllables is not None:
         parts.append(f"Syllables={tok.syllables}")
@@ -229,9 +236,9 @@ def _span_field(spans: dict) -> str:
 
 def conversation_to_conll(transcript: Transcript, output_path: Path, sep: str = "\t"):
     """Write the vert.tsv file for *transcript* (step 8a)."""
-    with output_path.open("w", encoding="utf-8", newline="") as f:
+    with output_path.open("w", encoding=ENCODING_WRITE, newline="") as f:
         writer = csv.DictWriter(
-            f, fieldnames=VERT_FIELDNAMES, delimiter=sep, restval="_"
+            f, fieldnames=VERT_FIELDNAMES, delimiter=sep, restval="_", lineterminator="\n"
         )
         writer.writeheader()
 
@@ -244,7 +251,7 @@ def conversation_to_conll(transcript: Transcript, output_path: Path, sep: str = 
                     "speaker":       tu.speaker,
                     "tu_id":         tu.tu_id,
                     "id":            tok_idx,
-                    "span":          tu.annotation[tok.span[0]:tok.span[1]],
+                    "span":          tu.token_span_text(tok),
                     "form":          tok.form,
                     "lemma":         "_",
                     "upos":          "_",
@@ -253,7 +260,7 @@ def conversation_to_conll(transcript: Transcript, output_path: Path, sep: str = 
                     "deprel":        "_",
                     "type":          tok.token_type.name,
                     "meta_label":    "_",
-                    "variation":     tu.non_ita.name,
+                    "variation":     _variation_feats(tok, tu),
                     "jefferson_feats": _jefferson_feats(tok),
                     "align":         _align(tok, tu),
                     "prolongations": _prolongations(tok),
@@ -299,7 +306,7 @@ def build_json(transcript: Transcript) -> dict:
         spk["tokens-nvb"]      = spk.get("tokens-nvb", 0)      + sum(1 for t in tu.tokens if df.tokentype.nonverbalbehavior in t.token_type)
         spk["tokens-pause"]    = spk.get("tokens-pause", 0)    + sum(1 for t in tu.tokens if df.tokentype.shortpause     in t.token_type)
         spk["tokens-err"]      = spk.get("tokens-err", 0)      + sum(1 for t in tu.tokens if df.tokentype.error          in t.token_type)
-        spk["code-switching"]  = spk.get("code-switching", 0)  + (1 if tu.non_ita != df.languagevariation.none else 0)
+        spk["code-switching"]  = spk.get("code-switching", 0)  + (1 if tu.contains_variation else 0)
 
         for tok in tu.tokens:
             if df.tokentype.error in tok.token_type:
@@ -330,7 +337,7 @@ def build_json(transcript: Transcript) -> dict:
 def write_json(transcript: Transcript, output_path: Path):
     """Write the JSON summary file for *transcript* (step 8b)."""
     data = build_json(transcript)
-    with output_path.open("w", encoding="utf-8") as f:
+    with output_path.open("w", encoding=ENCODING_WRITE, newline="\n") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
@@ -340,9 +347,9 @@ def write_json(transcript: Transcript, output_path: Path):
 
 def write_translations(rows: list[dict], output_path: Path, sep: str = "\t"):
     """Write the translations TSV for extracted tiers (step 8c)."""
-    with output_path.open("w", encoding="utf-8", newline="") as f:
+    with output_path.open("w", encoding=ENCODING_WRITE, newline="") as f:
         writer = csv.DictWriter(
-            f, fieldnames=TRANSLATIONS_FIELDNAMES, delimiter=sep, restval="_"
+            f, fieldnames=TRANSLATIONS_FIELDNAMES, delimiter=sep, restval="_", lineterminator="\n"
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -360,7 +367,7 @@ def write_translations_json(rows: list[dict], output_path: Path):
         {field: row.get(field, "_") for field in TRANSLATIONS_FIELDNAMES}
         for row in rows
     ]
-    with output_path.open("w", encoding="utf-8") as f:
+    with output_path.open("w", encoding=ENCODING_WRITE, newline="\n") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 
@@ -471,7 +478,7 @@ def process(
 
 def load_annotations(fname):
     """Load YAML annotation file."""
-    with open(fname, "r", encoding="utf-8") as fh:
+    with open(fname, "r", encoding=ENCODING_READ) as fh:
         return yaml.safe_load(fh)
 
 
@@ -489,7 +496,7 @@ def eaf2csv(input_filename, output_filename, annotations, sep="\t"):
             _to_ts = f"{anno.to_ts.sec:.3f}" if anno.to_ts is not None else ""
             _duration = f"{anno.duration:.3f}" if anno.duration is not None else ""
             to_write = {
-                "speaker": tier.ID,
+                "speaker": nfc(tier.ID),
                 "start": _from_ts,
                 "end": _to_ts,
                 "duration": _duration,
@@ -497,7 +504,7 @@ def eaf2csv(input_filename, output_filename, annotations, sep="\t"):
                 "eaf_id": anno.ID,
                 "eaf_ref_id": getattr(anno, "ref", None).ID if getattr(anno, "ref", None) is not None else None,
             }
-            text_matches = re.split(r"^(id:)([0-9]+) ", anno.value.strip())
+            text_matches = re.split(r"^(id:)([0-9]+) ", nfc(anno.value).strip())
             to_write["text"] = text_matches[-1]
             if len(text_matches) > 1:
                 to_write["id"] = text_matches[2]
@@ -512,8 +519,8 @@ def eaf2csv(input_filename, output_filename, annotations, sep="\t"):
         to_remap[to_write["id"]] = el_no
         eaf_id_to_tu_id[to_write["eaf_id"]] = el_no
 
-    with open(output_filename, "w", encoding="utf-8", newline="") as fout:
-        writer = csv.DictWriter(fout, fieldnames=fieldnames, delimiter=sep, extrasaction="ignore")
+    with open(output_filename, "w", encoding=ENCODING_WRITE, newline="") as fout:
+        writer = csv.DictWriter(fout, fieldnames=fieldnames, delimiter=sep, extrasaction="ignore", lineterminator="\n")
         writer.writeheader()
         for to_write in full_file:
             ref_id = to_write.get("eaf_ref_id")
@@ -538,24 +545,17 @@ def vert_to_linear_rows(vert_path) -> list[dict]:
     """Reconstruct linear TU rows (tu_id/speaker/start/end/text/include) from
     a vert.tsv, for feeding into ``_csv2eaf_from_rows`` (see ``vert2eaf``).
 
-    Token-level variation markers (``#word``, ``$word``, ``#*word``) need no
-    special handling: they are preserved verbatim in each token's ``span``
-    (stripped only from ``form`` during tokenization, never from ``span``).
-
-    TU-level variation is reconstructed for ``variation=all`` (prepends
-    ``"#_ "``) and ``variation=unspecified`` (prepends ``"# "``) — the
-    explicit TU-level marker used when individual non-Italian tokens aren't
-    decidable. ``variation=yes`` (derived bottom-up from individually-marked
-    tokens) is never re-prefixed: those tokens already carry their own
-    marker in ``span``, so adding "# " would duplicate it.
+    Every variation marker (``#word``, ``#*word``, ``$word``, a unit-initial
+    ``"# "`` / ``"#_ "`` and a mid-unit ``"#_ "``) is preserved verbatim in the
+    ``span`` of the token it precedes, so the text is rebuilt from spans alone
+    and the ``contains_variation`` column is not needed.
     """
     vert_path = Path(vert_path)
     rows: list[dict] = []
 
-    with vert_path.open(encoding="utf-8", newline="") as f:
+    with vert_path.open(encoding=ENCODING_READ, newline="") as f:
         for tu_id, tok_rows in units_from_conll(f, source_col="tu_id"):
             speaker = tok_rows[0]["speaker"]
-            variation = tok_rows[0].get("variation", "none")
 
             text_parts = []
             for i, tok in enumerate(tok_rows):
@@ -570,11 +570,6 @@ def vert_to_linear_rows(vert_path) -> list[dict]:
                 else:
                     text_parts.append(" ")
             text = "".join(text_parts)
-
-            if variation == "unspecified":
-                text = "# " + text
-            elif variation == "all":
-                text = "#_ " + text
 
             m_start = _BEGIN_RE.search(tok_rows[0].get("align", "") or "")
             m_end = _END_RE.search(tok_rows[-1].get("align", "") or "")
@@ -604,8 +599,7 @@ def vert2eaf(vert_path, linked_file, output_filename,
             file, reattached as ``_trad`` ref-annotation tiers exactly like
             ``csv2eaf``'s ``translations_path`` (same underlying logic).
 
-    See ``vert_to_linear_rows`` for exactly what round-trips and what is a
-    documented, accepted lossy case (TU-level "# " variation marker).
+    See ``vert_to_linear_rows`` for exactly what round-trips.
     """
     rows = vert_to_linear_rows(vert_path)
     _csv2eaf_from_rows(rows, linked_file, output_filename,
@@ -616,7 +610,7 @@ def vert2eaf(vert_path, linked_file, output_filename,
 def _read_linear_rows(input_filename, sep="\t") -> list[dict]:
     """Read a pipeline linear CSV (tu_id/speaker/start/end/text/[include]) into rows."""
     rows = []
-    with open(input_filename, encoding="utf-8") as csvfile:
+    with open(input_filename, encoding=ENCODING_READ) as csvfile:
         reader = csv.DictReader(csvfile, delimiter=sep)
         for row in reader:
             if "speaker" in row:
@@ -669,7 +663,10 @@ def _csv2eaf_from_rows(tus, linked_file, output_filename,
             pass
 
     doc = EL.Eaf(author="automatic_pipeline")
-    doc.add_linked_file(linked_file, relpath=linked_file)
+    # pympi's MIMES table has no mp3 entry; pass the type explicitly for it.
+    _ext = str(linked_file).rsplit(".", 1)[-1].lower()
+    doc.add_linked_file(linked_file, relpath=linked_file,
+                        mimetype={"mp3": "audio/mpeg"}.get(_ext))
     for tier_id in tiers:
         doc.add_tier(tier_id=tier_id)
 
@@ -693,7 +690,7 @@ def _csv2eaf_from_rows(tus, linked_file, output_filename,
     if translations_path is not None:
         translations_path = Path(translations_path)
         if translations_path.is_file():
-            with translations_path.open(encoding="utf-8") as jf:
+            with translations_path.open(encoding=ENCODING_READ) as jf:
                 translation_rows = json.load(jf)
 
             trad_ling = "traduzione"
@@ -731,6 +728,11 @@ def _csv2eaf_from_rows(tus, linked_file, output_filename,
                     logger.error("Failed to attach translation tu_id=%s to parent_tu_id=%s: %s",
                                  row.get("tu_id"), parent_tu_id, e)
 
+    # pympi always creates an empty "default" tier; drop it unless something
+    # actually lives in it (ELAN would otherwise show a stray empty tier).
+    if "default" in doc.tiers and "default" not in tiers and not doc.tiers["default"][0]:
+        doc.remove_tier("default")
+
     doc.to_file(output_filename)
 
 
@@ -741,7 +743,7 @@ def _csv2eaf_from_rows(tus, linked_file, output_filename,
 def conversation_to_linear(transcript, output_filename, sep="\t"):
     """Write one row per TU with warnings, errors and token-type counts."""
     fieldnames = [
-        "tu_id", "speaker", "start", "end", "duration", "include", "variation",
+        "tu_id", "speaker", "start", "end", "duration", "include", "contains_variation",
         "W:normalized_spaces", "W:numbers", "W:accents", "W:non_jefferson",
         "W:pauses_trim", "W:prosodic_trim", "W:moved_boundaries", "W:switches",
         "W:overlap_mismatch",
@@ -751,28 +753,19 @@ def conversation_to_linear(transcript, output_filename, sep="\t"):
         "original", "text", "orthographic",
     ]
 
-    with open(output_filename, "w", encoding="utf-8") as fout:
-        writer = csv.DictWriter(fout, fieldnames=fieldnames, delimiter=sep, restval="_")
+    with open(output_filename, "w", encoding=ENCODING_WRITE, newline="\n") as fout:
+        writer = csv.DictWriter(fout, fieldnames=fieldnames, delimiter=sep, restval="_", lineterminator="\n")
         writer.writeheader()
 
         for tu in transcript.transcription_units:
             if not tu.include:
                 continue
-            variation = "_"
-            if tu.non_ita != df.languagevariation.none:
-                variation = tu.non_ita.name
-
             text = tu.annotation
             orthographic = " ".join(tok.form for tok in tu.tokens)
 
-            # Only `unspecified` (explicit TU-level "# " prefix) re-adds the
-            # marker text — `yes` (derived bottom-up from individually-marked
-            # tokens) already has each marker preserved in its own token span,
-            # so re-adding "# " here would duplicate it.
-            if df.languagevariation.unspecified in tu.non_ita:
-                text = "# " + text
-            if df.languagevariation.all in tu.non_ita:
-                text = "#_ " + text
+            # The unit-initial marker is stripped from the annotation (all
+            # other markers stay in it): put it back in front of the text.
+            text = tu.unit_marker + text
 
             errors_str = " ".join(tok.form for tok in tu.tokens
                                   if df.tokentype.error in tok.token_type)
@@ -792,7 +785,7 @@ def conversation_to_linear(transcript, output_filename, sep="\t"):
                 "end": tu.end,
                 "duration": tu.duration,
                 "include": tu.include,
-                "variation": variation,
+                "contains_variation": "yes" if tu.contains_variation else "no",
                 "original": tu.orig_annotation,
                 "text": text,
                 "orthographic": orthographic,
@@ -831,7 +824,7 @@ def conversation_to_linear(transcript, output_filename, sep="\t"):
 def transcript_from_csv(input_filename, sep="\t"):
     """Build a Transcript from a pipeline CSV (does not run full pipeline)."""
     transcript = Transcript(Path(input_filename).stem)
-    with open(input_filename, encoding="utf-8", newline="") as csvfile:
+    with open(input_filename, encoding=ENCODING_READ, newline="") as csvfile:
         reader = csv.DictReader(csvfile, delimiter=sep)
         for row in reader:
             new_tu = TranscriptionUnit(
@@ -853,8 +846,8 @@ def transcript_from_csv(input_filename, sep="\t"):
 def print_aligned(tokens_a, tokens_b, output_filename, sep="\t"):
     """Write token-pair alignment output (match/id_A/token_A/id_B/token_B)."""
     fieldnames = ["match", "id_A", "token_A", "id_B", "token_B"]
-    with open(output_filename, "w", encoding="utf-8") as fout:
-        writer = csv.DictWriter(fout, fieldnames=fieldnames, delimiter=sep, restval="_")
+    with open(output_filename, "w", encoding=ENCODING_WRITE, newline="\n") as fout:
+        writer = csv.DictWriter(fout, fieldnames=fieldnames, delimiter=sep, restval="_", lineterminator="\n")
         writer.writeheader()
         for toka, tokb in zip(tokens_a, tokens_b):
             row = {"match": 2, "id_A": "_", "token_A": "_", "id_B": "_", "token_B": "_"}
@@ -902,8 +895,7 @@ def units_from_conll(fobj, source_col="tu_id"):
     """Yield (unit_id, rows) groups from a CoNLL TSV file object."""
     curr_sent = []
     curr_unit = "0"
-    reader = csv.DictReader(fobj, delimiter="\t")
-    for row in reader:
+    for row in iter_vert_rows(fobj, getattr(fobj, "name", "vert.tsv")):
         unit = row[source_col]
         if unit == curr_unit or unit == "_":
             curr_sent.append(row)
@@ -918,8 +910,8 @@ def units_from_conll(fobj, source_col="tu_id"):
 
 def conll2conllu(filename, output_filename):
     """Convert a pipeline CoNLL TSV to CoNLL-U format."""
-    with open(filename, encoding="utf-8") as fin, \
-         open(output_filename, "w", encoding="utf-8") as fout:
+    with open(filename, encoding=ENCODING_READ) as fin, \
+         open(output_filename, "w", encoding=ENCODING_WRITE, newline="\n") as fout:
         for unit_id, unit in units_from_conll(fin):
             metadata = {"sent_id": unit_id, "text": "", "jefferson_text": "", "speaker": ""}
             token_added = False

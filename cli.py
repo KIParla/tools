@@ -12,6 +12,7 @@ import tqdm
 import yaml
 
 import args_check as ac
+import audio_check
 import config as config_mod
 import serialize
 import tsv2eaf_layered
@@ -166,6 +167,7 @@ def _process(args):
             annotations=annotations[name], return_transcript=True,
             translations_dir=translations_dir, reports_dir=reports_dir,
         )
+        audio_check.annotate_summary(summary, transcript, module_root, args.audio_dir, cfg)
         transcripts[name] = transcript
         full_data.append(summary)
         serialize.conversation_to_linear(transcript, csv_dir / f"{name}.csv")
@@ -403,6 +405,10 @@ def main():
     p.add_argument("--csv-dir", type=ac.valid_dirpath,
                    help="directory for the linear *.csv TU summary. "
                         "Default: <output-dir>/../tmp/process/csv")
+    p.add_argument("--audio-dir", type=ac.valid_dirpath,
+                   help="directory with the audio files (<code>.mp3/.wav/...): the audio-length "
+                        "check measures them; default: use `duration` from "
+                        "<module>/metadata/conversations.tsv")
     p.add_argument("--no-eaf", dest="eaf", action="store_false",
                    help="skip rendering the per-conversation .eaf files")
     p.add_argument("--eaf-dir", type=ac.valid_dirpath,

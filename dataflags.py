@@ -39,8 +39,13 @@ class languagevariation(Flag):
     all = auto()
 
 
-class tokenvariation(Flag):
+class tokenvariety(Flag):
+    """Token-level variety, written to jefferson_feats as ``Variety=<Name>``.
+
+    ``$word`` (a nonce / non-standard form) is *not* a variety: it is the
+    independent ``Nonce=Yes`` feature (Token.nonce).
+    """
     none = auto()
-    token = auto()     # #word  → Variation=Token
-    emerging = auto()  # $word  → Variation=Emerging
-    doubtful = auto()  # #*word → Variation=Doubtful
+    other = auto()          # #word, or inside a "#_" stretch → Variety=Other
+    unassignable = auto()   # #*word                          → Variety=Unassignable
+    unsure = auto()         # inside a unit starting with "# " → Variety=Unsure

@@ -58,6 +58,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from variety import OrthographicMarkers, iter_vert_rows
+
 
 # ── colour palette assigned round-robin to speakers ───────────────────────────
 # Muted multi-hue set, chosen to sit next to the kiparla.it brand red
@@ -139,22 +141,19 @@ def load_turns(path):
     return turns
 
 
-def _append_unit_text(text_jefferson, text_orthographic, row):
+def _append_unit_text(text_jefferson, text_orthographic, row, markers):
     rtype = row.get("type", "")
     span = row.get("span", "")
     form = row.get("form", "")
     feats = row.get("jefferson_feats", "")
-    tu_variation = row.get("variation", "none")
 
-    # TU-level "# "/"#_" prefix: reconstruct it once, at the very first token
-    # of the unit — mirrors tools/tsv2formats.py so alignment text matches.
-    if not text_jefferson and not text_orthographic:
-        if tu_variation == "unspecified":
-            text_jefferson.append("# ")
-            text_orthographic.append("# ")
-        elif tu_variation == "all":
-            text_jefferson.append("#_ ")
-            text_orthographic.append("#_ ")
+    # Variation markers live in the token spans (so the Jefferson text already
+    # has them); for the orthographic text, put the unit-level "# "/"#_ " back
+    # once and the per-word "#"/"#*"/"$" in front of the word — mirrors
+    # tools/tsv2formats.py so alignment text matches.
+    unit_prefix, word_prefix = markers.next(row)
+    if unit_prefix:
+        text_orthographic.append(unit_prefix)
 
     if rtype in ["nonverbalbehavior", "shortpause"]:
         text_jefferson.append(span)
@@ -163,14 +162,7 @@ def _append_unit_text(text_jefferson, text_orthographic, row):
         text_orthographic.append("".join(c for c in span if c == "x"))
     elif rtype in ["linguistic"]:
         text_jefferson.append(span)
-        word = form
-        if tu_variation != "all" and "Variation=Token" in feats:
-            word = "#" + word
-        elif "Variation=Doubtful" in feats:
-            word = "#*" + word
-        elif "Variation=Emerging" in feats:
-            word = "$" + word
-        text_orthographic.append(word)
+        text_orthographic.append(word_prefix + form)
     elif rtype in ["error"]:
         text_jefferson.append(span)
         text_orthographic.append("".join(c for c in form if c.isalpha()))
@@ -207,8 +199,9 @@ def load_tsv_units(tsv_path):
     text_jefferson = []
     text_orthographic = []
 
-    with open(tsv_path, encoding="utf-8") as f:
-        for row in csv.DictReader(f, delimiter="\t"):
+    markers = OrthographicMarkers()
+    with open(tsv_path, encoding="utf-8-sig", newline="") as f:
+        for row in iter_vert_rows(f, tsv_path):
             tid = row.get("tu_id", "")
             speaker = row.get("speaker", "").strip()
             if current_tu is None:
@@ -228,6 +221,7 @@ def load_tsv_units(tsv_path):
                 end_ms = None
                 text_jefferson = []
                 text_orthographic = []
+                markers = OrthographicMarkers()
 
             align = row.get("align", "")
             for part in align.split("|"):
@@ -242,7 +236,7 @@ def load_tsv_units(tsv_path):
                     except ValueError:
                         pass
 
-            _append_unit_text(text_jefferson, text_orthographic, row)
+            _append_unit_text(text_jefferson, text_orthographic, row, markers)
 
     if current_tu is not None:
         units.append(

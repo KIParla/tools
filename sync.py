@@ -4,7 +4,7 @@ sync.py — One-shot, one-directional sync between a single .eaf and its .vert.t
 
 Usage:
     python sync.py --from-eaf <path/to/X.eaf> [--module NAME]
-    python sync.py --from-vert <path/to/X.vert.tsv> [--module NAME]
+    python sync.py --from-vert <path/to/X.vert.tsv> [--module NAME] [--audio-ext mp3]
 
 Run manually after an editing session (opening/saving in ELAN, or
 hand-editing a vert.tsv) to propagate the change and refresh derived
@@ -41,6 +41,7 @@ import json
 import tempfile
 from pathlib import Path
 
+import audio_check
 import config as config_mod
 import serialize
 import tsv2formats
@@ -83,14 +84,14 @@ def _refresh_module_checks(module_dir: Path) -> None:
     add_unknown_participant_column(module_dir)
 
 
-def _refresh_validation_report(tools_dir: Path) -> None:
-    modules = discover_modules(tools_dir.parent)
-    if modules:
-        generate_report(modules, verbose=False)
-        print("refreshed docs/modules/ROOT/pages/validation-log.adoc and validation-errors.adoc")
+def _refresh_validation_report(module_dir: Path) -> None:
+    """Rebuild only this module's validation page (and the index)."""
+    written = generate_report([module_dir], verbose=False)
+    print(f"refreshed docs/modules/ROOT/pages/{written[0].name} and validation.adoc")
 
 
-def sync_from_eaf(eaf_path: Path, module_override: str | None) -> None:
+def sync_from_eaf(eaf_path: Path, module_override: str | None,
+                  audio_dir: Path | None = None) -> None:
     module_dir, module_name = _resolve_module(eaf_path, module_override)
     cfg = config_mod.load_config(module_name)
     cfg.setdefault("overlaps", {}).setdefault("duration_threshold", 0.1)
@@ -111,6 +112,13 @@ def sync_from_eaf(eaf_path: Path, module_override: str | None) -> None:
         )
         serialize.conversation_to_linear(transcript, csv_dir / f"{eaf_path.stem}.csv")
 
+    audio_check.annotate_summary(summary, transcript, module_dir, audio_dir, cfg)
+    check = summary.get("AUDIO_CHECK") or {}
+    if check.get("status") in ("overrun", "underrun"):
+        print(f"WARNING {eaf_path.stem}: {check['status']} — last annotation at "
+              f"{check['last_annotation_seconds']:.0f}s, audio {check['audio_seconds']:.0f}s "
+              f"({check['source']}); see the validation page")
+
     _update_summary_json(reports_dir, summary)
     print(f"eaf -> tsv/{eaf_path.stem}.vert.tsv")
 
@@ -119,10 +127,11 @@ def sync_from_eaf(eaf_path: Path, module_override: str | None) -> None:
     print(f"tsv -> linear-jefferson/, linear-orthographic/ ({eaf_path.stem})")
 
     _refresh_module_checks(module_dir)
-    _refresh_validation_report(Path(__file__).resolve().parent)
+    _refresh_validation_report(module_dir)
 
 
-def sync_from_vert(vert_path: Path, module_override: str | None, audio_dir: Path | None) -> None:
+def sync_from_vert(vert_path: Path, module_override: str | None, audio_dir: Path | None,
+                   audio_ext: str = "wav") -> None:
     module_dir, _module_name = _resolve_module(vert_path, module_override)
 
     stem = vert_path.name
@@ -133,9 +142,9 @@ def sync_from_vert(vert_path: Path, module_override: str | None, audio_dir: Path
     if not translations_path.is_file():
         translations_path = None
 
-    linked_file = f"{stem}.wav"
+    linked_file = f"{stem}.{audio_ext}"
     if audio_dir:
-        linked_file = str(audio_dir / f"{stem}.wav")
+        linked_file = str(audio_dir / f"{stem}.{audio_ext}")
 
     eaf_out = module_dir / "eaf" / f"{stem}.eaf"
     serialize.vert2eaf(vert_path, linked_file, eaf_out, translations_path=translations_path)
@@ -145,7 +154,7 @@ def sync_from_vert(vert_path: Path, module_override: str | None, audio_dir: Path
     print(f"tsv -> linear-jefferson/, linear-orthographic/ ({stem})")
 
     _refresh_module_checks(module_dir)
-    _refresh_validation_report(Path(__file__).resolve().parent)
+    _refresh_validation_report(module_dir)
     print("NOTE: pipeline warnings/errors in the validation report were not "
           "refreshed for this file (that requires reprocessing the eaf, the "
           "reverse direction this command doesn't auto-trigger).")
@@ -157,17 +166,24 @@ def main():
     group.add_argument("--from-eaf", type=Path, help="Path to a single .eaf file.")
     group.add_argument("--from-vert", type=Path, help="Path to a single .vert.tsv file.")
     ap.add_argument("--module", help="Override module config name (default: inferred from path).")
-    ap.add_argument("--audio-dir", type=Path, help="--from-vert only: directory for the linked .wav file.")
+    ap.add_argument("--audio-dir", type=Path,
+                    help="Directory with the audio files (<code>.mp3/.wav/...). --from-eaf: "
+                         "measure the real audio length for the audio-length check (default: "
+                         "use `duration` from conversations.tsv). --from-vert: directory for "
+                         "the linked audio file.")
+    ap.add_argument("--audio-ext", default="wav",
+                    help="--from-vert only: extension of the linked audio file (default: wav; "
+                         "use mp3 for modules distributed with MP3 audio).")
     args = ap.parse_args()
 
     if args.from_eaf:
         if not args.from_eaf.is_file():
             raise SystemExit(f"Not a file: {args.from_eaf}")
-        sync_from_eaf(args.from_eaf, args.module)
+        sync_from_eaf(args.from_eaf, args.module, args.audio_dir)
     else:
         if not args.from_vert.is_file():
             raise SystemExit(f"Not a file: {args.from_vert}")
-        sync_from_vert(args.from_vert, args.module, args.audio_dir)
+        sync_from_vert(args.from_vert, args.module, args.audio_dir, args.audio_ext)
 
 
 if __name__ == "__main__":

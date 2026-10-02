@@ -580,3 +580,97 @@ class TestTranscript:
         t.sort()
         ids = [tu.tu_id for tu in t]
         assert ids == [0, 1]
+
+
+# ---------------------------------------------------------------------------
+# Mid-unit "#_": non-Italian from the marker to the end of the unit
+# ---------------------------------------------------------------------------
+
+_HASH_CFG = {
+    "normalization": {"HASH_UNIT_SPACE": True},
+    "variation_markers": {"hash_token": True, "dollar": True, "hash_doubtful": True},
+}
+
+
+def _tu(text, cfg=_HASH_CFG):
+    tu = TranscriptionUnit(0, "S", 0, 1, 1, text, cfg=cfg)
+    tu.tokenize()
+    return tu
+
+
+class TestHashUnitMidMarker:
+
+    def test_only_tokens_after_marker_are_non_italian(self):
+        tu = _tu("ciao come #_ bḥāl wāḥd")
+        assert [t.form for t in tu.tokens] == ["ciao", "come", "bḥāl", "wāḥd"]
+        assert [t.non_ita for t in tu.tokens] == [False, False, True, True]
+        assert all(t.iso_code == "NO_ISO_CODE" for t in tu.tokens[2:])
+        assert all(t.variety == df.tokenvariety.other for t in tu.tokens[2:])
+        assert tu.non_ita == df.languagevariation.yes
+
+    def test_marker_is_not_a_token_but_is_kept_in_first_span(self):
+        tu = _tu("ciao #_ hola que")
+        assert len(tu.tokens) == 3
+        spans = [tu.annotation[t.span[0]:t.span[1]] for t in tu.tokens]
+        assert spans == ["ciao", "#_ hola", "que"]
+
+    def test_italian_part_is_normalized_foreign_part_is_not(self):
+        # "perchè" is accent-corrected before the marker, not after it.
+        tu = _tu("perchè #_ perchè")
+        assert tu.annotation == "perché #_ perchè"
+
+    def test_bracket_before_marker_is_moved_after_it(self):
+        tu = _tu("ciao [#_ lavage] bella")
+        assert tu.annotation == "ciao #_ [lavage] bella"
+        assert tu.warnings["HASH_UNIT_SPACE"] == 1
+        assert [t.non_ita for t in tu.tokens] == [False, True, True]
+        assert tu.overlapping_spans == [(8, 16)]
+
+    def test_marker_glued_to_previous_word(self):
+        tu = _tu("pisa.#_ hola")
+        assert [t.form for t in tu.tokens] == ["pisa", "hola"]
+        assert [t.non_ita for t in tu.tokens] == [False, True]
+
+    def test_unit_initial_bracket_marker_keeps_overlap(self):
+        tu = _tu("[#_ xshshiti]")
+        assert tu.non_ita == df.languagevariation.all
+        assert tu.annotation == "[xshshiti]"
+        assert tu.overlapping_spans == [(0, 10)]
+        assert tu.tokens[0].non_ita
+
+    def test_marker_with_nothing_after_is_dropped(self):
+        tu = _tu("ciao #_")
+        assert tu.annotation == "ciao"
+        assert not any(t.non_ita for t in tu.tokens)
+
+    def test_overlap_offsets_stay_aligned_after_marker(self):
+        tu = _tu("ciao #_ ho[la] que")
+        tu.add_token_features()
+        # "ola" chars of "hola" are inside the overlap; marker prefix must not shift them
+        assert tu.overlapping_spans == [(10, 14)]
+
+
+class TestHashUnitLanguageNeutralTokens:
+    """Pauses, NVB tags, anonymized names and unknown spans keep their type
+    (and carry no language) inside a non-Italian stretch."""
+
+    @pytest.mark.parametrize("text", [
+        "#_ hola (.) que @sara xxx ((ride forte)) tal",   # whole unit
+        "ciao #_ hola (.) que @sara xxx ((ride forte)) tal",  # mid-unit
+    ])
+    def test_neutral_tokens_keep_type(self, text):
+        tu = _tu(text)
+        types = {t.form: t.token_type for t in tu.tokens}
+        assert types["(.)"] == df.tokentype.shortpause
+        assert types["@sara"] == df.tokentype.anonymized
+        assert types["xxx"] == df.tokentype.unknown
+        assert types["((ride_forte))"] == df.tokentype.nonverbalbehavior
+        for f in ("(.)", "@sara", "xxx", "((ride_forte))"):
+            assert not next(t for t in tu.tokens if t.form == f).non_ita
+        for f in ("hola", "que", "tal"):
+            tok = next(t for t in tu.tokens if t.form == f)
+            assert tok.non_ita and tok.token_type == df.tokentype.linguistic
+
+    def test_nvb_spaces_collapsed_in_foreign_text(self):
+        tu = _tu("#_ hola ((ride forte)) tal")
+        assert "((ride_forte))" in tu.annotation

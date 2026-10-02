@@ -22,7 +22,11 @@ import networkx as nx
 import regex as re
 
 import dataflags as df
-from normalize import validate_and_normalize, _mask_non_guess_parens, is_reduction_candidate_span as _is_reduction_candidate_span
+from normalize import (
+    validate_and_normalize, hash_unit_space, check_normal_parentheses, meta_tag,
+    _mask_non_guess_parens, is_reduction_candidate_span as _is_reduction_candidate_span,
+)
+from textutil import nfc
 from tokens import Token, tokenize_tu
 
 logger = logging.getLogger(__name__)
@@ -56,6 +60,10 @@ class TranscriptionUnit:
     orig_annotation: str = field(init=False, default="")
     include: bool = field(init=False, default=True)
     non_ita: df.languagevariation = field(init=False, default=df.languagevariation.none)
+    # Unit-initial marker stripped from `annotation` in step 2b ("#_ " or "# ").
+    # serialize prepends it to the span of the unit's first token, so every
+    # marker can be read back from the `span` column alone.
+    unit_marker: str = field(init=False, default="")
 
     # Span positions (char offsets into the normalized annotation), step 2f.
     overlapping_spans: list[tuple[int, int]] = field(init=False, default_factory=list)
@@ -92,27 +100,65 @@ class TranscriptionUnit:
             self.include = False
             return
 
-        self.annotation = self.annotation.strip()
+        self.annotation = nfc(self.annotation).strip()
+
+        norm_cfg = self.cfg.get("normalization", {})
+
+        # 2b0. Make "#_" a standalone token wherever it appears (HASH_UNIT_SPACE):
+        # "[#_ w]" -> "#_ [w]", "w#_" -> "w #_", "#_w" -> "#_ w".
+        if norm_cfg.get("HASH_UNIT_SPACE") and "#_" in self.annotation:
+            count, self.annotation = hash_unit_space(self.annotation)
+            if count:
+                self.warnings["HASH_UNIT_SPACE"] += count
 
         # 2b. TU-level language variation markers.
         if self.annotation.startswith("#_"):
             self.non_ita = df.languagevariation.all
-            self.annotation = self.annotation[2:].strip()
+            self.unit_marker = "#_ "
+            self.annotation = self._clean_foreign(self.annotation[2:])
+            self._extract_foreign_overlap_spans()
             # Skip normalization for entirely non-Italian TUs.
             return
 
         if self.annotation.startswith("# "):
             self.non_ita = df.languagevariation.unspecified
+            self.unit_marker = "# "
             self.annotation = self.annotation[1:].strip()
 
-        # 2c–2g. Normalize, error-check, conditional fixes, symbol corrections.
-        # validate_and_normalize covers: warning rules (SYMBOL_NOT_ALLOWED, META_TAGS,
-        # UNEVEN_SPACES, TRIM_PAUSES, TRIM_PROSODICLINKS, OVERLAP_PROLONGATION,
-        # MULTIPLE_SPACES, ACCENTS, NUMBERS, check_spaces_dots, check_spaces_angular,
-        # SWITCHES, remove_empty_spans, flag_empty_unit) and error rules
-        # (UNBALANCED_DOTS, UNBALANCED_PACE, UNBALANCED_GUESS, UNBALANCED_OVERLAP).
-        norm_cfg = self.cfg.get("normalization", {})
-        normalized, warnings, errors = validate_and_normalize(self.annotation, norm_cfg)
+        # 2b'. Mid-unit "#_": everything from the marker to the end of the unit
+        # is non-Italian. Only the Italian part before it is normalized; the
+        # non-Italian rest is kept as transcribed (like a whole "#_" unit),
+        # apart from collapsing repeated spaces. The marker stays in the
+        # annotation as a standalone token — tokenize_tu consumes it and
+        # records it on the first non-Italian token (Token.marker_prefix) so
+        # it survives in that token's `span`.
+        hash_unit = re.search(r"(?<!\S)#_(?!\S)", self.annotation)
+        if hash_unit:
+            prefix = self.annotation[:hash_unit.start()].strip()
+            suffix = self._clean_foreign(self.annotation[hash_unit.end():])
+            normalized, warnings, _ = validate_and_normalize(prefix, norm_cfg)
+            # Structural errors (unbalanced brackets, ...) are judged on the
+            # whole unit: a span may legitimately open before the marker and
+            # close after it.
+            _, _, errors = validate_and_normalize(f"{prefix} {suffix}", norm_cfg)
+            if normalized and suffix:
+                normalized = f"{normalized} #_ {suffix}"
+            elif suffix:
+                # Nothing but symbols before the marker: whole unit is non-Italian.
+                self.non_ita = df.languagevariation.all
+                self.unit_marker = "#_ "
+                self.annotation = suffix
+                self._extract_foreign_overlap_spans()
+                return
+            # (marker with nothing after it: dropped, unit keeps its Italian part)
+        else:
+            # 2c–2g. Normalize, error-check, conditional fixes, symbol corrections.
+            # validate_and_normalize covers: warning rules (SYMBOL_NOT_ALLOWED, META_TAGS,
+            # UNEVEN_SPACES, TRIM_PAUSES, TRIM_PROSODICLINKS, OVERLAP_PROLONGATION,
+            # MULTIPLE_SPACES, ACCENTS, NUMBERS, check_spaces_dots, check_spaces_angular,
+            # SWITCHES, remove_empty_spans, flag_empty_unit) and error rules
+            # (UNBALANCED_DOTS, UNBALANCED_PACE, UNBALANCED_GUESS, UNBALANCED_OVERLAP).
+            normalized, warnings, errors = validate_and_normalize(self.annotation, norm_cfg)
 
         for key, count in warnings.items():
             self.warnings[key] += count
@@ -166,6 +212,48 @@ class TranscriptionUnit:
                 else:
                     self.guessing_spans.append((start, end))
 
+    @property
+    def contains_variation(self) -> bool:
+        """True when any token carries a variety (Other / Unassignable /
+        Unsure). Written to the vert.tsv ``contains_variation`` column and to
+        the NoSketch ``contains_variation`` unit attribute. ``$`` (nonce)
+        forms do not count: they are not another variety."""
+        return any(t.variety != df.tokenvariety.none for t in self.tokens)
+
+    def token_span_text(self, tok: Token) -> str:
+        """The portion of the original transcription a token covers, including
+        any marker that was stripped before tokenization (unit-initial "#_ " /
+        "# ") or that sits just before it (mid-unit "#_ ")."""
+        text = self.annotation[tok.span[0]:tok.span[1]]
+        if self.unit_marker and tok is self.tokens[0]:
+            text = self.unit_marker + text
+        return text
+
+    def _clean_foreign(self, text: str) -> str:
+        """Minimal cleanup for non-Italian text, which is otherwise left as
+        transcribed: collapse repeated spaces and keep ``((non verbal))`` tags
+        in one piece (META_TAGS), so they tokenize as a single NVB token
+        instead of being split on their inner spaces."""
+        text = re.sub(r" +", " ", text).strip()
+        count, text = meta_tag(text)
+        if count:
+            self.warnings["META_TAGS"] += count
+        return text
+
+    def _extract_foreign_overlap_spans(self):
+        """Overlap spans for a unit whose (remaining) annotation is entirely
+        non-Italian and therefore not normalized. Overlaps are structural,
+        not linguistic, so they must still be recorded."""
+        if "[" not in self.annotation and "]" not in self.annotation:
+            return
+        if not check_normal_parentheses(self.annotation, "[", "]"):
+            self.errors["UNBALANCED_OVERLAP"] = True
+            return
+        self.overlapping_spans = [
+            (m.start(), m.end())
+            for m in re.finditer(r"\[[^\]]+\]", self.annotation)
+        ]
+
     # ------------------------------------------------------------------
     # Step 5 — Tokenize
     # ------------------------------------------------------------------
@@ -214,6 +302,11 @@ class TranscriptionUnit:
 
         for tok_i, tok in enumerate(self.tokens):
             fi = 0
+            # A mid-unit "#_ " marker sits in the annotation just before this
+            # token but is not part of orig_text; keep offsets aligned.
+            for _ in tok.marker_prefix:
+                token_at.append(-1)
+                form_idx.append(-1)
             for ch in tok.orig_text:
                 if ch in ":.,?":
                     token_at.append(-1)

@@ -34,6 +34,8 @@ import sys
 import yaml
 from speach import elan
 
+from textutil import nfc, ENCODING_READ, ENCODING_WRITE
+
 
 FIELDNAMES = ["tu_id", "speaker", "start", "end", "duration", "text"]
 
@@ -65,12 +67,12 @@ def convert(input_path, output_path, annotations=None, sep="\t"):
             # Annotations written by the pipeline may carry an 'id:N ' prefix
             # (e.g. "id:15 ciao ciao"). Extract it so downstream tools can
             # correlate rows with their original EAF annotation IDs.
-            parts = re.split(r"^(id:)([0-9]+) ", anno.value.strip())
+            parts = re.split(r"^(id:)([0-9]+) ", nfc(anno.value).strip())
             text = parts[-1]
             orig_id = parts[2] if len(parts) > 1 else None
 
             rows.append({
-                "speaker":  tier.ID,
+                "speaker":  nfc(tier.ID),
                 "start":    start,
                 "end":      end,
                 "duration": dur,
@@ -84,9 +86,9 @@ def convert(input_path, output_path, annotations=None, sep="\t"):
     # used to remap 'ignore' pairs in the annotations YAML.
     id_remap = {}
 
-    with open(output_path, "w", encoding="utf-8", newline="") as fout:
+    with open(output_path, "w", encoding=ENCODING_WRITE, newline="") as fout:
         writer = csv.DictWriter(fout, fieldnames=FIELDNAMES, delimiter=sep,
-                                extrasaction="ignore")
+                                extrasaction="ignore", lineterminator="\n")
         writer.writeheader()
         for tu_id, row in enumerate(rows):
             row["tu_id"] = tu_id
@@ -162,13 +164,13 @@ def main():
         if args.annotations_dir:
             annot_path = args.annotations_dir / f"{input_path.stem}.yml"
             if annot_path.is_file():
-                with open(annot_path, encoding="utf-8") as f:
+                with open(annot_path, encoding=ENCODING_READ) as f:
                     annotations = yaml.safe_load(f) or {}
 
         convert(input_path, output_path, annotations)
 
         if annot_path is not None and annotations:
-            with open(annot_path, "w", encoding="utf-8") as f:
+            with open(annot_path, "w", encoding=ENCODING_WRITE, newline="\n") as f:
                 yaml.dump(annotations, f, indent=2)
 
     print("done.", file=sys.stderr)
