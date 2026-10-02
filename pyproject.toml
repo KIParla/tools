@@ -25,7 +25,7 @@ test = [
 ]
 
 [tool.setuptools]
-py-modules = ["eaf2csv", "make_patch", "merge_metadata", "tsv2eaf", "tsv2formats"]
+py-modules = ["eaf2csv", "make_patch", "merge_metadata", "tsv2formats"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

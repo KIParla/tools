@@ -38,7 +38,7 @@ To also normalize and validate the annotation text after export, see <<processin
 
 === Rebuild ELAN from TSV
 
-Use `tsv2eaf.py` when a TSV export still contains TU-level alignment information and you need to reconstruct an `.eaf` file.
+Use `cli.py vert2eaf` (see xref:scripts.adoc#vert2eaf[Scripts]) when you need to reconstruct an `.eaf` file from a `.vert.tsv`.
 
 === Regenerate linear publication formats
 
@@ -54,14 +54,14 @@ python tsv2formats.py -i tsv/ --out_jefferson linear-jefferson/ --out_orthograph
 
 === Rebuild EAF files from TSV
 
-Use `tsv2eaf.py` when `.vert.tsv` files have changed and the corresponding ELAN `.eaf` files must be regenerated.
+Use `cli.py vert2eaf` when `.vert.tsv` files have changed and the corresponding ELAN `.eaf` files must be regenerated.
 
 In normal development this also happens automatically (see <<auto-regen>> below).
 To run manually:
 
 [source,bash]
 ----
-python tsv2eaf.py -i tsv/ -o eaf/
+python cli.py vert2eaf --input-dir tsv/ --output-dir eaf/
 ----
 
 === Rebuild collection metadata
@@ -85,10 +85,10 @@ re-trigger it, so there is no feedback loop.
 
 . Checks out the module repository at `dev`.
 . Checks out `KIParla/tools` into a temporary `_tools/` subdirectory.
-. Installs `pympi-ling`.
+. Installs the `tools` dependencies (`pip install ./_tools`).
 . Runs `tsv2formats.py` over the entire `tsv/` directory, writing to `linear-jefferson/`
   and `linear-orthographic/`.
-. Runs `tsv2eaf.py` over the entire `tsv/` directory, writing to `eaf/`.
+. Runs `cli.py vert2eaf` over the entire `tsv/` directory, writing to `eaf/`.
 . Commits the regenerated files back to `dev` (only if any file actually changed).
 
 The commit message is always:
@@ -108,7 +108,7 @@ The normal workflow for correcting a transcription error is:
 === If the workflow fails
 
 The most common cause is a TSV missing a `Begin=` or `End=` alignment value for a
-transcription unit. `tsv2eaf.py` exits with an error and prints the offending file and TU
+transcription unit. `vert2eaf` exits with an error and prints the offending file and TU
 to the Actions log. Fix the alignment in the TSV, push again, and the workflow will retry.
 
 [[processing-pipeline]]

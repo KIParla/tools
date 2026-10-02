@@ -46,36 +46,29 @@ Output columns:
 * `duration`
 * `text`
 
-== `tsv2eaf.py`
+[[vert2eaf]]
+== `vert2eaf` (`cli.py vert2eaf`)
 
-Rebuilds `.eaf` files from corpus `.vert.tsv` exports.
+Rebuilds `.eaf` files from corpus `.vert.tsv` files (`serialize.vert2eaf`). It replaces the former
+`tsv2eaf.py`, which was removed because it read column names (`iu_id`, `iu_align`) that the current
+`.vert.tsv` schema no longer has and knew nothing about translations.
 
 Key behaviors:
 
 * reads `Begin=` and `End=` values from the `align` column
-* reconstructs Jefferson-style TU text by joining token spans and prosodic links
+* reconstructs Jefferson-style TU text from the token spans and prosodic links
+* reattaches translations from `translations/<code>.translations.json` as ref-annotations when
+  `--translations-dir` is given
 * exits with an error if a transcription unit is missing `Begin=` or `End=`
 
-Process a single file:
-
 [source,bash]
 ----
-python tsv2eaf.py -i tsv/BOA1007.vert.tsv -o eaf/
+python cli.py vert2eaf --input-files tsv/BOA1007.vert.tsv --output-dir eaf/
+python cli.py vert2eaf --input-dir tsv/ --output-dir eaf/ [--translations-dir translations/]
 ----
 
-Process a whole directory:
-
-[source,bash]
-----
-python tsv2eaf.py -i tsv/ -o eaf/
-----
-
-Output goes to `eaf/` by default.
-One `.eaf` is written per input file, named after the file stem (e.g. `BOA1007.eaf`).
-
-This script is also invoked automatically by the `regenerate-derived` workflow
-whenever TSV files are pushed to `dev`.
-See xref:workflows.adoc#auto-regen[Automatic regeneration on TSV push].
+One `.eaf` is written per input file, named after the file stem (e.g. `BOA1007.eaf`). `sync.py --from-vert`
+does the same for a single file, and also refreshes the linear files and the validation page.
 
 == `vert2eaf-layered` (`tsv2eaf_layered.py`)
 

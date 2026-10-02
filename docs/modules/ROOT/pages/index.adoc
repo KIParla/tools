@@ -16,7 +16,7 @@ This repository is useful when you need task-focused data maintenance scripts ra
 The current scripts are:
 
 * `eaf2csv.py`
-* `tsv2eaf.py`
+* `cli.py vert2eaf`
 * `tsv2formats.py`
 * `merge_metadata.py`
 

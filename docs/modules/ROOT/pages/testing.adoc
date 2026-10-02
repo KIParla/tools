@@ -24,7 +24,7 @@ python -m pytest
 
 [source,bash]
 ----
-python -m pytest tests/test_tsv2eaf.py
+python -m pytest tests/test_tsv2formats.py
 ----
 
 == Current coverage
@@ -35,9 +35,6 @@ The current tests focus on:
 * `merge_metadata.normalise`
 * `merge_metadata.merge`
 * `tsv2formats.tsv2linear`
-* `tsv2eaf.parse_begin`
-* `tsv2eaf.parse_end`
-* `tsv2eaf.extract_annotations`
 * `normalize.validate_and_normalize` — pipeline infrastructure (rule ordering, config enable/disable, warning accumulation)
 * `normalize` — all individual normalization and validation functions
 

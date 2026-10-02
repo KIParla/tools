@@ -9,7 +9,7 @@ Standalone scripts to handle and transform KIParla data.
   It also supports `--batch <wip_subdir>` to process every CSV in a corpus folder.
 - `cli.py vert2eaf` (`serialize.vert2eaf`): rebuild `.eaf` files from current-schema `.vert.tsv`
   output, reattaching translations from `translations/<name>.translations.json` the same way
-  `csv2eaf` does. Supersedes `tsv2eaf.py` (deprecated, see Notes).
+  `csv2eaf` does.
 - `tsv2formats.py`: generate linear Jefferson and orthographic text files from `.vert.tsv`.
 - `linear2html.py`: generate publication HTML and PDF artifacts in the `KIParla-artifacts` layout.
 - `merge_metadata.py`: merge metadata tables from module repositories.
@@ -74,7 +74,7 @@ python -m pytest
 If you only want to run one file:
 
 ```bash
-python -m pytest tests/test_tsv2eaf.py
+python -m pytest tests/test_tsv2formats.py
 ```
 
 ## Notes
@@ -100,9 +100,6 @@ python -m pytest tests/test_tsv2eaf.py
 - **`#_`** means "non-Italian from this point to the end of the unit" (the whole unit when it is at
   the start); `[#_ w]` is rewritten to `#_ [w]` (`HASH_UNIT_SPACE`). See PIPELINE.md.
 
-- `tsv2eaf.py` is deprecated: it expects the historical TSV column names `iu_id` and
-  `iu_align`, which don't exist in the current `.vert.tsv` schema, and it has no knowledge
-  of translations. Use `cli.py vert2eaf` instead.
 - `vert2eaf` reconstructs the pipeline's *normalized* Jefferson text (post accent-correction,
   post number-to-words, etc.), not necessarily byte-identical pre-normalization source text.
   One documented, tested lossy case: a TU's TU-level `# ` variation marker (used when
