@@ -440,6 +440,32 @@ people = rows[rows["in_participants_metadata"]]
 * `in_participants_metadata` is `false` for tiers not listed in `participants.tsv` (unidentified speakers written `???`, and `environment`); filter on it for per-person figures.
 * `with_lemma` and `with_upos` count annotated tokens, so the same snapshot will show progress once lemmatization is added.
 
+[[build_explorer]]
+== `build_explorer.py`
+
+Builds the *corpus explorer*, a single self-contained HTML page for browsing KIParla and assembling a sub-corpus. It reads only the `summaries/snapshot.json` of each module (see <<summarize>>), so run `summarize.py` first; it needs no `vert.tsv` files.
+
+[source,bash]
+----
+python build_explorer.py \
+    --modules KIP KIPasti ParlaBO ParlaTO ParlaBZ Stra-ParlaBO Stra-ParlaTO \
+    --output KIParla-artifacts/explorer/index.html [--data-json explorer-data.json]
+----
+
+The order of `--modules` matters for a conversation present in more than one module (KIP and ParlaTO share 16): it is listed once, under the first module, and the others are recorded in `modules`. The page works from a file or any static host; the data (about 700 KiB) is embedded in it. `--data-json` also writes the same dataset for analysis outside the page.
+
+*What the page does*
+
+* *Filters*: conversation metadata (module, type, subtype, relationship, moderator, topic, year, collection point, languages), speaker attributes (gender, age range, occupation, study level, region, mother tongue; match "at least one speaker" or "every speaker") and measured features (duration, overlap by time and by annotated tokens, speech rate, tokens, ...), each with a histogram and a range. Facet counts show what each option would select given the other filters, and values can be "unknown".
+* *Overview*: totals, shares and rate of the selection next to the whole corpus, what it is made of (conversations and distinct speakers per category), per-feature minimum, median, mean and maximum, and a distribution plot.
+* *Explore*: a scatter plot of any two features, coloured by a metadata field. Drag a rectangle to turn it into two range filters.
+* *Conversations*: the selected conversations with links to their transcriptions; any can be taken out by hand.
+* *Export*: the list of codes, a CSV with all features, a JSON with the filters and module versions, and a `bash` script that copies the chosen formats (vertical, ELAN, linear, summary, HTML, PDF) from local checkouts into one folder.
+
+The selection is kept in the URL (`#s=...&t=<tab>`), so a sub-corpus can be shared as a link. Speaker figures count only identified speakers (see `in_participants_metadata` in <<summarize>>).
+
+*Sources*: the page is `explorer/template.html` (markup, styles, interface) plus `explorer/core.js` (filtering and statistics, no DOM). The core is tested under Node (`tests/explorer_core.test.js`, also run by `pytest` when `node` is available); `build_explorer.py` inlines both and the data. Rebuild the page whenever summaries change and commit the result.
+
 [[sync]]
 == `sync.py`
 

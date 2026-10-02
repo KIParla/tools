@@ -4,6 +4,9 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* New `build_explorer.py`: builds the corpus explorer (`KIParla-artifacts/explorer/index.html`), a single HTML
+  page to filter the conversations by metadata, speaker attributes and measured features, see figures for the
+  resulting sub-corpus and export it (code list, CSV, JSON, copy script). Reads the modules' summaries.
 * Removed the legacy `tsv2eaf.py` and its tests. It read the old column names `iu_id` / `iu_align` and
   failed on every current `.vert.tsv`; use `cli.py vert2eaf` (or `sync.py --from-vert`). The
   `regenerate-derived` workflow of the modules now calls `cli.py vert2eaf`.
