@@ -569,6 +569,15 @@ different, sentence-level unit granularity (distinct from the Jefferson TU).
 
 ---
 
+## Summaries (`summarize.py`)
+
+Not part of `process`: a separate step, run after it, that reads `tsv/*.vert.tsv` (plus the
+metadata and, when present, `tmp/process/json/<code>.json`) and writes `<module>/summaries/`:
+one `<code>.json` per conversation and a module-level `snapshot.json` with token counts by type,
+speaking time and token/time rates per speaker, overlap shares and variation counts. Because it
+reads the vert.tsv, it can be re-run at any time; `summarize.py --check` flags summaries older than
+their tsv. Definitions and fields: `docs/modules/ROOT/pages/scripts.adoc#summarize`.
+
 ## Audio length check (`audio_check.py`)
 
 After a transcript is processed, the end of its **last annotation** is compared with the

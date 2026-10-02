@@ -408,6 +408,45 @@ python generate_validation_report.py
 
 Run it again (and commit the regenerated pages) after reprocessing a module — or via `sync.py`, which calls this automatically — to keep them current. With no arguments it discovers every module next to the `tools` checkout (or in a sibling `moduli/` folder); pass `--modules <dir> ...` to choose.
 
+[[summarize]]
+== `summarize.py`
+
+Writes statistical summaries of a module into `<module>/summaries/`, as a basis for data analysis. Everything is computed from `tsv/*.vert.tsv`, so the summaries can be regenerated at any time without reprocessing the EAF files. It is a separate step: run it after `sync.py` or `cli.py process`, and commit the result with the module.
+
+[source,bash]
+----
+python summarize.py <module_dir> [<module_dir> ...] [--code CODE ...]
+python summarize.py <module_dir> [<module_dir> ...] --check
+----
+
+`--check` writes nothing; it lists summaries that are missing or older than their `tsv/` file (each summary records the SHA-256 of its vertical) and exits with status 1 if there are any.
+
+*Files*
+
+* `summaries/<code>.json` — one conversation: its `metadata`, `time`, `units`, `tokens`, `rates`, `annotated_overlaps`, `variation`, one entry per speaker under `speakers`, and the pipeline's own report (`WARNINGS`, `ERRORS`, `AUDIO_CHECK`, …) under `pipeline` when `tmp/process/json/<code>.json` exists.
+* `summaries/snapshot.json` — the whole module: `totals`, `by_conversation_type`, and three flat tables ready for pandas: `conversations`, `participants` (one row per person, across conversations) and `speakers_in_conversations` (one row per speaker in each conversation).
+
+[source,python]
+----
+import json, pandas as pd
+snap = json.load(open("KIP/summaries/snapshot.json"))
+rows = pd.json_normalize(snap["speakers_in_conversations"])
+people = rows[rows["in_participants_metadata"]]
+----
+
+*Definitions*
+
+* *tokens* are all rows of the vertical; *linguistic tokens* those whose `type` is `linguistic` (words). The other types (`shortpause`, `nonverbalbehavior`, `unknown`, `anonymized`, `error`, `warning`) are counted in `tokens_by_type`.
+* A *unit* is a transcription unit; its interval runs from the `Begin=` of its first token to the `End=` of its last.
+* *Speech seconds* of a speaker are the time during which they have at least one unit active (the union of their units, so overlapping units of the same speaker are not counted twice). `share_of_speech_time` is relative to the sum of all speakers' speech seconds.
+* *Rates*: `tokens_per_second` and `linguistic_tokens_per_second` divide by the speaker's own speech seconds (conversation level: by the conversation's speech seconds); `linguistic_tokens_per_minute` is the same figure per minute.
+* *Overlap seconds* are the time during which at least two different speakers are active, computed from unit intervals regardless of how the transcribers marked overlaps; `share_overlap_of_speech` divides by the conversation's speech seconds. For a speaker, `share_of_own_speech_overlapped` is the part of their speech during which someone else was also speaking.
+* *Annotated overlaps* are tokens carrying an `overlaps` annotation, i.e. spans transcribers bracketed. `events` counts distinct matched events; `unmatched_spans` counts annotated spans for which the pipeline found no time overlap (`(?)` in the vertical). Shares are relative to linguistic tokens.
+* A *turn* is a maximal run of consecutive units, in time order, by the same speaker.
+* `silence_seconds` is the conversation span (first `Begin` to last `End`) minus speech seconds; `metadata_duration_seconds` is `duration` from `conversations.tsv` for comparison.
+* `in_participants_metadata` is `false` for tiers not listed in `participants.tsv` (unidentified speakers written `???`, and `environment`); filter on it for per-person figures.
+* `with_lemma` and `with_upos` count annotated tokens, so the same snapshot will show progress once lemmatization is added.
+
 [[sync]]
 == `sync.py`
 

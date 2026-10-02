@@ -20,6 +20,12 @@ Standalone scripts to handle and transform KIParla data.
   directions. Runs across all modules by default (auto-discovered), or pass
   `--modules <dir> ...`. Pass `--add-unknown-participant-column` to add/refresh an
   `unknown-participant` column (`yes`/`no`) in each module's `conversations.tsv`.
+- `summarize.py`: write per-conversation summaries and a module-level `snapshot.json` into
+  `<module>/summaries/` (token counts by type, speaking time and token/time rates per
+  participant, overlap shares by time and by annotated tokens, variation, plus the pipeline's own
+  warnings/errors), computed from `tsv/*.vert.tsv`. Run by hand after `sync.py` / `cli.py process`:
+  `python summarize.py <module_dir> ...`; `--check` reports summaries that are missing or older than
+  their `tsv/` file. See `docs/modules/ROOT/pages/scripts.adoc`.
 - `generate_validation_report.py`: build the validation pages (published as part of the
   KIParla docs site), combining `check_participants.py`'s metadata-consistency results
   with per-conversation pipeline warnings/errors from each module's
