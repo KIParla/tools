@@ -114,27 +114,38 @@ class TestSite:
         assert json.loads((tmp_path / "site" / "data.json").read_text(encoding="utf-8")) == d
         assert "data.json" in (tmp_path / "site" / "app.js").read_text(encoding="utf-8")
 
-    def test_offline_site_embeds_the_data_as_a_script(self, tmp_path):
-        d = self._dataset(tmp_path)
-        files = build_explorer.write_site(d, tmp_path / "site", offline=True)
-        names = sorted(f.name for f in files)
-        assert names == ["app.js", "core.js", "data.js", "explorer.css", "index.html"]
-        html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
-        assert html.index("core.js") < html.index("data.js") < html.index("app.js")
-        text = (tmp_path / "site" / "data.js").read_text(encoding="utf-8")
-        prefix = "window.KIPARLA_DATA = "
-        payload = text[text.index(prefix) + len(prefix):].rstrip().removesuffix(";")
-        assert json.loads(payload) == d
-
     def test_index_references_only_files_that_exist(self, tmp_path):
         import re
         d = self._dataset(tmp_path)
-        for offline in (False, True):
-            out = tmp_path / ("off" if offline else "prod")
-            build_explorer.write_site(d, out, offline=offline)
-            html = (out / "index.html").read_text(encoding="utf-8")
-            for ref in re.findall(r'(?:src|href)="([^"#]+\.(?:js|css))"', html):
-                assert (out / ref).is_file(), ref
+        build_explorer.write_site(d, tmp_path / "site")
+        html = (tmp_path / "site" / "index.html").read_text(encoding="utf-8")
+        refs = re.findall(r'(?:src|href)="([^"#]+\.(?:js|css))"', html)
+        assert sorted(refs) == ["app.js", "core.js", "explorer.css"]
+        for ref in refs:
+            assert (tmp_path / "site" / ref).is_file(), ref
+
+    def test_single_file_has_nothing_external(self, tmp_path):
+        import re
+        html = build_explorer.single_file(self._dataset(tmp_path))
+        assert "<style>" in html and html.count("<script>") == 3
+        assert not re.search(r'<link[^>]+stylesheet', html)
+        assert not re.search(r'<script[^>]+src=', html)
+        assert "__DATA_SCRIPT__" not in html
+
+    def test_single_file_embeds_the_dataset_before_the_app(self, tmp_path):
+        d = self._dataset(tmp_path)
+        html = build_explorer.single_file(d)
+        start = html.index("window.KIPARLA_DATA = ") + len("window.KIPARLA_DATA = ")
+        end = html.index(";</script>", start)
+        assert json.loads(html[start:end].replace("<\\/", "</")) == d
+        assert start < html.index("function run(DATA)")
+
+    def test_data_cannot_close_the_script_tag(self, tmp_path):
+        d = self._dataset(tmp_path)
+        d["conversations"][0]["topic"] = "</script><b>x"
+        html = build_explorer.single_file(d)
+        assert "</script><b>" not in html
+        assert "<\\/script><b>x" in html
 
     def test_transcription_links_default_to_the_published_site_and_can_be_relative(self, tmp_path):
         d = self._dataset(tmp_path)
@@ -143,16 +154,20 @@ class TestSite:
         d2 = build_explorer.build_dataset(_modules(tmp_path / "mods2"), "..")
         assert d2["links"]["artifacts"] == "../"
 
-    def test_zip_is_the_offline_bundle_in_one_folder(self, tmp_path):
+    def test_zip_holds_the_single_file_as_an_ordinary_file(self, tmp_path):
+        import stat
         import zipfile
         d = self._dataset(tmp_path)
         z = tmp_path / "x.zip"
         build_explorer.write_zip(d, z)
-        names = sorted(zipfile.ZipFile(z).namelist())
-        assert names == [f"kiparla-explorer/{n}" for n in
-                         ["app.js", "core.js", "data.js", "explorer.css", "index.html"]]
+        zf = zipfile.ZipFile(z)
+        assert zf.namelist() == ["kiparla-explorer/index.html"]
+        info = zf.infolist()[0]
+        mode = info.external_attr >> 16
+        assert stat.S_ISREG(mode) and stat.S_IMODE(mode) == 0o644, oct(mode)
+        assert zf.read(info.filename).decode("utf-8") == build_explorer.single_file(d)
 
-    def test_missing_source_file_or_marker_is_refused(self, tmp_path, monkeypatch):
+    def test_missing_source_file_or_tag_is_refused(self, tmp_path, monkeypatch):
         (tmp_path / "explorer").mkdir()
         monkeypatch.setattr(build_explorer, "EXPLORER_DIR", tmp_path / "explorer")
         with pytest.raises(SystemExit, match="is missing"):
@@ -160,8 +175,8 @@ class TestSite:
         for n in ("explorer.css", "core.js", "app.js"):
             (tmp_path / "explorer" / n).write_text("", encoding="utf-8")
         (tmp_path / "explorer" / "template.html").write_text("<html></html>", encoding="utf-8")
-        with pytest.raises(SystemExit, match="marker"):
-            build_explorer.site_files({"conversations": []})
+        with pytest.raises(SystemExit, match="has no"):
+            build_explorer.single_file({"conversations": []})
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
