@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-build_explorer.py — build the KIParla corpus explorer, a single self-contained
-HTML page, from the modules' summaries/snapshot.json (see summarize.py).
+build_explorer.py — build the KIParla corpus explorer, a small static site
+(index.html, explorer.css, core.js, app.js, data.js), from the modules'
+summaries/snapshot.json (see summarize.py).
 
 The page lets you filter the corpus by conversation metadata, speaker
 attributes and measured features (overlap shares, token/time rates, ...), see
@@ -10,22 +11,29 @@ CSV, a script that copies the files).
 
 Usage:
     python build_explorer.py --modules KIP KIPasti ParlaBO ParlaTO ParlaBZ \\
-        Stra-ParlaBO Stra-ParlaTO --output KIParla-artifacts/explorer/index.html
+        Stra-ParlaBO Stra-ParlaTO --output-dir KIParla-artifacts/explorer \\
+        [--artifacts-url URL] [--zip kiparla-explorer.zip]
 
 Run summarize.py on the modules first. The explorer reads only the snapshots,
 so it can be rebuilt without the vert.tsv files. A conversation that appears in
 more than one module (KIP and ParlaTO share 16) is listed once, under the first
 module given, and records the others in `modules`.
 
-Source of the page: explorer/template.html (markup, styles and interface) and
-explorer/core.js (filtering and statistics, tested under Node). The data is
-embedded as JSON, so the output works from a file or any static host.
+The files work when index.html is opened from disk (no server needed): the data
+is a classic script (data.js), not fetched. Links to the transcription pages use
+--artifacts-url (default: the published KIParla-artifacts site) so they work
+wherever the folder is; pass ../ to link to a sibling checkout instead.
+
+Source: explorer/template.html (markup), explorer/explorer.css (styles),
+explorer/app.js (interface) and explorer/core.js (filtering and statistics,
+tested under Node).
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import zipfile
 from pathlib import Path
 
 from textutil import ENCODING_READ, ENCODING_WRITE
@@ -33,6 +41,9 @@ from textutil import ENCODING_READ, ENCODING_WRITE
 SCHEMA_VERSION = 1
 EXPLORER_DIR = Path(__file__).resolve().parent / "explorer"
 UNKNOWN = "unknown"
+DEFAULT_ARTIFACTS_URL = "https://kiparla.github.io/KIParla-artifacts/"
+SEARCH_URL = "https://search.corpuskiparla.it/"
+SITE_FILES = ("index.html", "explorer.css", "core.js", "app.js")   # copied as they are
 
 # Conversation-level measured features. `get` builds the value from a snapshot
 # row; `unit` and `decimals` drive how the page formats it.
@@ -175,7 +186,11 @@ def speaker_record(row: dict, module: str) -> dict:
     return out
 
 
-def build_dataset(module_dirs: list[Path]) -> dict:
+def _with_slash(url: str) -> str:
+    return url if not url or url.endswith("/") else url + "/"
+
+
+def build_dataset(module_dirs: list[Path], artifacts_url: str = DEFAULT_ARTIFACTS_URL) -> dict:
     conversations: dict[str, dict] = {}
     speakers: list[dict] = []
     sources: dict[str, str | None] = {}
@@ -215,6 +230,7 @@ def build_dataset(module_dirs: list[Path]) -> dict:
     return {
         "schema": SCHEMA_VERSION,
         "sources": sources,
+        "links": {"artifacts": _with_slash(artifacts_url), "search": SEARCH_URL},
         "metrics": [{"id": i, "label": l, "unit": u, "decimals": d, "description": t}
                     for i, l, u, d, t in METRICS],
         "conversation_facets": [{"id": i, "label": l, "description": d, "multi": i in MULTI_VALUED}
@@ -226,15 +242,36 @@ def build_dataset(module_dirs: list[Path]) -> dict:
     }
 
 
-def render_page(dataset: dict) -> str:
-    template = (EXPLORER_DIR / "template.html").read_text(encoding=ENCODING_READ)
-    core = (EXPLORER_DIR / "core.js").read_text(encoding=ENCODING_READ)
+def data_script(dataset: dict) -> str:
+    """data.js: the dataset as a classic script, so index.html works from a file."""
     data = json.dumps(dataset, ensure_ascii=False, separators=(",", ":"))
-    data = data.replace("</", "<\\/")          # never close the <script> early
-    for marker in ("/*__CORE__*/", "/*__DATA__*/"):
-        if marker not in template:
-            raise SystemExit(f"template.html has no {marker} marker")
-    return template.replace("/*__CORE__*/", core).replace("/*__DATA__*/", data)
+    return "/* KIParla corpus explorer: data, built by build_explorer.py */\nwindow.KIPARLA_DATA = " + data + ";\n"
+
+
+def write_site(dataset: dict, out_dir: Path) -> list[Path]:
+    """Write the explorer into *out_dir*; return the files written."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = []
+    for name in SITE_FILES:
+        src = EXPLORER_DIR / ("template.html" if name == "index.html" else name)
+        if not src.is_file():
+            raise SystemExit(f"{src} is missing")
+        dest = out_dir / name
+        with dest.open("w", encoding=ENCODING_WRITE, newline="\n") as f:
+            f.write(src.read_text(encoding=ENCODING_READ))
+        written.append(dest)
+    data_path = out_dir / "data.js"
+    with data_path.open("w", encoding=ENCODING_WRITE, newline="\n") as f:
+        f.write(data_script(dataset))
+    written.append(data_path)
+    return written
+
+
+def write_zip(files: list[Path], zip_path: Path, folder: str = "kiparla-explorer") -> None:
+    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in files:
+            z.write(f, f"{folder}/{f.name}")
 
 
 def main():
@@ -242,22 +279,27 @@ def main():
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--modules", nargs="+", required=True, type=Path,
                     help="Module directories, in priority order for shared conversations")
-    ap.add_argument("--output", required=True, type=Path,
-                    help="Where to write the page, e.g. KIParla-artifacts/explorer/index.html")
+    ap.add_argument("--output-dir", required=True, type=Path,
+                    help="Folder to write the explorer into, e.g. KIParla-artifacts/explorer")
+    ap.add_argument("--artifacts-url", default=DEFAULT_ARTIFACTS_URL,
+                    help="Where the HTML transcription pages are (default: the published "
+                         "KIParla-artifacts site). Use ../ to link to a sibling checkout.")
+    ap.add_argument("--zip", type=Path, help="Also write the explorer as a zip, ready to send")
     ap.add_argument("--data-json", type=Path,
                     help="Also write the dataset as JSON (for analysis outside the page)")
     args = ap.parse_args()
 
-    dataset = build_dataset(args.modules)
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    with args.output.open("w", encoding=ENCODING_WRITE, newline="\n") as f:
-        f.write(render_page(dataset))
+    dataset = build_dataset(args.modules, args.artifacts_url)
+    files = write_site(dataset, args.output_dir)
+    if args.zip:
+        write_zip(files, args.zip)
     if args.data_json:
         with args.data_json.open("w", encoding=ENCODING_WRITE, newline="\n") as f:
             json.dump(dataset, f, ensure_ascii=False, separators=(",", ":"))
-    print(f"{args.output}: {len(dataset['conversations'])} conversations, "
-          f"{len(dataset['speakers'])} speaker rows, "
-          f"{args.output.stat().st_size / 1024:.0f} KiB")
+    size = sum(f.stat().st_size for f in files) / 1024
+    print(f"{args.output_dir}: {len(dataset['conversations'])} conversations, "
+          f"{len(dataset['speakers'])} speaker rows, {len(files)} files, {size:.0f} KiB"
+          + (f"; zip: {args.zip}" if args.zip else ""))
 
 
 if __name__ == "__main__":

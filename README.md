@@ -26,8 +26,8 @@ Standalone scripts to handle and transform KIParla data.
   warnings/errors), computed from `tsv/*.vert.tsv`. Run by hand after `sync.py` / `cli.py process`:
   `python summarize.py <module_dir> ...`; `--check` reports summaries that are missing or older than
   their `tsv/` file. See `docs/modules/ROOT/pages/scripts.adoc`.
-- `build_explorer.py`: build the corpus explorer, a single self-contained HTML page
-  (`KIParla-artifacts/explorer/index.html`) from the modules' `summaries/snapshot.json`. It filters
+- `build_explorer.py`: build the corpus explorer, a small static site (`index.html`, `explorer.css`,
+  `core.js`, `app.js`, `data.js`; in `KIParla-artifacts/explorer/`) from the modules' `summaries/snapshot.json`. It filters
   the conversations by metadata, speaker attributes and measured features (overlap shares, token/time
   rates, ...), shows figures for the resulting sub-corpus and exports it (code list, CSV, a script that
   copies the files). Run `summarize.py` first. See `docs/modules/ROOT/pages/scripts.adoc`.
