@@ -347,12 +347,37 @@ git commit -m "fix: transcription corrections from lemmatization of BOA1007"
 
 See the lemmatization-project documentation for the full workflow, including how to handle recap warnings.
 
+[[audio_check]]
+== `audio_check.py`
+
+Checks that the end of each transcript's last annotation is compatible with the length of its recording, to
+spot problematic files (a wrong or swapped recording, an unfinished transcription, a time-shifted tier, a wrong
+`duration` in `conversations.tsv`). It runs automatically inside `sync.py --from-eaf` and `cli.py process`, and
+can be run on whole modules:
+
+[source,bash]
+----
+python audio_check.py <module_dir> [<module_dir> ...] [--audio-dir DIR] [--all] [--update-summary]
+----
+
+The audio length is measured on `<DIR>/<code>.mp3` (or `.wav`, `.flac`, `.m4a`, `.ogg`, `.aac`) with `ffprobe` when
+`--audio-dir` is given, otherwise it is read from `duration` in `metadata/conversations.tsv`; the result says which.
+Two rules, both *warnings*:
+
+* `AUDIO_OVERRUN`: the last annotation ends more than `max_overrun` (default 1 s) after the audio ends.
+* `AUDIO_UNDERRUN`: the last annotation ends more than `max_underrun` (default 120 s) before the audio ends.
+
+Thresholds live in the `audio_check` block of `configs/defaults.yml` (override per module; `enabled: false` turns the
+check off). With metadata as the source, `max_overrun` is widened by `metadata_slack` (60 s) because durations are
+often rounded to the minute. `--update-summary` writes the results into the module's `tmp/process/json/summary.json`
+so the *Audio length* section of the validation page can be refreshed without reprocessing.
+
 [[check_participants]]
 == `check_participants.py`
 
 Cross-checks each conversation's `metadata/conversations.tsv` `participants` list against the actual `speaker` values found in its `tsv/<code>.vert.tsv`, flags transcript speakers with no row in `metadata/participants.tsv`, and cross-checks `conversations.tsv` `participants` against `participants.tsv` `conversations` in both directions.
 
-Known non-participant placeholder tiers (`?`/`??`/`???`, `commenti`, `suoni`, `sottofondo`, `gruppo`, `video`, `trad_video`) are excluded so real mismatches aren't buried in noise.
+Known non-participant placeholder tiers (`?`/`??`/`???`, `environment`, and the older names `commenti`, `suoni`, `sottofondo`, `gruppo`, `video`, `trad_video`) are excluded so real mismatches aren't buried in noise.
 
 [source,bash]
 ----
@@ -370,17 +395,18 @@ python check_participants.py --add-unknown-participant-column
 [[generate_validation_report]]
 == `generate_validation_report.py`
 
-Builds two pages, combining `check_participants.py`'s metadata-consistency results with per-conversation pipeline warnings/errors from each module's `tmp/process/json/summary.json` (produced by `cli.py process`):
+Builds one validation page per module (plus an index), combining `check_participants.py`'s metadata-consistency results with per-conversation pipeline warnings/errors from each module's `tmp/process/json/summary.json` (produced by `cli.py process`):
 
-* xref:validation-log.adoc[Validation log] — every warning the pipeline auto-fixed, per conversation. Informational, not actionable.
-* xref:validation-errors.adoc[Validation errors] — an interactive, filterable table of only real errors, metadata gaps, and missing transcripts, with GitHub links to jump straight to each file. This is the "what needs fixing" list.
+* xref:validation.adoc[Validation] — index of all modules, with per-module counts. Each module has its own page, `validation-<module>.adoc`, with two sections:
+** *Errors* — an interactive, filterable table of only real errors, metadata gaps, and missing transcripts, with GitHub links to jump straight to each file. This is the "what needs fixing" list.
+** *Warnings* — every warning the pipeline auto-fixed, per conversation. Informational, not actionable.
 
 [source,bash]
 ----
 python generate_validation_report.py
 ----
 
-Run it again (and commit the regenerated pages) after reprocessing a module — or via `sync.py`, which calls this automatically — to keep both current.
+Run it again (and commit the regenerated pages) after reprocessing a module — or via `sync.py`, which calls this automatically — to keep them current. With no arguments it discovers every module next to the `tools` checkout (or in a sibling `moduli/` folder); pass `--modules <dir> ...` to choose.
 
 [[sync]]
 == `sync.py`

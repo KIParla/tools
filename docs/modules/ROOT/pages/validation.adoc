@@ -1,0 +1,15 @@
+= Validation
+
+Generated 2026-10-02 10:59 UTC by `tools/generate_validation_report.py`. One page per module, combining `check_participants.py`'s metadata-consistency results with the pipeline's per-conversation warnings and errors (`tmp/process/json/summary.json`). Each module page has the actionable errors (an interactive, filterable table) and the diary of auto-fixed warnings.
+
+[cols="2,1,1,1"]
+|===
+|Module |Conversations |With errors / gaps |With warnings
+|xref:validation-kip.adoc[KIP] |121 |93 |119
+|xref:validation-kipasti.adoc[KIPasti] |63 |63 |63
+|xref:validation-parlabo.adoc[ParlaBO] |85 |80 |85
+|xref:validation-parlabz.adoc[ParlaBZ] |10 |9 |10
+|xref:validation-parlato.adoc[ParlaTO] |67 |59 |67
+|xref:validation-stra-parlabo.adoc[Stra-ParlaBO] |84 |80 |84
+|xref:validation-stra-parlato.adoc[Stra-ParlaTO] |82 |81 |82
+|===

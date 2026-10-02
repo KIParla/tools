@@ -131,6 +131,10 @@ python eaf2csv.py \
 
 Each output CSV has one row per transcription unit with columns `tu_id`, `speaker`, `start`, `end`, `duration`, and `text`.
 
+Annotation text and tier IDs are converted to Unicode NFC here. Every tool in the pipeline reads UTF-8
+(a BOM is tolerated) and writes UTF-8 without BOM, with LF line endings, like Universal Dependencies files;
+see xref:normalize.adoc#_text_encoding[Text encoding].
+
 See xref:scripts.adoc#eaf2csv[`eaf2csv.py`] for full options.
 
 === Step 2 — Normalize (`normalize.py`)

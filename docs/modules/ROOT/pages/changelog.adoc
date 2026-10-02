@@ -4,6 +4,48 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* New `audio_check.py` and pipeline check: the end of each transcript's last annotation is compared with the
+  length of its recording (audio file measured with `ffprobe` when `--audio-dir` is given, else `duration` from
+  `conversations.tsv`). `AUDIO_OVERRUN` (annotations end after the audio) and `AUDIO_UNDERRUN` (they end well
+  before it) are warnings, with thresholds in the new `audio_check` block of `configs/defaults.yml`. Run
+  automatically by `sync.py --from-eaf` and `cli.py process` (new `--audio-dir`), recorded as `AUDIO_CHECK` in
+  `summary.json`, and shown in a new *Audio length* section of each module's validation page. On Stra-ParlaBO
+  it flags SBCB002 (transcript ends 14 min before the audio) and, on the old metadata, would have caught the
+  swapped SBCA003/SBCA004 durations and SBIC011.
+
+* **Breaking — vert.tsv variation format.** The `variation` column now holds *all*
+  variation features of a token as one feature list (`ContainsVariation=Yes|No` for the
+  unit, then `Variety=Other|Unassignable|Unsure`, `Language=<code>`, `Nonce=Yes`), instead
+  of one unit-level label (`none`/`yes`/`unspecified`/`all`). `Variation=Token|Doubtful|Emerging`,
+  `Orthography=Yes` and `Language=` leave `jefferson_feats`:
+  `#word`/`#_` -> `Variety=Other`, `#*word` -> `Variety=Unassignable`,
+  tokens of a `# ` unit -> `Variety=Unsure`, `$word` -> `Nonce=Yes`. The unit-initial
+  `# ` / `#_ ` marker is now part of the first token's `span`, so every marker can be
+  rebuilt from spans alone and `vert2eaf` is lossless for all of them. See
+  xref:variation-format.adoc[Variation labels in the vert.tsv] for the full mapping. The
+  tools **refuse to read old-format files** (`variety.iter_vert_rows`): regenerate every
+  module with `sync.py --from-eaf` before using `tsv2formats`, `vert2eaf`,
+  `linear2html`, `tsv2vert` or `tsv2tei`. Each released module needs a major version when
+  regenerated; `csv-metadata.json` must be regenerated for every module
+  (`csvw/generate_csvw.py`).
+* NoSketch export (`tsv2vert.py`): positional `variation` and `non_standard_form` are now
+  `variety` (`other`/`unassignable`/`unsure`) and `nonce` (`yes`); the unit attribute
+  `language_variation` is now `contains_variation`. The `word` keeps its `#`/`#*`/`$`
+  prefix. The `KIParla-NoSketch-Data` registries and docs use the new names; every corpus
+  has to be rebuilt together with its registry.
+* A `#_` marker anywhere in a unit now means "non-Italian from this point to the end of
+  the unit" (a unit-initial one still covers the whole unit); `[#_ w]` is rewritten to
+  `#_ [w]` (`HASH_UNIT_SPACE`, previously a config flag with no code behind it). Pauses,
+  non-verbal tags, anonymized names and `xxx` inside the stretch keep their own type.
+  Units starting with `#_` now also record their overlap spans.
+* All tools read UTF-8 (BOM tolerated) and write UTF-8 without BOM, LF line endings,
+  Unicode NFC (`textutil.py`). `csv` writers no longer emit CRLF.
+* `sync.py --from-vert` accepts `--audio-ext` (e.g. `mp3`); the rebuilt EAF links audio by
+  relative path and no longer carries an empty `default` tier. `sync.py` refreshes only the
+  synced module's validation page.
+* `generate_validation_report.py` writes one page per module
+  (`validation-<module>.adoc`) plus an index (`validation.adoc`).
+
 * `tsv2vert_v2.py`: new derived `duration_range` conversation attribute (`0-15 min`,
   `15-30 min`, `30-60 min`, `60-90 min`, `90+ min`, `N/A`), computed from
   `duration` so the otherwise-continuous duration is usable as a filter and in

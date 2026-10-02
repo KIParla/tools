@@ -121,6 +121,37 @@ If `config` is `None` or a key is absent, each rule falls back to its `enabled_b
 |yes
 |===
 
+== The `#_` marker and `HASH_UNIT_SPACE`
+
+`#_` marks non-Italian speech _from the marker to the end of the transcription unit_.
+At the very start of a unit it therefore covers the whole unit.
+
+Because the non-Italian stretch must not be "corrected" with Italian rules, `#_` is handled
+in `TranscriptionUnit.__post_init__` (step 2b), _before_ the rule list above runs:
+
+. If the module enables `normalization.HASH_UNIT_SPACE`, `hash_unit_space()` makes `#_` a
+  standalone token: `#_word` -> `#_ word`, `word#_` -> `word #_`, and `[#_ word]` -> `#_ [word]`
+  (the overlap bracket moves after the marker).
+. A unit-initial `#_` is stripped and the unit gets `variation=all`. The text is not normalized,
+  except for collapsing repeated spaces and keeping `((non verbal))` tags in one piece
+  (`META_TAGS`); overlap spans are still recorded.
+. A mid-unit `#_` splits the unit: only the Italian part before it goes through the rules above.
+  The marker never becomes a token. Every token after it gets `Language=NO_ISO_CODE` and
+  `Variety=Other`, and the marker is kept in the `span` of the first of them (e.g. `#_ l-ʕars`),
+  so the vert.tsv -> eaf round trip restores it. A unit-initial `#_ ` or `# ` is kept the same
+  way, in the span of the unit's first token, so every variation marker can be read back from
+  the `span` column alone.
+. Pauses, non-verbal tags, anonymized names (`@...`) and unintelligible spans (`xxx`) inside the
+  non-Italian stretch keep their own token type and carry no language.
+
+== Text encoding
+
+All tools read and write UTF-8 without BOM, with LF line endings, in Unicode Normalization Form C,
+as Universal Dependencies requires (see `textutil.py`). Text is NFC-normalized where it enters the
+pipeline (`eaf2csv`, and `TranscriptionUnit`). This is not only cosmetic: a decomposed letter such as
+`ṭ` (`t` + U+0323) is not a letter for the tokenizer's `\p{L}` word regex, so it used to produce
+spurious `warning`/`error` tokens.
+
 == NVB tags, shortpause, and bracket spans
 
 Non-verbal behaviour tags (`((laugh))`, `((ride))`, `((toss))`, …) and shortpause `(.)` must appear _outside_

@@ -1,0 +1,119 @@
+= Variation labels in the vert.tsv
+
+The variation markers of the Jefferson transcription (`#word`, `#*word`, `$word`, `#_`,
+and a unit-initial `# `) are exported in a single feature-list column of the
+`.vert.tsv`, `variation`, and to NoSketch Engine as the attributes `variety`, `nonce` and
+`contains_variation`. This page describes the format and how it differs from the one used
+before; it is a *breaking change* of the vert.tsv schema.
+
+== The `variation` column
+
+`variation` holds every variation feature of a token as pipe-separated `Key=Value` pairs
+(CoNLL-U style). None of them is in `jefferson_feats`.
+
+[cols="2,3", options="header"]
+|===
+| Feature | Meaning
+
+| `ContainsVariation=Yes\|No`
+| Unit level, repeated on every token row of the unit. `Yes` when any token of the unit has
+  a `Variety`. Always present, so the column is never empty. A `$` form alone does not make
+  it `Yes`.
+
+| `Variety=Other`
+| `#word`, or any token covered by a `#_` marker: from the marker to the end of the unit
+  (the whole unit when the marker is unit-initial).
+
+| `Variety=Unassignable`
+| `#*word`: the variety cannot be assigned (probably Italian).
+
+| `Variety=Unsure`
+| A token of a unit that starts with `# `: another variety is present, but the transcriber
+  did not say on which words. An explicit `#word` / `#*word` in such a unit keeps its own label.
+
+| `Language=<ISO code>`
+| On tokens marked `Other` or `Unassignable`; `NO_ISO_CODE` when the language was not
+  identified. Not set on `Unsure` tokens (the language is unknown).
+
+| `Nonce=Yes`
+| `$word`: a nonce or non-standard form. It is a property of the form, not a variety, and
+  is independent of `Variety`.
+|===
+
+Examples:
+
+----
+ContainsVariation=No
+ContainsVariation=Yes
+ContainsVariation=Yes|Variety=Other|Language=NO_ISO_CODE
+ContainsVariation=Yes|Variety=Unsure
+ContainsVariation=No|Nonce=Yes
+----
+
+Pauses, non-verbal behaviour, anonymized names and `xxx` never carry a variety.
+
+== Everything is recoverable from `span`
+
+The unit-initial marker is part of the `span` of the unit's first token (`# hola`,
+`#_ hola`), and a mid-unit `#_` is part of the span of the first token it covers
+(`#_ l-ʕars`). The Jefferson text, the EAF rebuilt by `vert2eaf` and the linear files are
+therefore rebuilt from `span` alone and match the transcription exactly; the unit-level
+`ContainsVariation` flag is not needed for that.
+
+In the NoSketch vertical only the labels are available. `other`, `unassignable` and `nonce`
+words map back to `#`, `#*` and `$`, and `unsure` words to a unit-initial `# `. What a
+vertical cannot tell is the notation used for `other`: a `#_` stretch and the same words each
+marked with `#` are the same data.
+
+== Differences from the previous format
+
+[cols="1,1", options="header"]
+|===
+| Before | Now
+
+| Column `variation`: one label per unit — `none`, `yes`, `unspecified` (a `# ` unit),
+  `all` (a `#_` unit); older files have `some`
+| Column `variation`: the feature list above. How a unit was written (`# `, `#_ `) is read
+  from the spans
+
+| `jefferson_feats`: `Variation=Token`
+| `variation`: `Variety=Other`
+
+| `jefferson_feats`: `Variation=Doubtful`
+| `variation`: `Variety=Unassignable`
+
+| `jefferson_feats`: `Variation=Emerging` and `Orthography=Yes` (`$word`)
+| `variation`: `Nonce=Yes`
+
+| `jefferson_feats`: `Language=<code>`
+| `variation`: `Language=<code>`
+
+| Tokens of a `# ` unit: no token-level information
+| `variation`: `Variety=Unsure`
+
+| `span`: a unit-initial `# ` / `#_ ` was not in any span (it was rebuilt from the unit label)
+| `span` of the first token starts with the marker
+
+| NoSketch positional `variation`, `non_standard_form`; unit attribute `language_variation`
+| NoSketch positional `variety`, `nonce`; unit attribute `contains_variation`
+
+| `csv-metadata.json`: describes the old column
+| Regenerated from the updated `csvw/vert-schema.json`
+|===
+
+The number of columns is unchanged.
+
+== Migrating
+
+The tools refuse to read an old-format file (`variety.iter_vert_rows` raises
+`old-format vert.tsv`): its unit-initial markers are not in the spans, so reading it would
+silently lose them. There is no in-place converter, because the EAF is the source of truth:
+
+. Regenerate each module from its `.eaf` files: `python sync.py --from-eaf <module>/eaf/X.eaf`
+  (this rewrites `tsv/`, `translations/`, `linear-jefferson/` and `linear-orthographic/`).
+. Regenerate each module's `csv-metadata.json`: `python csvw/generate_csvw.py <module_dir>`.
+. Regenerate the validation pages (`generate_validation_report.py`).
+. Rebuild the NoSketch corpora together with their registries (`KIParla-NoSketch-Data`).
+. Release each already-released module with a **major** version: the schema, the
+  `csv-metadata.json` and the NoSketch attributes change. A module that has not been
+  released yet ships the new format as its first release.
