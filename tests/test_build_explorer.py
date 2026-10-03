@@ -35,15 +35,16 @@ def _modules(tmp_path):
         "code\tgender\tage-range\tschool-region\tbirth-region\n"
         "A\tF\t21-25\ttrentino-alto-adige:alto-adige\t_\n"
         "B\tM\t26-30\t_\temilia-romagna\n", encoding="utf-8")
+    root = tmp_path / "summaries"
     for m in (a, b):
-        summarize.update_module(m)
-    return [a, b]
+        summarize.update_module(m, root)
+    return root, ["KIP", "ParlaTO"]
 
 
 class TestDataset:
 
     def test_conversations_are_unique_and_keep_all_modules(self, tmp_path):
-        d = build_explorer.build_dataset(_modules(tmp_path))
+        d = build_explorer.build_dataset(*_modules(tmp_path))
         codes = [c["code"] for c in d["conversations"]]
         assert codes == ["C1", "C2", "C3"]
         c2 = d["conversations"][1]
@@ -51,11 +52,11 @@ class TestDataset:
         assert d["sources"] == {"KIP": None, "ParlaTO": None}
 
     def test_shared_conversation_speakers_are_not_duplicated(self, tmp_path):
-        d = build_explorer.build_dataset(_modules(tmp_path))
+        d = build_explorer.build_dataset(*_modules(tmp_path))
         assert sum(1 for s in d["speakers"] if s["conv"] == "C2") == 1
 
     def test_metadata_and_derived_metrics(self, tmp_path):
-        d = build_explorer.build_dataset(_modules(tmp_path))
+        d = build_explorer.build_dataset(*_modules(tmp_path))
         c1 = d["conversations"][0]
         assert (c1["type"], c1["subtype"]) == ("free-conversation", "meal")
         assert c1["hours"] == round(10 / 3600, 4)
@@ -69,12 +70,12 @@ class TestDataset:
         assert c1["rate"] == round(13 / 10, 3)
 
     def test_missing_values_become_null(self, tmp_path):
-        d = build_explorer.build_dataset(_modules(tmp_path))
+        d = build_explorer.build_dataset(*_modules(tmp_path))
         c3 = d["conversations"][2]
         assert c3["year"] is None and c3["point"] is None and c3["languages"] is None
 
     def test_speaker_attributes_fall_back_from_birth_to_school_region(self, tmp_path):
-        d = build_explorer.build_dataset(_modules(tmp_path))
+        d = build_explorer.build_dataset(*_modules(tmp_path))
         sp = {(s["conv"], s["spk"]): s for s in d["speakers"]}
         assert sp[("C1", "A")]["region"] == "trentino-alto-adige"     # school-region, colon stripped
         assert sp[("C1", "B")]["region"] == "emilia-romagna"          # birth-region wins
@@ -83,17 +84,16 @@ class TestDataset:
         assert sp[("C3", "X")]["gender"] == "F"
 
     def test_multivalued_facets_are_flagged(self, tmp_path):
-        d = build_explorer.build_dataset(_modules(tmp_path))
+        d = build_explorer.build_dataset(*_modules(tmp_path))
         multi = {f["id"] for f in d["conversation_facets"] + d["speaker_facets"] if f["multi"]}
         assert multi == {"languages", "mothertongue"}
 
     def test_missing_snapshot_is_a_clear_error(self, tmp_path):
-        (tmp_path / "M").mkdir()
         with pytest.raises(SystemExit, match="run summarize.py first"):
-            build_explorer.build_dataset([tmp_path / "M"])
+            build_explorer.build_dataset(tmp_path, ["M"])
 
     def test_every_declared_metric_exists_on_every_conversation(self, tmp_path):
-        d = build_explorer.build_dataset(_modules(tmp_path))
+        d = build_explorer.build_dataset(*_modules(tmp_path))
         for m in d["metrics"]:
             assert all(m["id"] in c for c in d["conversations"]), m["id"]
 
@@ -102,7 +102,7 @@ class TestSite:
 
     def _dataset(self, tmp_path, **kw):
         (tmp_path / "mods").mkdir()
-        return build_explorer.build_dataset(_modules(tmp_path / "mods"), **kw)
+        return build_explorer.build_dataset(*_modules(tmp_path / "mods"), **kw)
 
     def test_production_site_loads_data_json(self, tmp_path):
         d = self._dataset(tmp_path)
@@ -151,7 +151,7 @@ class TestSite:
         d = self._dataset(tmp_path)
         assert d["links"]["artifacts"] == "https://kiparla.github.io/KIParla-artifacts/"
         (tmp_path / "mods2").mkdir()
-        d2 = build_explorer.build_dataset(_modules(tmp_path / "mods2"), "..")
+        d2 = build_explorer.build_dataset(*_modules(tmp_path / "mods2"), "..")
         assert d2["links"]["artifacts"] == "../"
 
     def test_zip_holds_the_single_file_as_an_ordinary_file(self, tmp_path):

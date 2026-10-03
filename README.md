@@ -21,13 +21,13 @@ Standalone scripts to handle and transform KIParla data.
   `--modules <dir> ...`. Pass `--add-unknown-participant-column` to add/refresh an
   `unknown-participant` column (`yes`/`no`) in each module's `conversations.tsv`.
 - `summarize.py`: write per-conversation summaries and a module-level `snapshot.json` into
-  `<module>/summaries/` (token counts by type, speaking time and token/time rates per
+  the summaries repository, `KIParla-summaries/<Module>/` (token counts by type, speaking time and token/time rates per
   participant, overlap shares by time and by annotated tokens, variation, plus the pipeline's own
   warnings/errors), computed from `tsv/*.vert.tsv`. Run by hand after `sync.py` / `cli.py process`:
-  `python summarize.py <module_dir> ...`; `--check` reports summaries that are missing or older than
+  `python summarize.py --output-dir <summaries_dir> <module_dir> ...`; `--check` reports summaries that are missing or older than
   their `tsv/` file. See `docs/modules/ROOT/pages/scripts.adoc`.
 - `build_explorer.py`: build the corpus explorer, a small static site (`index.html`, `explorer.css`,
-  `core.js`, `app.js`, `data.json`; in `KIParla-artifacts/explorer/`) from the modules' `summaries/snapshot.json`. It filters
+  `core.js`, `app.js`, `data.json`; in `KIParla-artifacts/explorer/`) from the snapshots in `KIParla-summaries`. It filters
   the conversations by metadata, speaker attributes and measured features (overlap shares, token/time
   rates, ...), shows figures for the resulting sub-corpus and exports it (code list, CSV, a script that
   copies the files). Run `summarize.py` first. See `docs/modules/ROOT/pages/scripts.adoc`.

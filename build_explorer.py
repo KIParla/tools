@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 build_explorer.py — build the KIParla corpus explorer, a small static site
-(index.html, explorer.css, core.js, app.js, data.json), from the modules'
-summaries/snapshot.json (see summarize.py).
+(index.html, explorer.css, core.js, app.js, data.json), from the snapshots in
+the summaries repository (KIParla-summaries, see summarize.py).
 
 The page lets you filter the corpus by conversation metadata, speaker
 attributes and measured features (overlap shares, token/time rates, ...), see
@@ -10,12 +10,14 @@ basic figures about the resulting sub-corpus, and export it (list of codes,
 CSV, a script that copies the files).
 
 Usage:
-    python build_explorer.py --modules KIP KIPasti ParlaBO ParlaTO ParlaBZ \\
-        Stra-ParlaBO Stra-ParlaTO --output-dir KIParla-artifacts/explorer \\
+    python build_explorer.py --summaries KIParla-summaries \\
+        --modules KIP KIPasti ParlaBO ParlaTO ParlaBZ Stra-ParlaBO Stra-ParlaTO \\
+        --output-dir KIParla-artifacts/explorer \\
         [--artifacts-url URL] [--single-file kiparla-explorer.html] [--zip kiparla-explorer.zip]
 
-Run summarize.py on the modules first. The explorer reads only the snapshots,
-so it can be rebuilt without the vert.tsv files. A conversation that appears in
+Run summarize.py first. The explorer reads only the snapshots
+(<summaries>/<Module>/snapshot.json), so it can be rebuilt without the module
+repositories. A conversation that appears in
 more than one module (KIP and ParlaTO share 16) is listed once, under the first
 module given, and records the others in `modules`.
 
@@ -194,17 +196,17 @@ def _with_slash(url: str) -> str:
     return url if not url or url.endswith("/") else url + "/"
 
 
-def build_dataset(module_dirs: list[Path], artifacts_url: str = DEFAULT_ARTIFACTS_URL) -> dict:
+def build_dataset(summaries_root: Path, modules: list[str],
+                  artifacts_url: str = DEFAULT_ARTIFACTS_URL) -> dict:
     conversations: dict[str, dict] = {}
     speakers: list[dict] = []
     sources: dict[str, str | None] = {}
     seen_speaker_rows: set[tuple[str, str]] = set()
 
-    for module_dir in module_dirs:
-        module_dir = Path(module_dir)
-        snap_path = module_dir / "summaries" / "snapshot.json"
+    for name in modules:
+        snap_path = Path(summaries_root) / name / "snapshot.json"
         if not snap_path.is_file():
-            raise SystemExit(f"{module_dir}: no summaries/snapshot.json (run summarize.py first)")
+            raise SystemExit(f"{snap_path}: not found (run summarize.py first)")
         with snap_path.open(encoding=ENCODING_READ) as f:
             snap = json.load(f)
         module = snap["module"]
@@ -321,8 +323,10 @@ def write_zip(dataset: dict, zip_path: Path, folder: str = "kiparla-explorer") -
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--modules", nargs="+", required=True, type=Path,
-                    help="Module directories, in priority order for shared conversations")
+    ap.add_argument("--summaries", required=True, type=Path, metavar="DIR",
+                    help="Root of the summaries repository (KIParla-summaries)")
+    ap.add_argument("--modules", nargs="+", required=True, metavar="MODULE",
+                    help="Module names, in priority order for shared conversations")
     ap.add_argument("--output-dir", required=True, type=Path,
                     help="Folder to write the explorer into, e.g. KIParla-artifacts/explorer")
     ap.add_argument("--artifacts-url", default=DEFAULT_ARTIFACTS_URL,
@@ -335,7 +339,7 @@ def main():
                     help="Also write that single file as a zip")
     args = ap.parse_args()
 
-    dataset = build_dataset(args.modules, args.artifacts_url)
+    dataset = build_dataset(args.summaries, args.modules, args.artifacts_url)
     files = write_site(dataset, args.output_dir)
     if args.single_file:
         args.single_file.parent.mkdir(parents=True, exist_ok=True)

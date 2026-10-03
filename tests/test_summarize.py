@@ -53,6 +53,16 @@ def _module(tmp_path, units_by_code, conversations=None, participants=None):
     return tmp_path
 
 
+def _out(mod):
+    """The summaries repository root used in these tests (inside the module's tmp dir)."""
+    return mod / "out"
+
+
+def _sdir(mod):
+    """Where the module's summaries land: <root>/<Module>/."""
+    return _out(mod) / mod.name
+
+
 def _u(key, speaker, begin, end):
     return {"key": key, "speaker": speaker, "begin": begin, "end": end}
 
@@ -185,7 +195,10 @@ class TestModule:
 
     def test_snapshot_totals_and_tables(self, tmp_path):
         mod = self._two_conversations(tmp_path)
-        snap = json.loads(update_module(mod).read_text(encoding="utf-8"))
+        update_module(mod, _out(mod))
+        assert not (mod / "summaries").exists(), "nothing is written inside the module"
+        assert (_sdir(mod) / "C1.json").is_file()
+        snap = json.loads(update_module(mod, _out(mod)).read_text(encoding="utf-8"))
         t = snap["totals"]
         assert t["conversations"] == 2 and t["participants"] == 2
         assert t["tokens"] == 18 and t["linguistic_tokens"] == 18
@@ -202,15 +215,15 @@ class TestModule:
 
     def test_stale_summaries_are_removed_and_single_code_refresh_keeps_others(self, tmp_path):
         mod = self._two_conversations(tmp_path)
-        update_module(mod)
+        update_module(mod, _out(mod))
         (mod / "tsv" / "C2.vert.tsv").unlink()
-        update_module(mod)
-        assert not (mod / "summaries" / "C2.json").exists()
-        snap = json.loads((mod / "summaries" / "snapshot.json").read_text(encoding="utf-8"))
+        update_module(mod, _out(mod))
+        assert not (_sdir(mod) / "C2.json").exists()
+        snap = json.loads((_sdir(mod) / "snapshot.json").read_text(encoding="utf-8"))
         assert snap["totals"]["conversations"] == 1
-        before = (mod / "summaries" / "C1.json").read_text(encoding="utf-8")
-        update_module(mod, ["C1"])
-        assert (mod / "summaries" / "C1.json").read_text(encoding="utf-8") == before
+        before = (_sdir(mod) / "C1.json").read_text(encoding="utf-8")
+        update_module(mod, _out(mod), ["C1"])
+        assert (_sdir(mod) / "C1.json").read_text(encoding="utf-8") == before
 
     def test_pipeline_report_is_embedded_without_speaker_counts(self, tmp_path):
         mod = self._two_conversations(tmp_path)
@@ -218,18 +231,18 @@ class TestModule:
         (mod / "tmp" / "process" / "json" / "C1.json").write_text(json.dumps({
             "transcript": "C1", "speakers": {"A": {}}, "WARNINGS": {"SWITCHES": 2},
             "ERRORS": {}, "AUDIO_CHECK": {"status": "ok"}}), encoding="utf-8")
-        update_module(mod)
-        c1 = json.loads((mod / "summaries" / "C1.json").read_text(encoding="utf-8"))
+        update_module(mod, _out(mod))
+        c1 = json.loads((_sdir(mod) / "C1.json").read_text(encoding="utf-8"))
         assert c1["pipeline"]["WARNINGS"] == {"SWITCHES": 2}
         assert c1["pipeline"]["AUDIO_CHECK"] == {"status": "ok"}
         assert "speakers" not in c1["pipeline"]
-        c2 = json.loads((mod / "summaries" / "C2.json").read_text(encoding="utf-8"))
+        c2 = json.loads((_sdir(mod) / "C2.json").read_text(encoding="utf-8"))
         assert "pipeline" not in c2
 
     def test_output_is_deterministic(self, tmp_path):
         mod = self._two_conversations(tmp_path)
-        first = update_module(mod).read_bytes()
-        assert update_module(mod).read_bytes() == first
+        first = update_module(mod, _out(mod)).read_bytes()
+        assert update_module(mod, _out(mod)).read_bytes() == first
 
 
 class TestCheck:
@@ -238,27 +251,27 @@ class TestCheck:
         mod = _module(tmp_path, {"C1": [_unit(0, "A", 0.0, 4.0, ["a"] * 4)],
                                  "C2": [_unit(0, "B", 0.0, 2.0, ["b"] * 2)]},
                       conversations={"C1": ("t", "0:00:04"), "C2": ("t", "0:00:02")})
-        update_module(mod)
+        update_module(mod, _out(mod))
         return mod
 
     def test_up_to_date_has_no_problems(self, tmp_path):
-        assert check_module(self._fresh(tmp_path)) == []
+        assert check_module(*(lambda m: (m, _out(m)))(self._fresh(tmp_path))) == []
 
     def test_edited_tsv_is_reported_stale(self, tmp_path):
         mod = self._fresh(tmp_path)
         _write_vert(mod / "tsv" / "C1.vert.tsv", [_unit(0, "A", 0.0, 4.0, ["a"] * 5)])
-        assert check_module(mod) == ["C1: summary is older than tsv/C1.vert.tsv"]
+        assert check_module(mod, _out(mod)) == ["C1: summary is older than tsv/C1.vert.tsv"]
 
     def test_new_and_removed_conversations(self, tmp_path):
         mod = self._fresh(tmp_path)
         _write_vert(mod / "tsv" / "C3.vert.tsv", [_unit(0, "A", 0.0, 1.0, ["a"])])
         (mod / "tsv" / "C2.vert.tsv").unlink()
-        problems = check_module(mod)
+        problems = check_module(mod, _out(mod))
         assert "C3: no summary" in problems
         assert "C2: summary has no tsv/C2.vert.tsv" in problems
         assert any(p.startswith("snapshot.json: lists 2") for p in problems)
 
     def test_missing_snapshot(self, tmp_path):
         mod = self._fresh(tmp_path)
-        (mod / "summaries" / "snapshot.json").unlink()
-        assert check_module(mod) == ["snapshot.json: missing"]
+        (_sdir(mod) / "snapshot.json").unlink()
+        assert check_module(mod, _out(mod)) == ["snapshot.json: missing"]

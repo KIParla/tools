@@ -572,7 +572,7 @@ different, sentence-level unit granularity (distinct from the Jefferson TU).
 ## Summaries (`summarize.py`)
 
 Not part of `process`: a separate step, run after it, that reads `tsv/*.vert.tsv` (plus the
-metadata and, when present, `tmp/process/json/<code>.json`) and writes `<module>/summaries/`:
+metadata and, when present, `tmp/process/json/<code>.json`) and writes, in the separate summaries repository (`KIParla-summaries`, folder `<Module>/`):
 one `<code>.json` per conversation and a module-level `snapshot.json` with token counts by type,
 speaking time and token/time rates per speaker, overlap shares and variation counts. Because it
 reads the vert.tsv, it can be re-run at any time; `summarize.py --check` flags summaries older than

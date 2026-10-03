@@ -135,9 +135,11 @@ const csv = K.toCSV([conv("X,1", { languages: 'say "hi"', modules: ["KIP", "Parl
   ["code", "languages", "modules", "year"]);
 assert.equal(csv, 'code,languages,modules,year\n"X,1","say ""hi""",KIP;ParlaTO,\n');
 assert.equal(K.codeList(all.slice(0, 2)), "A1\nA2\n");
-const sh = K.copyScript([conv("A2", { modules: ["KIP", "ParlaTO"] })], ["tsv", "html", "pdf"], { note: "test" });
+const sh = K.copyScript([conv("A2", { modules: ["KIP", "ParlaTO"] })], ["tsv", "html", "pdf", "summary"], { note: "test" });
 assert.match(sh, /cp "\$KIPARLA\/KIP\/tsv\/A2\.vert\.tsv" "\$OUT\/tsv\/"/);
 assert.match(sh, /cp "\$ARTIFACTS\/KIP\/html\/A2\.html" "\$OUT\/html\/"/);
+assert.match(sh, /cp "\$SUMMARIES\/KIP\/A2\.json" "\$OUT\/summary\/"/, "summaries come from their own repository");
+assert.match(sh, /SUMMARIES="\$\{SUMMARIES:-\.\/KIParla-summaries\}"/);
 assert.match(sh, /A2-orthographic\.pdf/);
 assert.match(sh, /A2-jefferson\.pdf/);
 assert.doesNotMatch(sh, /eaf/);

@@ -3,28 +3,30 @@
 summarize.py — per-conversation summaries and a module-level "snapshot" of a
 KIParla module, computed from its tsv/*.vert.tsv files.
 
-Writes, inside the module directory:
+Writes, in the summaries repository (KIParla-summaries), one folder per module:
 
-    summaries/<code>.json    one conversation: metadata, token counts by type,
-                             time and overlap statistics, per-speaker figures,
-                             and (when present) the pipeline's own report
-                             (warnings, errors, audio check)
-    summaries/snapshot.json  the whole module: totals, a breakdown by
-                             conversation type, and flat tables
-                             (conversations, speakers, participants) meant to be
-                             loaded straight into pandas
+    <root>/<Module>/<code>.json    one conversation: metadata, token counts by
+                                   type, time and overlap statistics,
+                                   per-speaker figures, and (when present) the
+                                   pipeline's own report (warnings, errors,
+                                   audio check)
+    <root>/<Module>/snapshot.json  the whole module: totals, a breakdown by
+                                   conversation type, and flat tables
+                                   (conversations, speakers, participants)
+                                   meant to be loaded straight into pandas
 
 Everything is derived from the vert.tsv (the canonical output), so the
 summaries can be regenerated at any time without reprocessing the EAF files.
 `sync.py` and `cli.py process` refresh them automatically.
 
-It is a separate step, run by hand after `sync.py` / `cli.py process`; each
-summary records the SHA-256 of its vert.tsv, so `--check` can tell when the
-committed summaries are out of date.
+The summaries live in their own repository, not in the modules. It is a separate
+step, run by hand after `sync.py` / `cli.py process`; each summary records the
+SHA-256 of its vert.tsv, so `--check` can tell when the committed summaries are
+out of date.
 
 Usage:
-    python summarize.py MODULE_DIR [MODULE_DIR ...] [--code CODE ...]
-    python summarize.py MODULE_DIR [MODULE_DIR ...] --check
+    python summarize.py --output-dir KIParla-summaries MODULE_DIR [MODULE_DIR ...] [--code CODE ...]
+    python summarize.py --output-dir KIParla-summaries MODULE_DIR [MODULE_DIR ...] --check
 
 Definitions
 -----------
@@ -72,7 +74,6 @@ from variety import (
 )
 
 SCHEMA_VERSION = 1
-SUMMARIES_DIR = "summaries"
 SNAPSHOT_NAME = "snapshot.json"
 
 _EVENT_ID = re.compile(r"\((\d+)\)")
@@ -116,6 +117,11 @@ def file_sha256(path: Path) -> str:
 
 def module_name(module_dir: Path) -> str:
     return Path(module_dir).resolve().name
+
+
+def summaries_dir(module_dir: Path, out_root: Path) -> Path:
+    """Where a module's summaries go: <out_root>/<Module>/."""
+    return Path(out_root) / module_name(module_dir)
 
 
 def module_version(module_dir: Path) -> str | None:
@@ -437,7 +443,8 @@ def _load_inputs(module_dir: Path):
     return conversations, participants
 
 
-def write_conversation(module_dir: Path, code: str, conversations=None, participants=None) -> Path:
+def write_conversation(module_dir: Path, code: str, out_root: Path,
+                       conversations=None, participants=None) -> Path:
     module_dir = Path(module_dir)
     if conversations is None or participants is None:
         conversations, participants = _load_inputs(module_dir)
@@ -446,7 +453,7 @@ def write_conversation(module_dir: Path, code: str, conversations=None, particip
         vert, code=code, module=module_name(module_dir),
         metadata=conversations.get(code, {}), participants=participants,
         pipeline=_pipeline_report(module_dir, code))
-    out = module_dir / SUMMARIES_DIR / f"{code}.json"
+    out = summaries_dir(module_dir, out_root) / f"{code}.json"
     _write_json(out, summary)
     return out
 
@@ -478,12 +485,12 @@ def _flat_conversation(s: dict) -> dict:
     }
 
 
-def build_snapshot(module_dir: Path) -> dict:
+def build_snapshot(module_dir: Path, out_root: Path) -> dict:
     """Aggregate summaries/*.json (all conversations of the module) into the
     module snapshot."""
     module_dir = Path(module_dir)
     summaries = []
-    for p in sorted((module_dir / SUMMARIES_DIR).glob("*.json")):
+    for p in sorted(summaries_dir(module_dir, out_root).glob("*.json")):
         if p.name == SNAPSHOT_NAME:
             continue
         with p.open(encoding=ENCODING_READ) as f:
@@ -595,7 +602,7 @@ def build_snapshot(module_dir: Path) -> dict:
     }
 
 
-def update_module(module_dir: Path, codes: list[str] | None = None) -> Path:
+def update_module(module_dir: Path, out_root: Path, codes: list[str] | None = None) -> Path:
     """Regenerate the summaries of *codes* (default: every tsv/*.vert.tsv,
     removing summaries of conversations that no longer exist), then rebuild
     the module snapshot. Returns the snapshot path."""
@@ -605,18 +612,18 @@ def update_module(module_dir: Path, codes: list[str] | None = None) -> Path:
                        for p in (module_dir / "tsv").glob("*.vert.tsv"))
     if codes is None:
         codes = available
-        for p in (module_dir / SUMMARIES_DIR).glob("*.json"):
+        for p in summaries_dir(module_dir, out_root).glob("*.json"):
             if p.name != SNAPSHOT_NAME and p.stem not in available:
                 p.unlink()
     for code in codes:
-        write_conversation(module_dir, code, conversations, participants)
-    snapshot = build_snapshot(module_dir)
-    path = module_dir / SUMMARIES_DIR / SNAPSHOT_NAME
+        write_conversation(module_dir, code, out_root, conversations, participants)
+    snapshot = build_snapshot(module_dir, out_root)
+    path = summaries_dir(module_dir, out_root) / SNAPSHOT_NAME
     _write_json(path, snapshot)
     return path
 
 
-def check_module(module_dir: Path) -> list[str]:
+def check_module(module_dir: Path, out_root: Path) -> list[str]:
     """Problems that make the committed summaries disagree with tsv/ (empty
     when they are up to date): a missing or stale summary, a summary without
     a tsv, or a snapshot that does not list exactly the module's conversations."""
@@ -624,7 +631,7 @@ def check_module(module_dir: Path) -> list[str]:
     problems = []
     available = {p.name.removesuffix(".vert.tsv"): p
                  for p in (module_dir / "tsv").glob("*.vert.tsv")}
-    sdir = module_dir / SUMMARIES_DIR
+    sdir = summaries_dir(module_dir, out_root)
     present = {p.stem: p for p in sdir.glob("*.json") if p.name != SNAPSHOT_NAME}
     for code, vert in sorted(available.items()):
         if code not in present:
@@ -651,6 +658,8 @@ def check_module(module_dir: Path) -> list[str]:
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("-o", "--output-dir", required=True, type=Path, metavar="DIR",
+                    help="Root of the summaries repository; each module gets a folder <DIR>/<Module>/")
     ap.add_argument("module_dirs", nargs="+", type=Path, help="Module directories, e.g. KIP ParlaBO")
     ap.add_argument("--code", action="append",
                     help="Only regenerate this conversation (repeatable); the snapshot is rebuilt anyway.")
@@ -661,7 +670,7 @@ def main():
     if args.check:
         failed = False
         for module_dir in args.module_dirs:
-            problems = check_module(module_dir)
+            problems = check_module(module_dir, args.output_dir)
             failed |= bool(problems)
             print(f"{module_name(module_dir)}: " + ("up to date" if not problems else
                   f"{len(problems)} problem(s)"))
@@ -671,7 +680,7 @@ def main():
     for module_dir in args.module_dirs:
         if not (module_dir / "tsv").is_dir():
             raise SystemExit(f"{module_dir}: no tsv/ directory")
-        path = update_module(module_dir, args.code)
+        path = update_module(module_dir, args.output_dir, args.code)
         snap = json.loads(path.read_text(encoding="utf-8"))
         print(f"{module_name(module_dir)}: {snap['totals']['conversations']} conversations, "
               f"{snap['totals']['tokens']} tokens -> {path}")

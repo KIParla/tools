@@ -265,7 +265,7 @@
     { id: "eaf", label: "ELAN (.eaf)", repo: "module", path: "{m}/eaf/{c}.eaf" },
     { id: "orthographic", label: "Linear, orthographic", repo: "module", path: "{m}/linear-orthographic/{c}.txt" },
     { id: "jefferson", label: "Linear, Jefferson", repo: "module", path: "{m}/linear-jefferson/{c}.txt" },
-    { id: "summary", label: "Summary (.json)", repo: "module", path: "{m}/summaries/{c}.json" },
+    { id: "summary", label: "Summary (.json)", repo: "summaries", path: "{m}/{c}.json" },
     { id: "html", label: "HTML page", repo: "artifacts", path: "{m}/html/{c}.html" },
     { id: "pdf", label: "PDF (both)", repo: "artifacts", path: "{m}/pdf/{c}-orthographic.pdf", extra: ["{m}/pdf/{c}-jefferson.pdf"] },
   ];
@@ -278,10 +278,12 @@
     var chosen = FORMATS.filter(function (f) { return formatIds.indexOf(f.id) >= 0; });
     var out = ["#!/usr/bin/env bash",
       "# " + convs.length + " conversations selected in the KIParla explorer.",
-      "# Set KIPARLA to the folder holding the module checkouts (KIP, ParlaBO, ...) and",
-      "# ARTIFACTS to your KIParla-artifacts checkout, then run it.",
+      "# Set KIPARLA to the folder holding the module checkouts (KIP, ParlaBO, ...),",
+      "# ARTIFACTS to your KIParla-artifacts checkout and SUMMARIES to your",
+      "# KIParla-summaries checkout, then run it.",
       "set -euo pipefail",
       'KIPARLA="${KIPARLA:-.}"', 'ARTIFACTS="${ARTIFACTS:-./KIParla-artifacts}"',
+      'SUMMARIES="${SUMMARIES:-./KIParla-summaries}"',
       'OUT="${OUT:-subcorpus}"', ""];
     if (info && info.note) out.splice(2, 0, "# " + info.note);
     chosen.forEach(function (f) { out.push('mkdir -p "$OUT/' + f.id + '"'); });
@@ -291,7 +293,7 @@
       chosen.forEach(function (f) {
         [f.path].concat(f.extra || []).forEach(function (tpl) {
           var rel = tpl.replace("{m}", m).replace("{c}", c.code);
-          var base = f.repo === "module" ? "$KIPARLA" : "$ARTIFACTS";
+          var base = f.repo === "module" ? "$KIPARLA" : f.repo === "summaries" ? "$SUMMARIES" : "$ARTIFACTS";
           out.push('cp "' + base + "/" + rel + '" "$OUT/' + f.id + '/"');
         });
       });
