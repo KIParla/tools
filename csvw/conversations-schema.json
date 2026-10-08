@@ -19,7 +19,9 @@
     "collection-region": {},
     "macro-region": {},
     "languages": {},
-    "unknown-participant": { "datatype": { "base": "boolean", "format": "yes|no" } }
+    "unknown-participant": { "datatype": { "base": "boolean", "format": "yes|no" } },
+    "community": {
+      "dc:description": "Migrant community the speakers belong to (Stra-* modules), e.g. moroccan|bengali|chinese|ukrainian." }
   },
   "foreignKeys": [
     {
