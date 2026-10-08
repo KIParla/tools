@@ -92,8 +92,6 @@ TYPE_LABELS = {
     "lecture":                  "lezione",
     "semistructured-interview": "intervista semistrutturata",
 }
-RELATIONSHIP_LABELS = {"asymmetric": "asimmetrico", "symmetric": "simmetrico"}
-TOPIC_LABELS        = {"free": "libero", "fixed": "fisso"}
 OCCUPATION_LABELS   = {
     "0-Students": "stud", "0-Retired": "pens", "0-Unemployed": "disocc",
     "1-Managers": "impr", "2-Professionals": "intell", "3-Technicians": "tec",
@@ -1596,9 +1594,6 @@ def build_pdf_markdown(code, label, turns, timings, conv, participants_map, spea
         ("Tipo", tr(conv.get("type", ""), TYPE_LABELS)),
         ("Durata", conv.get("duration", "")),
         ("Partecipanti", conv.get("participants-number", "")),
-        ("Rapporto", tr(conv.get("participants-relationship", ""), RELATIONSHIP_LABELS)),
-        ("Moderatore", conv.get("moderator", "")),
-        ("Argomento", tr(conv.get("topic", ""), TOPIC_LABELS)),
         ("Anno", conv.get("year", "")),
         ("Punto di raccolta", conv.get("collection-point", conv.get("point", ""))),
         ("Licenza", f"{LICENSE_LABEL} — {LICENSE_URL}"),
@@ -1790,9 +1785,6 @@ def build_html(
         ("tipo",            tr(conv.get("type", ""), TYPE_LABELS)),
         ("durata",          conv.get("duration", "")),
         ("partecipanti",    conv.get("participants-number", "")),
-        ("rapporto",        tr(conv.get("participants-relationship", ""), RELATIONSHIP_LABELS)),
-        ("moderatore",      conv.get("moderator", "")),
-        ("argomento",       tr(conv.get("topic", ""), TOPIC_LABELS)),
         ("anno",            conv.get("year", "")),
         ("punto di raccolta", conv.get("collection-point", conv.get("point", ""))),
     ]

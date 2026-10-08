@@ -9,10 +9,6 @@
     "participants-number": { "datatype": "integer" },
     "participants": { "separator": ";",
       "dc:description": "Semicolon-separated list of participant codes." },
-    "participants-relationship": {
-      "dc:description": "Commonly asymmetric|symmetric, not enforced as a hard constraint." },
-    "moderator": { "datatype": { "base": "boolean", "format": "yes|no" } },
-    "topic": {},
     "year": { "datatype": "gYear" },
     "collection-point": {
       "dc:description": "Module-specific set of site codes (e.g. BO, TO)." },

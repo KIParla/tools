@@ -457,7 +457,7 @@ python build_explorer.py --summaries KIParla-summaries \
 
 *What the page does*
 
-* *Filters*: conversation metadata (module, type, subtype, relationship, moderator, topic, year, collection point, languages), speaker attributes (gender, age range, occupation, study level, region, mother tongue; match "at least one speaker" or "every speaker") and measured features (duration, overlap by time and by annotated tokens, speech rate, tokens, ...), each with a histogram and a range. Facet counts show what each option would select given the other filters, and values can be "unknown".
+* *Filters*: conversation metadata (module, type, subtype, year, collection point, languages), speaker attributes (gender, age range, occupation, study level, region, mother tongue; match "at least one speaker" or "every speaker") and measured features (duration, overlap by time and by annotated tokens, speech rate, tokens, ...), each with a histogram and a range. Facet counts show what each option would select given the other filters, and values can be "unknown".
 * *Overview*: totals, shares and rate of the selection next to the whole corpus, what it is made of (conversations and distinct speakers per category), per-feature minimum, median, mean and maximum, and a distribution plot.
 * *Explore*: a scatter plot of any two features, coloured by a metadata field. Drag a rectangle to turn it into two range filters.
 * *Conversations*: the selected conversations with links to their transcriptions; any can be taken out by hand.

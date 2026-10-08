@@ -4,6 +4,12 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* **Breaking — `topic`, `participants-relationship` and `moderator` removed from the conversation
+  metadata.** The three columns are no longer part of `metadata/conversations.tsv`, the CSVW
+  conversations schema, the merged collection table, the corpus explorer (filters, colour-by and CSV
+  export) or the metadata box of the HTML/PDF artifacts. In the TEI export a `moderator` role is now
+  assigned from the speaker code (`R` as third character) in `semistructured-interview`
+  conversations, since the `moderator` flag is gone.
 * **Breaking — `variation` column renamed `code-variation`, feature `Variety` renamed `Code`.** The
   column of the vert.tsv that holds the variation features is now `code-variation`, and its
   token-level feature is `Code=` instead of `Variety=`. The values are renamed with it:

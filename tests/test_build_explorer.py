@@ -142,7 +142,7 @@ class TestSite:
 
     def test_data_cannot_close_the_script_tag(self, tmp_path):
         d = self._dataset(tmp_path)
-        d["conversations"][0]["topic"] = "</script><b>x"
+        d["conversations"][0]["point"] = "</script><b>x"
         html = build_explorer.single_file(d)
         assert "</script><b>" not in html
         assert "<\\/script><b>x" in html

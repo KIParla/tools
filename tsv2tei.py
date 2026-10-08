@@ -525,7 +525,7 @@ def _build_tei_header(
         _sub(bibl, "title").text = corpus_id
         if conv.get("year"):
             _sub(bibl, "date", when=conv["year"])
-        for field in ("type", "collection-point", "topic", "participants-relationship", "moderator"):
+        for field in ("type", "collection-point"):
             if conv.get(field):
                 _sub(bibl, "note", type=field).text = conv[field]
 
@@ -546,7 +546,7 @@ def _build_tei_header(
     listPerson = _sub(particDesc, "listPerson")
 
     moderator_codes: set[str] = set()
-    if conv.get("moderator", "").lower() == "yes" and conv.get("participants"):
+    if conv.get("type") == "semistructured-interview" and conv.get("participants"):
         # Moderator codes have 'R' as their 3rd character (e.g. TOR001, BOR001)
         for code in conv["participants"].split(";"):
             if len(code) >= 3 and code[2] == "R":

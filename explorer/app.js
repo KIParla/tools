@@ -254,7 +254,7 @@ function renderOverview() {
     '</tbody></table></div><p class="note">Shares are pooled: total overlap time over total speech time, not an average of per-conversation percentages.</p>';
 
   h += "<h3>What it is made of</h3><p class=\"note\">Solid bar: conversations in the selection. Full length: all conversations in the corpus.</p><div class=\"cols\">";
-  ["module", "type", "year", "point", "relationship", "languages"].forEach(function (id) { h += bars("cat", id); });
+  ["module", "type", "year", "point", "languages"].forEach(function (id) { h += bars("cat", id); });
   h += "</div><h3>Who speaks</h3><p class=\"note\">Distinct identified speakers: in the selection / in the corpus.</p><div class=\"cols\">";
   ix.spkFacets.forEach(function (f) { h += peopleBars(f.id); });
   h += "</div>";
@@ -294,7 +294,7 @@ function renderExplore() {
   var h = "<h2>Explore</h2><p class=\"note\">Each point is a conversation. Drag a rectangle on the plot to keep only the conversations inside it (it sets the two feature ranges). Click a point to open the transcription.</p>";
   function opts(cur) { return DATA.metrics.map(function (m) { return '<option value="' + m.id + '"' + (m.id === cur ? " selected" : "") + ">" + esc(m.label) + (m.unit ? " (" + esc(m.unit) + ")" : "") + "</option>"; }).join(""); }
   h += '<div class="ctrl"><label>Horizontal <select id="sx">' + opts(ui.sx) + '</select></label><label>Vertical <select id="sy">' + opts(ui.sy) + '</select></label><label>Colour by <select id="sc">' +
-    ["type", "module", "year", "point", "relationship", "none"].map(function (id) { return '<option value="' + id + '"' + (id === ui.color ? " selected" : "") + ">" + (id === "none" ? "nothing" : esc(facetLabel("cat", id))) + "</option>"; }).join("") + "</select></label></div>";
+    ["type", "module", "year", "point", "none"].map(function (id) { return '<option value="' + id + '"' + (id === ui.color ? " selected" : "") + ">" + (id === "none" ? "nothing" : esc(facetLabel("cat", id))) + "</option>"; }).join("") + "</select></label></div>";
   h += scatter();
   return h;
 }
@@ -399,7 +399,7 @@ function updateScriptPreview() {
   var lines = script().split("\n");
   el.textContent = lines.slice(0, 26).join("\n") + (lines.length > 26 ? "\n… (" + (lines.length - 26) + " more lines)" : "");
 }
-var CSV_COLS = ["code", "modules", "type", "subtype", "relationship", "moderator", "topic", "year", "point", "languages"].concat(DATA.metrics.map(function (m) { return m.id; }));
+var CSV_COLS = ["code", "modules", "type", "subtype", "year", "point", "languages"].concat(DATA.metrics.map(function (m) { return m.id; }));
 function onPanel(e) {
   var t = e.target;
   var sortBtn = t.closest("button[data-sort]");

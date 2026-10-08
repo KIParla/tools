@@ -15,8 +15,8 @@ const metrics = [
 
 function conv(code, over) {
   return Object.assign({
-    code, modules: ["KIP"], type: "lecture", subtype: null, relationship: "asymmetric",
-    moderator: "no", topic: "free", year: "2018", point: "BO", languages: null,
+    code, modules: ["KIP"], type: "lecture", subtype: null,
+    year: "2018", point: "BO", languages: null,
     hours: 1, speech_hours: 1, overlap_pct: 0, ann_overlap_pct: 0, ling: 100, tokens: 110, units: 10,
   }, over);
 }

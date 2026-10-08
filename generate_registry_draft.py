@@ -27,7 +27,6 @@ CUSTOM_LABELS = {
     "full_conversation": "Trascrizione completa",
     "duration": "Durata",
     "duration_range": "Fascia di durata",
-    "topic": "Argomento",
     "participants": "Partecipanti",
     "participant_code": "Codice partecipante",
     "begin": "Inizio",

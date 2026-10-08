@@ -197,11 +197,11 @@ Populated from `conversations.tsv` and `participants.tsv` when `--metadata-dir` 
 |---|---|
 | `duration` | `<recording @dur>` (ISO 8601 format) |
 | `year` | `<bibl><date @when>` and `<setting><date @when>` |
-| `type`, `collection-point`, `topic`, `participants-relationship`, `moderator` | `<bibl><note @type>` |
+| `type`, `collection-point` | `<bibl><note @type>` |
 | `languages` | `<langUsage><language @ident>` (mapped to ISO 639-3) |
 | speaker `gender` | `<person><sex @value>` (TEI: `1`=female, `2`=male) |
 | speaker `age-range` | `<person><age>` |
 | speaker `birth-region` | `<person><birth><region>` |
 | speaker `occupation` | `<person><occupation>` |
 | speaker `study-level` | `<person><education>` |
-| moderator detection | `@role="moderator"` when speaker code has `R` as 3rd character (e.g. `TOR001`) |
+| moderator detection | `@role="moderator"` in `semistructured-interview` conversations when the speaker code has `R` as 3rd character (e.g. `TOR001`) |
