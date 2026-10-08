@@ -2,14 +2,14 @@
 """
 linear2html.py – Convert KIParla linearized transcripts to a styled HTML page.
 
-Produces a single self-contained HTML file with both orthographic and Jefferson
+Produces a single self-contained HTML file with both orthographic and enriched
 transcriptions embedded. Conversation metadata and participant table are always
 visible; toggle buttons switch between transcript views and show/hide timings.
 
 Usage:
     python3 tools/linear2html.py \\
         --orthographic  ParlaTO/linear-orthographic/PTA005.txt \\
-        --jefferson     ParlaTO/linear-jefferson/PTA005.txt \\
+        --enriched     ParlaTO/linear-enriched/PTA005.txt \\
         --tsv           ParlaTO/tsv/PTA005.vert.tsv \\
         --conversations ParlaTO/metadata/conversations.tsv \\
         --participants  ParlaTO/metadata/participants.tsv \\
@@ -18,7 +18,7 @@ Usage:
 Or write directly to the KIParla artifacts layout:
     python3 tools/linear2html.py \\
         --orthographic  ParlaTO/linear-orthographic/PTA005.txt \\
-        --jefferson     ParlaTO/linear-jefferson/PTA005.txt \\
+        --enriched     ParlaTO/linear-enriched/PTA005.txt \\
         --tsv           ParlaTO/tsv/PTA005.vert.tsv \\
         --conversations ParlaTO/metadata/conversations.tsv \\
         --participants  ParlaTO/metadata/participants.tsv \\
@@ -28,7 +28,7 @@ Or write directly to the KIParla artifacts layout:
 With a translation layer (e.g. Straparlando modules):
     python3 tools/linear2html.py \\
         --orthographic  Stra-ParlaTO/linear-orthographic/STCA001.txt \\
-        --jefferson     Stra-ParlaTO/linear-jefferson/STCA001.txt \\
+        --enriched     Stra-ParlaTO/linear-enriched/STCA001.txt \\
         --tsv           Stra-ParlaTO/tsv/STCA001.vert.tsv \\
         --conversations Stra-ParlaTO/metadata/conversations.tsv \\
         --participants  Stra-ParlaTO/metadata/participants.tsv \\
@@ -37,7 +37,7 @@ With a translation layer (e.g. Straparlando modules):
         --module        Stra-ParlaTO
 
 The conversation code is inferred from the input filename stem.
-Either --orthographic or --jefferson (or both) must be supplied.
+Either --orthographic or --enriched (or both) must be supplied.
 --tsv is optional; when supplied, per-turn begin/end times are embedded
 and can be toggled on/off in the page.
 --translations is optional and requires --tsv (translations are matched
@@ -147,7 +147,7 @@ def _append_unit_text(text_jefferson, text_orthographic, row, markers):
     form = row.get("form", "")
     feats = row.get("jefferson_feats", "")
 
-    # Variation markers live in the token spans (so the Jefferson text already
+    # Variation markers live in the token spans (so the enriched text already
     # has them); for the orthographic text, put the unit-level "# "/"#_ " back
     # once and the per-word "#"/"#*"/"$" in front of the word — mirrors
     # tools/tsv2formats.py so alignment text matches.
@@ -190,7 +190,7 @@ def _finalize_unit(tu_idx, tu_id, speaker, begin_ms, end_ms, text_jefferson, tex
 
 
 def load_tsv_units(tsv_path):
-    """Return canonical TU records with Jefferson text, orthographic text, and timings."""
+    """Return canonical TU records with enriched text, orthographic text, and timings."""
     units = []
     current_tu = None
     current_speaker = None
@@ -347,7 +347,7 @@ def fmt_ms(ms):
     return f"{m}:{sec:02d}"
 
 
-# ── Jefferson markup ──────────────────────────────────────────────────────────
+# ── enriched markup ──────────────────────────────────────────────────────────
 
 def markup_jefferson(text):
     placeholders = {}
@@ -710,7 +710,7 @@ tbody td {
 
 .toggle-sep-bar { color: #ddd; margin: 0 .3rem; }
 
-/* ── ortografico/Jefferson switch (two connected segments, not two buttons) ── */
+/* ── ortografico/enriched switch (two connected segments, not two buttons) ── */
 .view-switch {
     display: inline-flex;
     border: 1px solid #ccc;
@@ -812,7 +812,7 @@ tbody td {
     word-break: break-word;
 }
 
-/* ── Jefferson notation ── */
+/* ── enriched notation ── */
 .jtext { font: inherit; }
 .overlap { color: #2060a0; }
 .para    { color: #777; font-style: italic; }
@@ -1671,7 +1671,7 @@ def ensure_pdfs(
     pdf_links = {}
     jobs = [
         ("orthographic", "ortografico", orth_turns, orth_timings),
-        ("jefferson", "jefferson", jeff_turns, jeff_timings),
+        ("enriched", "enriched", jeff_turns, jeff_timings),
     ]
 
     for slug, label, turns, timings in jobs:
@@ -1724,7 +1724,7 @@ def txt_repo_links(module_name, code, has_orth, has_jeff):
     if has_orth:
         links["orthographic"] = f"{base}/linear-orthographic/{code}.txt"
     if has_jeff:
-        links["jefferson"] = f"{base}/linear-jefferson/{code}.txt"
+        links["enriched"] = f"{base}/linear-enriched/{code}.txt"
     return links
 
 
@@ -1830,13 +1830,13 @@ def build_html(
     download_items = []
     if pdf_links.get("orthographic"):
         download_items.append(f'<a href="{e(pdf_links["orthographic"])}" download>{e(code)} ortografico PDF</a>')
-    if pdf_links.get("jefferson"):
-        download_items.append(f'<a href="{e(pdf_links["jefferson"])}" download>{e(code)} Jefferson PDF</a>')
+    if pdf_links.get("enriched"):
+        download_items.append(f'<a href="{e(pdf_links["enriched"])}" download>{e(code)} Enriched PDF</a>')
     txt_links = txt_links or {}
     if txt_links.get("orthographic"):
         download_items.append(f'<a href="{e(txt_links["orthographic"])}" target="_blank" rel="noopener">{e(code)} ortografico TXT</a>')
-    if txt_links.get("jefferson"):
-        download_items.append(f'<a href="{e(txt_links["jefferson"])}" target="_blank" rel="noopener">{e(code)} Jefferson TXT</a>')
+    if txt_links.get("enriched"):
+        download_items.append(f'<a href="{e(txt_links["enriched"])}" target="_blank" rel="noopener">{e(code)} Enriched TXT</a>')
     if download_items:
         downloads_html = f'<div class="download-links">{"".join(download_items)}</div>'
 
@@ -1849,7 +1849,7 @@ def build_html(
         default_panel = default_panel or "panel-orth"
 
     if jeff_turns is not None:
-        panels.append(("panel-jeff", "Jefferson", render_turns(jeff_turns, colour_map, True, jeff_timings, translations_map)))
+        panels.append(("panel-jeff", "Enriched", render_turns(jeff_turns, colour_map, True, jeff_timings, translations_map)))
         default_panel = default_panel or "panel-jeff"
 
     toggle_html = ""
@@ -2019,7 +2019,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--orthographic",  help="Orthographic linear .txt file")
-    ap.add_argument("--jefferson",     help="Jefferson linear .txt file")
+    ap.add_argument("--enriched",     help="Enriched linear .txt file")
     ap.add_argument("--tsv",           help="vert.tsv file for per-turn begin/end timings (optional)")
     ap.add_argument(
         "--translations",
@@ -2050,12 +2050,12 @@ def main():
     )
     args = ap.parse_args()
 
-    if not args.orthographic and not args.jefferson:
-        ap.error("at least one of --orthographic or --jefferson is required")
+    if not args.orthographic and not args.enriched:
+        ap.error("at least one of --orthographic or --enriched is required")
     if not args.output and not args.artifacts_root:
         ap.error("either --output or --artifacts-root is required")
 
-    src = args.orthographic or args.jefferson
+    src = args.orthographic or args.enriched
     code = Path(src).stem.split("_")[0]
     module_name = args.module or infer_module_name(args.conversations)
     output_path = args.output
@@ -2071,7 +2071,7 @@ def main():
         print(f"[warn] conversation {code} not found in {args.conversations}", file=sys.stderr)
 
     orth_turns = load_turns(args.orthographic) if args.orthographic else None
-    jeff_turns = load_turns(args.jefferson)    if args.jefferson    else None
+    jeff_turns = load_turns(args.enriched)    if args.enriched    else None
 
     # build unified turn list for colour assignment (preserve first-appearance order)
     all_turns: list[tuple[str, str]] = []
@@ -2110,7 +2110,7 @@ def main():
         release_label=args.release_label, release_url=args.release_url,
     )
 
-    txt_links = txt_repo_links(module_name, code, args.orthographic, args.jefferson)
+    txt_links = txt_repo_links(module_name, code, args.orthographic, args.enriched)
 
     out = build_html(
         code, conv, participants, all_turns, orth_turns, jeff_turns,

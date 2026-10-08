@@ -7,7 +7,7 @@ the Toolbox/ELAN interlinear ``<code>@<speaker>`` convention:
 
     ref@<speaker>              top-level, time-alignable   value = unit id
       ├─ ft@<speaker>          Symbolic_Association        free translation of the unit
-      ├─ tx@<speaker>          Symbolic_Association        Jefferson text of the unit
+      ├─ tx@<speaker>          Symbolic_Association        enriched text of the unit
       └─ tx_ortho@<speaker>    Symbolic_Association        orthographic text of the unit
            └─ tok@<speaker>    Symbolic_Subdivision       one annotation per token, value = form
                 ├─ lemma@<speaker>  Symbolic_Association   lemma        (only with --linguistic)
@@ -116,7 +116,7 @@ def _join(tokens, field, prosodic_link="="):
     """Join a unit's tokens on ``field``, honouring SpaceAfter=No / ProsodicLink=Yes.
 
     ``prosodic_link`` is the separator inserted on ProsodicLink=Yes: ``"="`` for
-    the Jefferson transcription, ``" "`` for the orthographic one.
+    the enriched transcription, ``" "`` for the orthographic one.
     """
     parts = []
     for i, tok in enumerate(tokens):

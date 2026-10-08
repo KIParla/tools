@@ -23,7 +23,7 @@ VARIATION_CFG = {
 
 
 def _make_transcript(annotations, cfg=None, speaker="SPK1"):
-    """Build a small Transcript from raw Jefferson annotations, tokenized."""
+    """Build a small Transcript from raw enriched annotations, tokenized."""
     if cfg is None:
         cfg = VARIATION_CFG
     t = Transcript("TEST")

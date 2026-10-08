@@ -11,7 +11,7 @@ var UNKNOWN = K.UNKNOWN;
 var state = K.emptyState();
 var tab = "overview";
 var ui = { dist: "overlap_pct", sx: "overlap_pct", sy: "rate", color: "type", sort: "code", dir: 1,
-           formats: { tsv: 1, orthographic: 1, jefferson: 1 }, spkTop: {} };
+           formats: { tsv: 1, orthographic: 1, enriched: 1 }, spkTop: {} };
 var metricById = {};
 DATA.metrics.forEach(function (m) { metricById[m.id] = m; });
 var corpus = K.summarise(ix, DATA.conversations);

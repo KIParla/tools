@@ -117,7 +117,7 @@ class Token:
             self.form = core
             return
 
-        # Strip Jefferson span markers — they are position markers only.
+        # Strip enriched span markers — they are position markers only.
         for ch in "[]()<>°":
             text = text.replace(ch, "")
 

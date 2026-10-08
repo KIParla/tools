@@ -28,7 +28,7 @@ This document describes how every field in the pipeline `vert.tsv` format is enc
 | `tu_id`           | `xml:id` on `<annotationBlock>` (`ab{N}`) and `<u>` (`u{N}`)                             |
 | `unit`            | not encoded                                                                               |
 | `id`              | not encoded                                                                               |
-| `span`            | not encoded — raw Jefferson notation form; `form` is used instead                         |
+| `span`            | not encoded — raw enriched notation form; `form` is used instead                         |
 | `form`            | text content of `<w>` (clean normalized form)                                             |
 | `lemma`           | `@lemma` on `<w>` (when not `_`)                                                          |
 | `upos`            | `<fs><f name="upos">…</f></fs>` inside `<w>` (when not `_`)                               |
@@ -118,7 +118,7 @@ Each entry in `jefferson_feats` (pipe-separated `key=value` pairs) is encoded as
 | `tempo` | `l` (lento/slow), `aa` (accelerando/fast), `normal` | `pace` |
 | `pitch` | `weakly_asc`, `asc`, `desc`, `weakly_desc`, `normal` | `jefferson_feats` `Intonation` |
 
-Pitch shifts are placed **inside `<w>`** (word-final position) since intonation in Jefferson notation is a point marker, not a spanning feature. Loud and tempo shifts are placed **between tokens** in `<u>` since they span across words.
+Pitch shifts are placed **inside `<w>`** (word-final position) since intonation in enriched notation is a point marker, not a spanning feature. Loud and tempo shifts are placed **between tokens** in `<u>` since they span across words.
 
 ---
 

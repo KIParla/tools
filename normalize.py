@@ -93,9 +93,9 @@ def remove_spaces(annotation: str) -> tuple[int, str]:
     return total, annotation.strip()
 
 
-# Shortpause: literal Jefferson `(.)`.
+# Shortpause: literal enriched `(.)`.
 PAUSE_RE = re.compile(r"\(\.\)")
-# Non-verbal behavior: literal Jefferson `((...))`, non-nested.
+# Non-verbal behavior: literal enriched `((...))`, non-nested.
 NVB_RE = re.compile(r"\(\(([^()]*)\)\)")
 # Either marker, used where callers need to treat both the same way.
 NVB_OR_PAUSE_RE = re.compile(r"\(\([^()]*\)\)|\(\.\)")
@@ -106,9 +106,9 @@ def _replace_spaces_in_nvb(match: re.Match) -> str:
 
 
 def meta_tag(annotation: str) -> tuple[int, str]:
-    """Normalize spacing inside Jefferson NVB spans: `((ride forte))` becomes
+    """Normalize spacing inside enriched NVB spans: `((ride forte))` becomes
     a single `((ride_forte))` token. Shortpause `(.)` and NVB `((...))` are
-    otherwise left as literal Jefferson notation (not rewritten to {P}/{...})."""
+    otherwise left as literal enriched notation (not rewritten to {P}/{...})."""
     annotation, total = NVB_RE.subn(_replace_spaces_in_nvb, annotation)
     return total, annotation
 
@@ -202,7 +202,7 @@ def overlap_prolongations(annotation: str) -> tuple[int, str]:
 
 
 def clean_non_jefferson_symbols(annotation: str) -> tuple[int, str]:
-    """Remove characters that are not part of the Jefferson transcription system.
+    """Remove characters that are not part of the transcription system.
 
     ``*`` is kept alongside ``$``/``#``/``@`` because it's half of the ``#*word``
     "doubtful variation" marker (tokens.py's ``hash_doubtful``); like ``$``/``#``,
@@ -220,7 +220,7 @@ def clean_non_jefferson_symbols(annotation: str) -> tuple[int, str]:
 # Accent substitution tables — defined as module-level constants so they can
 # be replaced or extended by a YAML config in a later step.
 
-# Words where -chè should become -ché (the regex allows Jefferson markers
+# Words where -chè should become -ché (the regex allows enriched markers
 # interspersed between letters, e.g. per[chè → per[ché).
 ACCENT_CHE_MAP: dict[str, str] = {
     "perchè":   "perché",
@@ -250,7 +250,7 @@ def replace_che(annotation: str, accent_map: dict[str, str] | None = None) -> tu
         accent_map = ACCENT_CHE_MAP
     total = 0
     for word in accent_map:
-        # Build a pattern that tolerates Jefferson markers between letters.
+        # Build a pattern that tolerates enriched markers between letters.
         pattern = r"\b" + "".join(f"([^ =']*){ch}" for ch in word) + r"\b"
         back_refs = "".join(f"\\{i+1}{ch}" for i, ch in enumerate(word))
         replacement = back_refs[:-1] + "é"  # swap last char with é
@@ -315,7 +315,7 @@ def apply_word_corrections(annotation: str, corrections: list[tuple[str, str]] |
     canonical spelling (e.g. "mha" -> "mah", "va beh" -> "vabbè").
 
     Entries are literal word/phrase matches on word boundaries — no
-    Jefferson-marker tolerance (unlike ACCENT_CHE_MAP/ACCENT_PERO_MAP, which
+    Enriched-marker tolerance (unlike ACCENT_CHE_MAP/ACCENT_PERO_MAP, which
     only ever swap a word's final character). Longer/phrase entries are
     checked first, so e.g. "va beh" is replaced before a hypothetical
     standalone "va" rule could interfere.
@@ -327,7 +327,7 @@ def apply_word_corrections(annotation: str, corrections: list[tuple[str, str]] |
         # Boundaries are space/"="/string-edge only — the same delimiters
         # tokenize_tu itself splits on (`re.split(r"( |=)", annotation)`) —
         # not a generic \w/\W transition. A \b-style check would treat
-        # Jefferson brackets as boundaries too, wrongly matching e.g. the
+        # Enriched brackets as boundaries too, wrongly matching e.g. the
         # "m" in "m(e l)o" (a reduction span, not the standalone word "m").
         pattern = re.compile(
             r"(?:(?<=^)|(?<=[ =]))" + re.escape(wrong) + r"(?:(?=$)|(?=[ =]))"

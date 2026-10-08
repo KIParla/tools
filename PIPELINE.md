@@ -66,7 +66,7 @@ A tab-separated CSV with columns:
 | start         | float | seconds                                        |
 | end           | float | seconds                                        |
 | duration      | float | seconds                                        |
-| text          | str   | raw Jefferson transcription                    |
+| text          | str   | raw enriched transcription                    |
 | parent_tu_id  | int   | TU id of the parent annotation; empty for top-level tiers |
 
 `parent_tu_id` is produced by `eaf2csv` for ELAN child tiers (e.g. `Traduzione`).
@@ -119,7 +119,7 @@ The count is accumulated in `tu.warnings[RULE_NAME]`.
 | # | rule name             | function                  | what it does |
 |---|-----------------------|---------------------------|--------------|
 | 1 | `SYMBOL_NOT_ALLOWED`  | `clean_non_jefferson_symbols` | Remove characters not in `allowed_symbols` (config), `\w`, `\s`, or active variation prefixes (`$`, `#*`). |
-| 2 | `META_TAGS`           | `meta_tag`                | Normalize spacing inside NVB spans: spaces inside `((…))` replaced with `_` so the tag is treated as a single token downstream. Shortpause `(.)` and NVB `((…))` stay literal Jefferson notation (not rewritten). |
+| 2 | `META_TAGS`           | `meta_tag`                | Normalize spacing inside NVB spans: spaces inside `((…))` replaced with `_` so the tag is treated as a single token downstream. Shortpause `(.)` and NVB `((…))` stay literal enriched notation (not rewritten). |
 | 3 | `UNEVEN_SPACES`       | `check_spaces`            | Remove spaces immediately inside `[ ]` and `( )`, before `. , : ?`, and around `(.)`/`((…))` tags. |
 | 4 | `TRIM_PAUSES`         | `remove_pauses`           | Remove leading/trailing `(.)`. |
 | 5 | `TRIM_PROSODICLINKS`  | `remove_prosodiclinks`    | Remove leading/trailing `=`. |
@@ -127,7 +127,7 @@ The count is accumulated in `tu.warnings[RULE_NAME]`.
 | 7 | `OVERLAP_PROLONGATION`| `overlap_prolongations`   | **Default off.** Move `[` before the last character + its colons: `word:*[:` → `wor[d:*:`. |
 | 8 | `MULTIPLE_SPACES`     | `remove_spaces`           | Remove tabs, newlines, double spaces. |
 | 9 | `ACCENTS`             | `apply_accent_corrections` | Apply word-boundary-aware substitutions from `accent_corrections` (config list). |
-| 10| `WORD_CORRECTIONS`    | `apply_word_corrections`  | Replace known misspelled discourse markers/interjections (`WORD_CORRECTIONS` list, e.g. `mha`→`mah`, `va beh`→`vabbè`) — full word/phrase matches on space/`=`/string-edge boundaries only, not Jefferson-marker-tolerant like `ACCENTS`. |
+| 10| `WORD_CORRECTIONS`    | `apply_word_corrections`  | Replace known misspelled discourse markers/interjections (`WORD_CORRECTIONS` list, e.g. `mha`→`mah`, `va beh`→`vabbè`) — full word/phrase matches on space/`=`/string-edge boundaries only, not enriched-marker-tolerant like `ACCENTS`. |
 | 11| `NUMBERS`             | `check_numbers`           | Replace Arabic numerals with Italian words (`num2words`). |
 | 12| `HASH_UNIT_SPACE`     | `hash_unit_space` | **Default off.** Make `#_` a standalone token anywhere in the unit: `#_word` → `#_ word`, `word#_` → `word #_`, `[#_ word]` → `#_ [word]`. Applied in step 2b, before the `#_` detection (not part of the ordered rule list). (StraParlaBO, StraParlaTO) |
 | 13| `HASH_PREFIX_SPACE`   | `normalize_hash_prefix`    | **Default off.** Move `#` to front of unit with a space. (KIPasti) |
@@ -481,7 +481,7 @@ index; this edge case is accepted as a limitation.
 
 **Examples:**
 
-| Jefferson fragment | bracket pos | encoding |
+| Enriched fragment | bracket pos | encoding |
 |--------------------|-------------|----------|
 | `s[cherzavo]`      | `[` after `s` | start = `1` |
 | `[scherzavo]`      | `[` before first char | start = `0` |
@@ -544,7 +544,7 @@ schema file to regenerate every module's copy.
 | `speaker`       | tier ID |
 | `tu_id`         | TU id |
 | `id`            | token's true position within its TU, `0`-based. Recomputed from row order on every patch (see `make_patch.py`), so — unlike `token_id` — always monotonic |
-| `span`          | raw Jefferson span (character slice of original annotation) |
+| `span`          | raw enriched span (character slice of original annotation) |
 | `form`          | normalized form (lowercase, no prolongations, no punctuation) |
 | `lemma`         | `_` (filled by lemmatization step) |
 | `upos`          | `_` (filled by lemmatization step) |
@@ -565,7 +565,7 @@ schema file to regenerate every module's copy.
 superseded by `id` above. Files freshly serialized, or touched by a patch,
 no longer carry it; older untouched `.vert.tsv` files may still have it until
 a patch runs against them. Planned: `UD_sent`/`UD_id` columns for a
-different, sentence-level unit granularity (distinct from the Jefferson TU).
+different, sentence-level unit granularity (distinct from the enriched TU).
 
 ---
 

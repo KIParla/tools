@@ -604,7 +604,7 @@ def test_word_corrections_va_apostrophe_not_touched_outside_ma_va():
 
 def test_word_corrections_no_false_positive_inside_reduction_span():
     """The single-letter "m"->"mh" entry must not match inside a
-    Jefferson-bracket-continued token like m(e l)o (a reduction span,
+    Enriched-bracket-continued token like m(e l)o (a reduction span,
     not the standalone word "m")."""
     assert normalize.apply_word_corrections("m(e l)o segno") == (0, "m(e l)o segno")
     assert normalize.apply_word_corrections("co(m)e stai") == (0, "co(m)e stai")

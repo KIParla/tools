@@ -56,7 +56,7 @@ Rebuilds `.eaf` files from corpus `.vert.tsv` files (`serialize.vert2eaf`). It r
 Key behaviors:
 
 * reads `Begin=` and `End=` values from the `align` column
-* reconstructs Jefferson-style TU text from the token spans and prosodic links
+* reconstructs enriched TU text from the token spans and prosodic links
 * reattaches translations from `translations/<code>.translations.json` as ref-annotations when
   `--translations-dir` is given
 * exits with an error if a transcription unit is missing `Begin=` or `End=`
@@ -91,7 +91,7 @@ Toolbox/ELAN interlinear `<code>@<speaker>` convention; the codes live in the
 
 | `tx@<speaker>`
 | `Symbolic_Association` (under `ref@`)
-| Jefferson text of the unit (token `span`s joined, `=` on `ProsodicLink=Yes`)
+| Enriched text of the unit (token `span`s joined, `=` on `ProsodicLink=Yes`)
 
 | `tx_ortho@<speaker>`
 | `Symbolic_Association` (under `ref@`)
@@ -174,7 +174,7 @@ Example for `KIParla-artifacts`:
 ----
 python linear2html.py \
   --orthographic ../ParlaTO/linear-orthographic/PTA005.txt \
-  --jefferson ../ParlaTO/linear-jefferson/PTA005.txt \
+  --enriched ../ParlaTO/linear-enriched/PTA005.txt \
   --tsv ../ParlaTO/tsv/PTA005.vert.tsv \
   --conversations ../ParlaTO/metadata/conversations.tsv \
   --participants ../ParlaTO/metadata/participants.tsv \
@@ -186,7 +186,7 @@ This writes:
 
 * `../KIParla-artifacts/ParlaTO/html/PTA005.html`
 * `../KIParla-artifacts/ParlaTO/pdf/PTA005-orthographic.pdf`
-* `../KIParla-artifacts/ParlaTO/pdf/PTA005-jefferson.pdf`
+* `../KIParla-artifacts/ParlaTO/pdf/PTA005-enriched.pdf`
 * shared assets under `../KIParla-artifacts/css/` and `../KIParla-artifacts/js/`
 
 You can still pass `--output` explicitly if you want a custom HTML destination.
@@ -195,7 +195,7 @@ You can still pass `--output` explicitly if you want a custom HTML destination.
 
 Generates two linear text outputs from `.vert.tsv` files:
 
-* Jefferson-style linear transcription
+* enriched linear transcription
 * orthographic linear transcription
 
 These outputs are used in downstream publication and maintenance workflows.
@@ -206,7 +206,7 @@ Example for a whole folder:
 ----
 python tsv2formats.py \
   --input tsv \
-  --out_jefferson linear-jefferson \
+  --out_enriched linear-enriched \
   --out_orthographic linear-orthographic
 ----
 
@@ -225,7 +225,7 @@ Output shape:
 
 Important details:
 
-* the Jefferson output keeps Jefferson spans, pauses, and error token punctuation
+* the enriched output keeps enriched spans, pauses, and error token punctuation
 * the orthographic output strips non-alphabetic material from `error` tokens
 * `unknown` tokens are rendered as repeated `x` characters in the orthographic output
 
@@ -267,7 +267,7 @@ Normalization currently handled by the script:
 
 Generates a unified diff `.patch` file from a lemmatization CSV, capturing transcription-level corrections to be applied back to a corpus `.vert.tsv`.
 
-Typical use case: during lemmatization work, errors in the original transcription are spotted (wrong form, wrong Jefferson notation, wrong tokenisation).
+Typical use case: during lemmatization work, errors in the original transcription are spotted (wrong form, wrong enriched notation, wrong tokenisation).
 This script extracts those corrections from the CSV and produces a patch that can be applied with `git apply` on the corpus module's `dev` branch.
 
 What is patched:

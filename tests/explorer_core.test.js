@@ -141,7 +141,7 @@ assert.match(sh, /cp "\$ARTIFACTS\/KIP\/html\/A2\.html" "\$OUT\/html\/"/);
 assert.match(sh, /cp "\$SUMMARIES\/KIP\/A2\.json" "\$OUT\/summary\/"/, "summaries come from their own repository");
 assert.match(sh, /SUMMARIES="\$\{SUMMARIES:-\.\/KIParla-summaries\}"/);
 assert.match(sh, /A2-orthographic\.pdf/);
-assert.match(sh, /A2-jefferson\.pdf/);
+assert.match(sh, /A2-enriched\.pdf/);
 assert.doesNotMatch(sh, /eaf/);
 assert.match(sh, /set -euo pipefail/);
 

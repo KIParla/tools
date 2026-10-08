@@ -258,7 +258,7 @@ def render_module_page(name: str, rows: list[dict], has_pipeline: bool) -> str:
 
     lines.append("== Errors")
     lines.append("")
-    lines.append("Only real problems: malformed Jefferson notation the pipeline couldn't "
+    lines.append("Only real problems: malformed enriched notation the pipeline couldn't "
                  "auto-fix, a word the tokenizer couldn't parse at all (`TOKEN_TYPE_ERROR`), "
                  "a missing source recording, or a metadata cross-reference gap. One row per "
                  "*occurrence* (not per file) — each shows the actual transcription-unit text "
@@ -440,7 +440,7 @@ table.vr-table tr:hover td { background: #f0f2fa; }
 (function () {
   var DATA = __DATA__;
 
-  // Which Jefferson marker to highlight for each error rule, so the
+  // Which enriched marker to highlight for each error rule, so the
   // imbalance is visible at a glance in the raw TU text.
   var RULE_CHARS = {
     "UNBALANCED_DOTS": "\\u00b0",

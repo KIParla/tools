@@ -32,7 +32,7 @@ class TestTokenClassification:
         t = self._tok("{ride}")
         assert t.token_type == df.tokentype.nonverbalbehavior
 
-    # --- literal Jefferson shortpause/NVB, plain and overlap-bracketed ---
+    # --- literal enriched shortpause/NVB, plain and overlap-bracketed ---
     def test_shortpause_literal(self):
         t = self._tok("(.)")
         assert t.token_type == df.tokentype.shortpause

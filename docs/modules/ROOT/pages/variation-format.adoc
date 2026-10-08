@@ -1,6 +1,6 @@
 = Variation labels in the vert.tsv
 
-The variation markers of the Jefferson transcription (`#word`, `#*word`, `$word`, `#_`,
+The variation markers of the enriched transcription (`#word`, `#*word`, `$word`, `#_`,
 and a unit-initial `# `) are exported in a single feature-list column of the
 `.vert.tsv`, `code-variation`, and to NoSketch Engine as the attributes `variety`, `nonce` and
 `contains_variation`. This page describes the format and how it differs from the one used
@@ -57,7 +57,7 @@ Pauses, non-verbal behaviour, anonymized names and `xxx` never carry a code.
 
 The unit-initial marker is part of the `span` of the unit's first token (`# hola`,
 `#_ hola`), and a mid-unit `#_` is part of the span of the first token it covers
-(`#_ l-ʕars`). The Jefferson text, the EAF rebuilt by `vert2eaf` and the linear files are
+(`#_ l-ʕars`). The enriched text, the EAF rebuilt by `vert2eaf` and the linear files are
 therefore rebuilt from `span` alone and match the transcription exactly; the unit-level
 `ContainsVariation` flag is not needed for that.
 
@@ -111,7 +111,7 @@ The tools refuse to read an old-format file (`variety.iter_vert_rows` raises
 silently lose them. There is no in-place converter, because the EAF is the source of truth:
 
 . Regenerate each module from its `.eaf` files: `python sync.py --from-eaf <module>/eaf/X.eaf`
-  (this rewrites `tsv/`, `translations/`, `linear-jefferson/` and `linear-orthographic/`).
+  (this rewrites `tsv/`, `translations/`, `linear-enriched/` and `linear-orthographic/`).
 . Regenerate each module's `csv-metadata.json`: `python csvw/generate_csvw.py <module_dir>`.
 . Regenerate the validation pages (`generate_validation_report.py`).
 . Rebuild the NoSketch corpora together with their registries (`KIParla-NoSketch-Data`).

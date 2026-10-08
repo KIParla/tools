@@ -3,8 +3,8 @@
 generate_artifacts.py – Batch-run linear2html.py over every conversation in a module.
 
 Loops the codes found in <module-root>/linear-orthographic (or
-linear-jefferson, if orthographic is absent), and for each one invokes
-linear2html.py with the matching linear-orthographic/linear-jefferson/tsv
+linear-enriched, if orthographic is absent), and for each one invokes
+linear2html.py with the matching linear-orthographic/linear-enriched/tsv
 files plus module metadata. If <module-root>/translations/<code>.translations.json
 (or .tsv) exists, it is passed along too — translations are optional per
 conversation, not required for the whole module.
@@ -32,7 +32,7 @@ import args_check as ac
 
 def _codes(module_root: Path) -> list[str]:
     orth_dir = module_root / "linear-orthographic"
-    jeff_dir = module_root / "linear-jefferson"
+    jeff_dir = module_root / "linear-enriched"
     src_dir = orth_dir if orth_dir.is_dir() else jeff_dir
     return sorted(p.stem for p in src_dir.glob("*.txt"))
 
@@ -58,7 +58,7 @@ def main():
     module_name = args.module or module_root.name
 
     orth_dir = module_root / "linear-orthographic"
-    jeff_dir = module_root / "linear-jefferson"
+    jeff_dir = module_root / "linear-enriched"
     tsv_dir = module_root / "tsv"
     translations_dir = module_root / "translations"
     conversations = module_root / "metadata" / "conversations.tsv"
@@ -88,7 +88,7 @@ def main():
         if orth_file.is_file():
             cmd += ["--orthographic", str(orth_file)]
         if jeff_file.is_file():
-            cmd += ["--jefferson", str(jeff_file)]
+            cmd += ["--enriched", str(jeff_file)]
 
         tsv_file = tsv_dir / f"{code}.vert.tsv"
         if tsv_file.is_file():

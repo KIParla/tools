@@ -121,9 +121,9 @@ def _kid_base(kid: str) -> str | None:
 
 
 def _jt_approx_form(word: str) -> str:
-    """Normalise a jefferson word to approximately match a CoNLL-U form.
+    """Normalise an enriched word to approximately match a CoNLL-U form.
 
-    Strips Jefferson decoration that is absent from CoNLL-U forms:
+    Strips enriched decoration that is absent from CoNLL-U forms:
       - overlap brackets  [ ] ( ) < > °
       - speed markers     > <
       - trailing intonation  . , ?

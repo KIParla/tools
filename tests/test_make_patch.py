@@ -255,7 +255,7 @@ def test_no_diff_produces_no_patch(tmp_path):
 
 # ---------------------------------------------------------------------------
 # Legacy {P}/{tag} notation vs. literal (.)/((tag)) — see normalize.py's
-# decision to preserve literal Jefferson notation (not rewrite it to
+# decision to preserve literal enriched notation (not rewrite it to
 # {P}/{...}). make_patch must canonicalize, never write {P}/{tag} back out.
 # ---------------------------------------------------------------------------
 

@@ -264,10 +264,10 @@
     { id: "tsv", label: "Vertical (.vert.tsv)", repo: "module", path: "{m}/tsv/{c}.vert.tsv" },
     { id: "eaf", label: "ELAN (.eaf)", repo: "module", path: "{m}/eaf/{c}.eaf" },
     { id: "orthographic", label: "Linear, orthographic", repo: "module", path: "{m}/linear-orthographic/{c}.txt" },
-    { id: "jefferson", label: "Linear, Jefferson", repo: "module", path: "{m}/linear-jefferson/{c}.txt" },
+    { id: "enriched", label: "Linear, enriched", repo: "module", path: "{m}/linear-enriched/{c}.txt" },
     { id: "summary", label: "Summary (.json)", repo: "summaries", path: "{m}/{c}.json" },
     { id: "html", label: "HTML page", repo: "artifacts", path: "{m}/html/{c}.html" },
-    { id: "pdf", label: "PDF (both)", repo: "artifacts", path: "{m}/pdf/{c}-orthographic.pdf", extra: ["{m}/pdf/{c}-jefferson.pdf"] },
+    { id: "pdf", label: "PDF (both)", repo: "artifacts", path: "{m}/pdf/{c}-orthographic.pdf", extra: ["{m}/pdf/{c}-enriched.pdf"] },
   ];
 
   function shQuote(s) { return "'" + String(s).replace(/'/g, "'\\''") + "'"; }

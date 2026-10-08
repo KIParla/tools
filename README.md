@@ -10,7 +10,7 @@ Standalone scripts to handle and transform KIParla data.
 - `cli.py vert2eaf` (`serialize.vert2eaf`): rebuild `.eaf` files from current-schema `.vert.tsv`
   output, reattaching translations from `translations/<name>.translations.json` the same way
   `csv2eaf` does.
-- `tsv2formats.py`: generate linear Jefferson and orthographic text files from `.vert.tsv`.
+- `tsv2formats.py`: generate linear enriched and orthographic text files from `.vert.tsv`.
 - `linear2html.py`: generate publication HTML and PDF artifacts in the `KIParla-artifacts` layout.
 - `merge_metadata.py`: merge metadata tables from module repositories.
 - `check_participants.py`: cross-check each conversation's `metadata/conversations.tsv`
@@ -52,7 +52,7 @@ Standalone scripts to handle and transform KIParla data.
   after opening/saving a `.eaf` in ELAN, or hand-editing a `.vert.tsv`:
   - `python sync.py --from-eaf <path/to/X.eaf>`: eaf2csv → process (updates
     `tsv/X.vert.tsv`, `translations/`, `tmp/process/{csv,json}/`, `tmp/process/json/summary.json`)
-    → `tsv2formats` (linear-jefferson/orthographic) → `check_participants` (this module)
+    → `tsv2formats` (linear-enriched/orthographic) → `check_participants` (this module)
     → `generate_validation_report` (this module's page).
   - `python sync.py --from-vert <path/to/X.vert.tsv>`: `vert2eaf` (overwrites `eaf/X.eaf`
     in place) → `tsv2formats` → `check_participants` → `generate_validation_report`.
@@ -105,7 +105,7 @@ python -m pytest tests/test_tsv2formats.py
 - **`#_`** means "non-Italian from this point to the end of the unit" (the whole unit when it is at
   the start); `[#_ w]` is rewritten to `#_ [w]` (`HASH_UNIT_SPACE`). See PIPELINE.md.
 
-- `vert2eaf` reconstructs the pipeline's *normalized* Jefferson text (post accent-correction,
+- `vert2eaf` reconstructs the pipeline's *normalized* enriched text (post accent-correction,
   post number-to-words, etc.), not necessarily byte-identical pre-normalization source text.
   One documented, tested lossy case: a TU's TU-level `# ` variation marker (used when
   individual non-Italian tokens aren't decidable) is not reconstructed when `variation=some`,

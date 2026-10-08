@@ -15,7 +15,7 @@ ping-pong between the two commands.
   --from-eaf <X.eaf>:
     eaf2csv -> process (writes tsv/X.vert.tsv, translations/X.translations.*,
     tmp/process/{csv,json}/X.* and updates tmp/process/json/summary.json)
-    -> tsv2formats (linear-jefferson/orthographic) -> check_participants
+    -> tsv2formats (linear-enriched/orthographic) -> check_participants
     (this module) -> generate_validation_report (all modules).
 
   --from-vert <X.vert.tsv>:
@@ -123,8 +123,8 @@ def sync_from_eaf(eaf_path: Path, module_override: str | None,
     print(f"eaf -> tsv/{eaf_path.stem}.vert.tsv")
 
     vert_path = module_dir / "tsv" / f"{eaf_path.stem}.vert.tsv"
-    tsv2formats.tsv2linear([vert_path], module_dir / "linear-jefferson", module_dir / "linear-orthographic")
-    print(f"tsv -> linear-jefferson/, linear-orthographic/ ({eaf_path.stem})")
+    tsv2formats.tsv2linear([vert_path], module_dir / "linear-enriched", module_dir / "linear-orthographic")
+    print(f"tsv -> linear-enriched/, linear-orthographic/ ({eaf_path.stem})")
 
     _refresh_module_checks(module_dir)
     _refresh_validation_report(module_dir)
@@ -150,8 +150,8 @@ def sync_from_vert(vert_path: Path, module_override: str | None, audio_dir: Path
     serialize.vert2eaf(vert_path, linked_file, eaf_out, translations_path=translations_path)
     print(f"vert.tsv -> eaf/{stem}.eaf")
 
-    tsv2formats.tsv2linear([vert_path], module_dir / "linear-jefferson", module_dir / "linear-orthographic")
-    print(f"tsv -> linear-jefferson/, linear-orthographic/ ({stem})")
+    tsv2formats.tsv2linear([vert_path], module_dir / "linear-enriched", module_dir / "linear-orthographic")
+    print(f"tsv -> linear-enriched/, linear-orthographic/ ({stem})")
 
     _refresh_module_checks(module_dir)
     _refresh_validation_report(module_dir)

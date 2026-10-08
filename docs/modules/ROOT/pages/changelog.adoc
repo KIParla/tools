@@ -134,7 +134,7 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 * new `vert2eaf-layered` command (`tsv2eaf_layered.py`): renders a `.vert.tsv`
   to a layered ELAN `.eaf` with a per-speaker tier hierarchy named in the
   Toolbox/ELAN interlinear `<code>@<speaker>` convention — `ref@` (units) ▸
-  `ft@` (translation), `tx@` (Jefferson), `tx_ortho@` (orthographic) ▸ `tok@`
+  `ft@` (translation), `tx@` (enriched), `tx_ortho@` (orthographic) ▸ `tok@`
   (tokens) ▸ `nvb@`, `sent_id@` (many-to-many syntactic-sentence link) and,
   with `--linguistic`, `lemma@ / pos@ / xpos@ / feats@ / dep@`. Empty leaf
   tiers are pruned; `--template` writes an `.etf` with the full tier set for

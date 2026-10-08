@@ -7,7 +7,7 @@ from textutil import ENCODING_READ, ENCODING_WRITE
 from variety import OrthographicMarkers, iter_vert_rows
 
 # orthographic = []
-# jefferson = []
+# enriched = []
 
 def tsv2linear(input_files_paths, output_jefferson_path, output_orthographic_path):
 
@@ -50,7 +50,7 @@ def tsv2linear(input_files_paths, output_jefferson_path, output_orthographic_pat
 					text_orthographic = []
 					markers = OrthographicMarkers()
 
-				# Variation markers live in the token spans, so the Jefferson
+				# Variation markers live in the token spans, so the enriched
 				# text already contains them; for the orthographic text, put
 				# the unit-level "# "/"#_ " back once and the per-word
 				# "#"/"#*"/"$" in front of the word.
@@ -112,9 +112,9 @@ if __name__ == "__main__":
 		)
 
 		parser.add_argument(
-			"--out_jefferson",
-			help="Output folder for transformation into linear jefferson.",
-			default="linear-jefferson"
+			"--out_enriched",
+			help="Output folder for transformation into linear enriched.",
+			default="linear-enriched"
 		)
 
 		return parser.parse_args()
@@ -143,7 +143,7 @@ if __name__ == "__main__":
 
 	# Ensure output folders exist
 	out_orth = pathlib.Path(args.out_orthographic)
-	out_jeff = pathlib.Path(args.out_jefferson)
+	out_jeff = pathlib.Path(args.out_enriched)
 	out_orth.mkdir(parents=True, exist_ok=True)
 	out_jeff.mkdir(parents=True, exist_ok=True)
 

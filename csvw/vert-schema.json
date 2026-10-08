@@ -12,7 +12,7 @@
     "id": { "datatype": "integer",
       "dc:description": "Token's true 0-based position within its TU. Recomputed from row order on every patch — always monotonic, unlike token_id." },
     "span": { "required": true,
-      "dc:description": "Raw Jefferson span (character slice of the original annotation)." },
+      "dc:description": "Raw enriched span (character slice of the original annotation)." },
     "form": { "required": true,
       "dc:description": "Normalized form: lowercase, no prolongations, no punctuation." },
     "lemma": { "null": "_", "dc:description": "Filled by the lemmatization step." },

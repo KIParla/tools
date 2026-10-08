@@ -58,7 +58,7 @@ If `config` is `None` or a key is absent, each rule falls back to its `enabled_b
 |Name |What it fixes |On by default
 
 |`SYMBOL_NOT_ALLOWED`
-|Removes characters outside the Jefferson transcription alphabet
+|Removes characters outside the enriched transcription alphabet
 |yes
 
 |`META_TAG`
@@ -184,7 +184,7 @@ The substitution tables used by the accent normalization rules are defined as mo
 
 `ACCENT_CHE_MAP`::
   Words where `-chè` should become `-ché` (e.g. `perchè` → `perché`, `nè` → `né`).
-  The patterns tolerate Jefferson markers interspersed between letters (e.g. `per[chè` → `per[ché`).
+  The patterns tolerate enriched markers interspersed between letters (e.g. `per[chè` → `per[ché`).
 
 `ACCENT_PERO_MAP`::
   Words where a trailing apostrophe-accent should become the proper accent (e.g. `però'` → `però`, `può'` → `può`).

@@ -134,7 +134,7 @@ def _merge_positional_feature(prev_value: str, dropped_value: str, offset: int, 
         shifted_entries = shifted_entries[1:]
     return ','.join(prev_entries + shifted_entries)
 
-# Legacy curly-brace Jefferson notation: {P} for shortpause, {tag}/{multi_word_tag}
+# Legacy curly-brace enriched notation: {P} for shortpause, {tag}/{multi_word_tag}
 # for non-verbal-behavior (spaces stored as underscores). normalize.py's decision
 # is to preserve literal (.)/((tag)) notation rather than rewrite it — see
 # meta_tag()'s docstring. Some wip/*.csv rows a lemmatizer never touched still

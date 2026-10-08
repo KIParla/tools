@@ -42,14 +42,14 @@ Use `cli.py vert2eaf` (see xref:scripts.adoc#vert2eaf[Scripts]) when you need to
 
 === Regenerate linear publication formats
 
-Use `tsv2formats.py` when `.vert.tsv` files have changed and the corresponding linear Jefferson or orthographic files must be regenerated.
+Use `tsv2formats.py` when `.vert.tsv` files have changed and the corresponding linear enriched or orthographic files must be regenerated.
 
 In normal development this happens automatically (see <<auto-regen>> below).
 Run it manually when you need to regenerate files outside of CI, for example to verify the output locally before pushing:
 
 [source,bash]
 ----
-python tsv2formats.py -i tsv/ --out_jefferson linear-jefferson/ --out_orthographic linear-orthographic/
+python tsv2formats.py -i tsv/ --out_enriched linear-enriched/ --out_orthographic linear-orthographic/
 ----
 
 === Rebuild EAF files from TSV
@@ -78,7 +78,7 @@ TSV files are updated on the `dev` branch.
 === When it runs
 
 The workflow triggers on every push to `dev` that modifies at least one file under `tsv/`.
-Commits that only touch `linear-jefferson/`, `linear-orthographic/`, or `eaf/` do not
+Commits that only touch `linear-enriched/`, `linear-orthographic/`, or `eaf/` do not
 re-trigger it, so there is no feedback loop.
 
 === What it does
@@ -86,7 +86,7 @@ re-trigger it, so there is no feedback loop.
 . Checks out the module repository at `dev`.
 . Checks out `KIParla/tools` into a temporary `_tools/` subdirectory.
 . Installs the `tools` dependencies (`pip install ./_tools`).
-. Runs `tsv2formats.py` over the entire `tsv/` directory, writing to `linear-jefferson/`
+. Runs `tsv2formats.py` over the entire `tsv/` directory, writing to `linear-enriched/`
   and `linear-orthographic/`.
 . Runs `cli.py vert2eaf` over the entire `tsv/` directory, writing to `eaf/`.
 . Commits the regenerated files back to `dev` (only if any file actually changed).
