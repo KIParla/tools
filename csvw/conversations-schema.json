@@ -21,7 +21,7 @@
     "languages": {},
     "unknown-participant": { "datatype": { "base": "boolean", "format": "yes|no" } },
     "community": {
-      "dc:description": "Migrant community the speakers belong to (Stra-* modules), e.g. moroccan|bengali|chinese|ukrainian." }
+      "dc:description": "Migrant community the speakers belong to (Stra-* modules), e.g. moroccan, bengali, chinese, ukrainian (Stra-ParlaBO); moroccan, romanian, peruvian (Stra-ParlaTO)." }
   },
   "foreignKeys": [
     {
