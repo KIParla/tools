@@ -2,13 +2,13 @@
 
 The variation markers of the Jefferson transcription (`#word`, `#*word`, `$word`, `#_`,
 and a unit-initial `# `) are exported in a single feature-list column of the
-`.vert.tsv`, `variation`, and to NoSketch Engine as the attributes `variety`, `nonce` and
+`.vert.tsv`, `code-variation`, and to NoSketch Engine as the attributes `variety`, `nonce` and
 `contains_variation`. This page describes the format and how it differs from the one used
 before; it is a *breaking change* of the vert.tsv schema.
 
-== The `variation` column
+== The `code-variation` column
 
-`variation` holds every variation feature of a token as pipe-separated `Key=Value` pairs
+`code-variation` holds every variation feature of a token as pipe-separated `Key=Value` pairs
 (CoNLL-U style). None of them is in `jefferson_feats`.
 
 [cols="2,3", options="header"]
@@ -17,27 +17,28 @@ before; it is a *breaking change* of the vert.tsv schema.
 
 | `ContainsVariation=Yes\|No`
 | Unit level, repeated on every token row of the unit. `Yes` when any token of the unit has
-  a `Variety`. Always present, so the column is never empty. A `$` form alone does not make
+  a `Code`. Always present, so the column is never empty. A `$` form alone does not make
   it `Yes`.
 
-| `Variety=Other`
+| `Code=Other`
 | `#word`, or any token covered by a `#_` marker: from the marker to the end of the unit
   (the whole unit when the marker is unit-initial).
 
-| `Variety=Unassignable`
-| `#*word`: the variety cannot be assigned (probably Italian).
+| `Code=Unsure`
+| `#*word`: the code of the token can be assigned to more than one language (e.g. Italian
+  and Spanish).
 
-| `Variety=Unsure`
-| A token of a unit that starts with `# `: another variety is present, but the transcriber
-  did not say on which words. An explicit `#word` / `#*word` in such a unit keeps its own label.
+| `Code=Underspecified`
+| A token of a unit that starts with `# `: at least one word of the unit belongs to another
+  language, but the transcriber did not say which. An explicit `#word` / `#*word` in such a unit keeps its own label.
 
 | `Language=<ISO code>`
-| On tokens marked `Other` or `Unassignable`; `NO_ISO_CODE` when the language was not
-  identified. Not set on `Unsure` tokens (the language is unknown).
+| On tokens marked `Other` or `Unsure`; `NO_ISO_CODE` when the language was not
+  identified. Not set on `Underspecified` tokens (the language is unknown).
 
 | `Nonce=Yes`
-| `$word`: a nonce or non-standard form. It is a property of the form, not a variety, and
-  is independent of `Variety`.
+| `$word`: a nonce or non-standard form. It is a property of the form, not a code change, and
+  is independent of `Code`.
 |===
 
 Examples:
@@ -45,12 +46,12 @@ Examples:
 ----
 ContainsVariation=No
 ContainsVariation=Yes
-ContainsVariation=Yes|Variety=Other|Language=NO_ISO_CODE
-ContainsVariation=Yes|Variety=Unsure
+ContainsVariation=Yes|Code=Other|Language=NO_ISO_CODE
+ContainsVariation=Yes|Code=Underspecified
 ContainsVariation=No|Nonce=Yes
 ----
 
-Pauses, non-verbal behaviour, anonymized names and `xxx` never carry a variety.
+Pauses, non-verbal behaviour, anonymized names and `xxx` never carry a code.
 
 == Everything is recoverable from `span`
 
@@ -60,8 +61,8 @@ The unit-initial marker is part of the `span` of the unit's first token (`# hola
 therefore rebuilt from `span` alone and match the transcription exactly; the unit-level
 `ContainsVariation` flag is not needed for that.
 
-In the NoSketch vertical only the labels are available. `other`, `unassignable` and `nonce`
-words map back to `#`, `#*` and `$`, and `unsure` words to a unit-initial `# `. What a
+In the NoSketch vertical only the labels are available. `other`, `unsure` and `nonce`
+words map back to `#`, `#*` and `$`, and `underspecified` words to a unit-initial `# `. What a
 vertical cannot tell is the notation used for `other`: a `#_` stretch and the same words each
 marked with `#` are the same data.
 
@@ -73,23 +74,23 @@ marked with `#` are the same data.
 
 | Column `variation`: one label per unit — `none`, `yes`, `unspecified` (a `# ` unit),
   `all` (a `#_` unit); older files have `some`
-| Column `variation`: the feature list above. How a unit was written (`# `, `#_ `) is read
+| Column `code-variation`: the feature list above. How a unit was written (`# `, `#_ `) is read
   from the spans
 
 | `jefferson_feats`: `Variation=Token`
-| `variation`: `Variety=Other`
+| `code-variation`: `Code=Other`
 
 | `jefferson_feats`: `Variation=Doubtful`
-| `variation`: `Variety=Unassignable`
+| `code-variation`: `Code=Unsure`
 
 | `jefferson_feats`: `Variation=Emerging` and `Orthography=Yes` (`$word`)
-| `variation`: `Nonce=Yes`
+| `code-variation`: `Nonce=Yes`
 
 | `jefferson_feats`: `Language=<code>`
-| `variation`: `Language=<code>`
+| `code-variation`: `Language=<code>`
 
 | Tokens of a `# ` unit: no token-level information
-| `variation`: `Variety=Unsure`
+| `code-variation`: `Code=Underspecified`
 
 | `span`: a unit-initial `# ` / `#_ ` was not in any span (it was rebuilt from the unit label)
 | `span` of the first token starts with the marker
@@ -117,3 +118,28 @@ silently lose them. There is no in-place converter, because the EAF is the sourc
 . Release each already-released module with a **major** version: the schema, the
   `csv-metadata.json` and the NoSketch attributes change. A module that has not been
   released yet ships the new format as its first release.
+
+== Renaming to `code-variation`
+
+The column was first released as `variation` with the feature `Variety=Other|Unassignable|Unsure`.
+It is now `code-variation` with `Code=Other|Unsure|Underspecified`, because the features describe
+code switching and nonce formations rather than varieties:
+
+[cols="1,1", options="header"]
+|===
+| Before | Now
+
+| Column `variation`
+| Column `code-variation`
+
+| `Variety=Other`
+| `Code=Other`
+
+| `Variety=Unassignable` (`#*word`)
+| `Code=Unsure`
+
+| `Variety=Unsure` (tokens of a `# ` unit)
+| `Code=Underspecified`
+|===
+
+`ContainsVariation`, `Language` and `Nonce` keep their names.

@@ -34,7 +34,7 @@ DEFAULT_ISSUES_BASE_URL = "https://github.com/KIParla"
 # Two further positional attributes are always emitted last (see
 # variation_kind()/is_nonce()/convert_file() below), in this order:
 #   variety  — "other" for a '#' marker or a token covered by a '#_' marker,
-#              "unassignable" for '#*', "unsure" for a token in a unit that
+#              "unsure" for '#*', "underspecified" for a token in a unit that
 #              starts with '# ', "" otherwise. To be extended later with which
 #              language the variety is from.
 #   nonce    — "yes" for a '$' marker, "" otherwise. Not a variety — a
@@ -213,14 +213,14 @@ def _pos_value(row, key):
 
 
 def variation_kind(row):
-    """Word-level variety from the variation column (Variety=...): 'other' for a
-    '#' marker or a token covered by '#_', 'unassignable' for '#*', 'unsure'
+    """Word-level code from the code-variation column (Code=...): 'other' for a
+    '#' marker or a token covered by '#_', 'unsure' for '#*', 'underspecified'
     for a token in a '# ' unit, '' otherwise."""
     return row_variety(row)
 
 
 def is_nonce(row):
-    """True for a '$word' token (Nonce=Yes in the variation column) — a nonce / non-standard form,
+    """True for a '$word' token (Nonce=Yes in the code-variation column) — a nonce / non-standard form,
     not a variety, so tracked separately from variation_kind()."""
     return row_nonce(row)
 
@@ -408,7 +408,7 @@ def convert_file(
             word = form[1:] if is_anonymized(row) and form.startswith("@") else form
             if kind == "other":
                 word = f"#{word}"
-            elif kind == "unassignable":
+            elif kind == "unsure":
                 word = f"#*{word}"
             elif nonce:
                 word = f"${word}"

@@ -4,6 +4,16 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* **Breaking — `variation` column renamed `code-variation`, feature `Variety` renamed `Code`.** The
+  column of the vert.tsv that holds the variation features is now `code-variation`, and its
+  token-level feature is `Code=` instead of `Variety=`. The values are renamed with it:
+  `Variety=Other` -> `Code=Other`, `Variety=Unassignable` (`#*word`) -> `Code=Unsure` (the code can
+  be assigned to more than one language), `Variety=Unsure` (tokens of a `# ` unit) ->
+  `Code=Underspecified`. `ContainsVariation`, `Language=` and `Nonce=` are unchanged. The dataflags
+  enum `tokenvariety` follows (`other`, `unsure`, `underspecified`) and the NoSketch positional
+  attribute `variety` now carries `other`/`unsure`/`underspecified` (its name is unchanged). The
+  tools refuse to read files with the old `variation` column (`variety.iter_vert_rows`); all
+  modules were migrated and `csv-metadata.json` regenerated.
 * New `build_explorer.py`: builds the corpus explorer (`KIParla-artifacts/explorer/index.html`), a single HTML
   page to filter the conversations by metadata, speaker attributes and measured features, see figures for the
   resulting sub-corpus and export it (code list, CSV, JSON, copy script). Reads the snapshots of the summaries repository.

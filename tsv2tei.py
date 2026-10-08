@@ -210,9 +210,9 @@ def _add_feature_struct(w: ET.Element, tok: dict) -> None:
     if val and val not in ("_", ""):
         features.append(("meta_label", val))
 
-    # variation column: Language becomes xml:lang (see the <w> attributes);
+    # code-variation column: Language becomes xml:lang (see the <w> attributes);
     # ContainsVariation=No is the default and carries no information here.
-    for k, v in feats_dict(tok.get("variation")).items():
+    for k, v in feats_dict(tok.get("code-variation")).items():
         if k == "Language" or (k == "ContainsVariation" and v == "No"):
             continue
         features.append((f"var.{k}", v))
@@ -271,7 +271,7 @@ def _add_token(parent: ET.Element, tok: dict, unit_id: str, idx: int) -> ET.Elem
     elif tok_type == "error":
         attribs["type"] = "error"
 
-    lang = feat_value(tok.get("variation"), "Language")
+    lang = feat_value(tok.get("code-variation"), "Language")
     if lang and lang != "ita":
         attribs[f"{X}lang"] = lang
 

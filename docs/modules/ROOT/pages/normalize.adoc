@@ -137,7 +137,7 @@ in `TranscriptionUnit.__post_init__` (step 2b), _before_ the rule list above run
   (`META_TAGS`); overlap spans are still recorded.
 . A mid-unit `#_` splits the unit: only the Italian part before it goes through the rules above.
   The marker never becomes a token. Every token after it gets `Language=NO_ISO_CODE` and
-  `Variety=Other`, and the marker is kept in the `span` of the first of them (e.g. `#_ l-ʕars`),
+  `Code=Other`, and the marker is kept in the `span` of the first of them (e.g. `#_ l-ʕars`),
   so the vert.tsv -> eaf round trip restores it. A unit-initial `#_ ` or `# ` is kept the same
   way, in the span of the unit's first token, so every variation marker can be read back from
   the `span` column alone.

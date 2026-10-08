@@ -155,7 +155,7 @@ class Token:
 
         # 5. Unassignable variety (#*word) — checked before plain #
         if self._cfg_variation.get("hash_doubtful") and text.startswith("#*"):
-            self.variety = df.tokenvariety.unassignable
+            self.variety = df.tokenvariety.unsure
             self.non_ita = True
             self.iso_code = "NO_ISO_CODE"
             text = text[2:]
@@ -388,12 +388,12 @@ def tokenize_tu(
 
     # 5e. Post-tokenize: variety for marker-covered text.
     #   "#_"  -> every token from the marker on is treated exactly as if it had
-    #            carried an explicit #-prefix (Variety=Other, plus Language=),
+    #            carried an explicit #-prefix (Code=Other, plus Language=),
     #            not a distinct per-token state. A unit-initial "#_"
     #            (variation_context=all) covers the whole unit; a mid-unit "#_"
     #            covers the tokens after it.
     #   "# "  -> (unit-initial only; variation_context=unspecified) every token
-    #            not individually marked is Variety=Unsure.
+    #            not individually marked is Code=Underspecified.
     foreign_from = None
     if df.languagevariation.all in variation_context:
         foreign_from = 0
@@ -417,7 +417,7 @@ def tokenize_tu(
             # An explicit #word / #*word keeps its own, more specific variety.
             if tok.token_type & _LANGUAGE_NEUTRAL or tok.variety != df.tokenvariety.none:
                 continue
-            tok.variety = df.tokenvariety.unsure
+            tok.variety = df.tokenvariety.underspecified
 
     # PauseAfter pass: mark tokens immediately before a shortpause
     for i, tok in enumerate(tokens):

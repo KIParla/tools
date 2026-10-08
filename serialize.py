@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 VERT_FIELDNAMES = [
     "token_id", "speaker", "tu_id", "id", "span",
     "form", "lemma", "upos", "xpos", "feats", "deprel",
-    "type", "meta_label", "variation", "jefferson_feats",
+    "type", "meta_label", "code-variation", "jefferson_feats",
     "align", "prolongations", "pace", "guesses", "overlaps",
 ]
 
@@ -134,12 +134,12 @@ def read_csv(
 # ---------------------------------------------------------------------------
 
 def _variation_feats(tok, tu) -> str:
-    """The ``variation`` column: every variation feature of a token, plus the
+    """The ``code-variation`` column: every variation feature of a token, plus the
     unit-level flag (see variety.py). Never empty: ContainsVariation is always
     present."""
     parts = [f"ContainsVariation={'Yes' if tu.contains_variation else 'No'}"]
     if tok.variety != df.tokenvariety.none:
-        parts.append(f"Variety={tok.variety.name.capitalize()}")
+        parts.append(f"Code={tok.variety.name.capitalize()}")
     if tok.non_ita:
         parts.append(f"Language={tok.iso_code}")
     if tok.nonce:
@@ -260,7 +260,7 @@ def conversation_to_conll(transcript: Transcript, output_path: Path, sep: str = 
                     "deprel":        "_",
                     "type":          tok.token_type.name,
                     "meta_label":    "_",
-                    "variation":     _variation_feats(tok, tu),
+                    "code-variation": _variation_feats(tok, tu),
                     "jefferson_feats": _jefferson_feats(tok),
                     "align":         _align(tok, tu),
                     "prolongations": _prolongations(tok),

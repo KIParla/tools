@@ -25,7 +25,7 @@ def test_languagevariation_all_values():
 
 
 def test_tokenvariety_all_values():
-    for name in ("none", "other", "unassignable", "unsure"):
+    for name in ("none", "other", "unsure", "underspecified"):
         assert hasattr(df.tokenvariety, name)
 
 

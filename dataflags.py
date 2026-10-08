@@ -40,12 +40,12 @@ class languagevariation(Flag):
 
 
 class tokenvariety(Flag):
-    """Token-level variety, written to jefferson_feats as ``Variety=<Name>``.
+    """Token-level variety, written to the code-variation column as ``Code=<Name>``.
 
     ``$word`` (a nonce / non-standard form) is *not* a variety: it is the
     independent ``Nonce=Yes`` feature (Token.nonce).
     """
     none = auto()
-    other = auto()          # #word, or inside a "#_" stretch → Variety=Other
-    unassignable = auto()   # #*word                          → Variety=Unassignable
-    unsure = auto()         # inside a unit starting with "# " → Variety=Unsure
+    other = auto()          # #word, or inside a "#_" stretch → Code=Other
+    unsure = auto()         # #*word                          → Code=Unsure
+    underspecified = auto() # inside a unit starting with "# " → Code=Underspecified

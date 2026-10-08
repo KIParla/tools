@@ -336,7 +336,7 @@ def summarize_conversation(vert_path: Path, *, code: str | None = None,
                 _ratio(s["annotated_overlap_linguistic"], ling),
             "variation": {
                 "units_with_variation": s["units_with_variation"],
-                "tokens_by_variety": dict(sorted(s["variety"].items())),
+                "tokens_by_code": dict(sorted(s["variety"].items())),
                 "tokens_by_language": dict(sorted(s["languages"].items())),
                 "nonce_tokens": s["nonce"],
             },
@@ -400,7 +400,7 @@ def summarize_conversation(vert_path: Path, *, code: str | None = None,
         },
         "variation": {
             "units_with_variation": sum(s["units_with_variation"] for s in speakers.values()),
-            "tokens_by_variety": dict(sorted(variety_total.items())),
+            "tokens_by_code": dict(sorted(variety_total.items())),
             "tokens_by_language": dict(sorted(language_total.items())),
             "nonce_tokens": sum(s["nonce"] for s in speakers.values()),
         },
@@ -481,7 +481,7 @@ def _flat_conversation(s: dict) -> dict:
         "share_linguistic_tokens_in_annotated_overlap": o["share_of_linguistic_tokens"],
         "share_units_overlapped_in_time": u["share_overlapped_in_time"],
         "units_with_variation": v["units_with_variation"],
-        "tokens_by_variety": v["tokens_by_variety"],
+        "tokens_by_code": v["tokens_by_code"],
     }
 
 

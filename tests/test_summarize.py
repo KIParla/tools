@@ -8,7 +8,7 @@ import summarize
 from summarize import check_module, summarize_conversation, time_statistics, update_module
 
 COLUMNS = ["token_id", "speaker", "tu_id", "id", "span", "form", "lemma", "upos",
-           "xpos", "feats", "deprel", "type", "meta_label", "variation",
+           "xpos", "feats", "deprel", "type", "meta_label", "code-variation",
            "jefferson_feats", "align", "prolongations", "pace", "guesses", "overlaps"]
 
 
@@ -25,7 +25,7 @@ def _unit(tu, speaker, begin, end, words, overlaps=None, variation="ContainsVari
         rows.append({
             "token_id": f"{tu}-{i}", "speaker": speaker, "tu_id": str(tu), "id": str(i),
             "span": w, "form": w, "type": (types or {}).get(i, "linguistic"),
-            "variation": variation, "align": "|".join(align) or "_",
+            "code-variation": variation, "align": "|".join(align) or "_",
             "overlaps": (overlaps or {}).get(i, "_"),
         })
     return rows

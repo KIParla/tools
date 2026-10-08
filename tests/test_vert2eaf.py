@@ -251,5 +251,5 @@ class TestRoundTripIdempotency:
             assert r1["form"] == r2["form"]
             assert r1["type"] == r2["type"]
             assert r1["jefferson_feats"] == r2["jefferson_feats"]
-            assert r1["variation"] == r2["variation"]
+            assert r1["code-variation"] == r2["code-variation"]
             assert r1["span"] == r2["span"]

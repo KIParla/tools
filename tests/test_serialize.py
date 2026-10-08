@@ -225,7 +225,7 @@ class TestConversationToConll:
         out = tmp_path / "test.vert.tsv"
         conversation_to_conll(t, out)
         rows = _read_vert(out)
-        assert rows[0]["variation"] == "ContainsVariation=Yes|Variety=Unsure"
+        assert rows[0]["code-variation"] == "ContainsVariation=Yes|Code=Underspecified"
         assert "contains_variation" not in rows[0]
         # the unit-initial marker is part of the first token's span
         assert rows[0]["span"] == "# hola"
@@ -241,8 +241,8 @@ class TestConversationToConll:
         conversation_to_conll(t, out)
         rows = _read_vert(out)
         # unit-level flag on every token row of the unit; Language only on the #word
-        assert rows[0]["variation"] == "ContainsVariation=Yes"
-        assert rows[1]["variation"] == "ContainsVariation=Yes|Variety=Other|Language=NO_ISO_CODE"
+        assert rows[0]["code-variation"] == "ContainsVariation=Yes"
+        assert rows[1]["code-variation"] == "ContainsVariation=Yes|Code=Other|Language=NO_ISO_CODE"
         # none of it is left in jefferson_feats
         for r in rows:
             for key in ("Variety", "Language", "Nonce", "ContainsVariation"):
@@ -252,7 +252,7 @@ class TestConversationToConll:
         t = _make_simple_transcript(["ciao", "mondo"])
         out = tmp_path / "test.vert.tsv"
         conversation_to_conll(t, out)
-        assert {r["variation"] for r in _read_vert(out)} == {"ContainsVariation=No"}
+        assert {r["code-variation"] for r in _read_vert(out)} == {"ContainsVariation=No"}
 
     def test_nonce_is_a_feature_not_a_variety(self, tmp_path):
         cfg = {"variation_markers": {"dollar": True}}
@@ -264,7 +264,7 @@ class TestConversationToConll:
         out = tmp_path / "test.vert.tsv"
         conversation_to_conll(t, out)
         rows = _read_vert(out)
-        assert rows[0]["variation"] == "ContainsVariation=No|Nonce=Yes"
+        assert rows[0]["code-variation"] == "ContainsVariation=No|Nonce=Yes"
         assert "Orthography" not in rows[0]["jefferson_feats"]
 
     def test_lemma_upos_xpos_feats_deprel_are_underscore(self, tmp_path):

@@ -37,7 +37,7 @@ This document describes how every field in the pipeline `vert.tsv` format is enc
 | `deprel`          | `<fs><f name="deprel">…</f></fs>` inside `<w>` (when not `_`)                             |
 | `type`            | determines element type (see **Token Types** below)                                       |
 | `meta_label`      | `<fs><f name="meta_label">…</f></fs>` inside `<w>` (when not `_`)                         |
-| `variation`       | `<fs><f name="variation">…</f></fs>` inside `<w>` (when not `_` or `none`)                |
+| `code-variation`  | `<fs><f name="code-variation">…</f></fs>` inside `<w>` (when not `_` or `none`)                |
 | `jefferson_feats` | split by key — see **jefferson_feats Keys** below                                         |
 | `align`           | `Begin` → `@start` on `<annotationBlock>`; `End` → `@end`; values reference `<timeline>`  |
 | `prolongations`   | inline `<c type="prolongation" n="N"/>` milestones inside `<w>` (see below)               |
