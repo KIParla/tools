@@ -40,7 +40,7 @@ class languagevariation(Flag):
 
 
 class tokenvariety(Flag):
-    """Token-level variety, written to the code-variation column as ``Code=<Name>``.
+    """Token-level variety, written to the code_variation column as ``Code=<Name>``.
 
     ``$word`` (a nonce / non-standard form) is *not* a variety: it is the
     independent ``Nonce=Yes`` feature (Token.nonce).

@@ -133,6 +133,14 @@ class TestVertToLinearRows:
         with pytest.raises(SystemExit, match="old-format"):
             vert_to_linear_rows(vert)
 
+    def test_hyphenated_column_vert_is_rejected(self, tmp_path):
+        import pytest
+        vert = tmp_path / "hyphen.vert.tsv"
+        vert.write_text("token_id\tspeaker\ttu_id\tcode-variation\n0-0\tA\t0\tContainsVariation=No\n",
+                        encoding="utf-8")
+        with pytest.raises(SystemExit, match="old-format"):
+            vert_to_linear_rows(vert)
+
     def test_tu_level_yes_not_re_prefixed(self, tmp_path):
         """A TU with no explicit '# ' prefix, only an individually-marked
         token, must NOT get a synthesized '# ' prefix on reconstruction —
@@ -251,5 +259,5 @@ class TestRoundTripIdempotency:
             assert r1["form"] == r2["form"]
             assert r1["type"] == r2["type"]
             assert r1["jefferson_feats"] == r2["jefferson_feats"]
-            assert r1["code-variation"] == r2["code-variation"]
+            assert r1["code_variation"] == r2["code_variation"]
             assert r1["span"] == r2["span"]

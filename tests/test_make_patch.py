@@ -593,7 +593,7 @@ def test_span_change_recomputes_intonation(tmp_path):
 
 
 def test_volume_not_derivable_from_own_span_is_preserved_on_edit(tmp_path):
-    """Real case (KIP BOA1002 tu_id 66): a token can carry Volume=low while
+    """Real case (KIP BOA1002 tu_id 66): a token can carry Volume=Low while
     its own span has no literal `°` — it's inside a multi-word °...° span
     where only the boundary tokens carry the ° (see feats_from_span). An
     unrelated accent fix to this token's span ("vabbé" → "vabbè") shouldn't
@@ -606,7 +606,7 @@ def test_volume_not_derivable_from_own_span_is_preserved_on_edit(tmp_path):
     patch_path = tmp_path / "CONV001.vert.tsv.patch"
 
     tsv_rows = [
-        "0-0\tSPK1\t0\tvabbé\tvabbé\tlinguistic\tVolume=low\t_\t_\t_\t_\t_",
+        "0-0\tSPK1\t0\tvabbé\tvabbé\tlinguistic\tVolume=Low\t_\t_\t_\t_\t_",
     ]
     csv_rows = [
         "0-0,SPK1,0,0,1,vabbè,vabbè,vabbè,INTJ,_",
@@ -617,12 +617,12 @@ def test_volume_not_derivable_from_own_span_is_preserved_on_edit(tmp_path):
     make_patch.make_patch(str(csv_path), str(tsv_path), str(patch_path))
 
     patch = patch_path.read_text(encoding="utf-8")
-    assert "+0-0\tSPK1\t0\tvabbè\tvabbè\tlinguistic\tVolume=low\t_\t_\t_\t_\t_" in patch
+    assert "+0-0\tSPK1\t0\tvabbè\tvabbè\tlinguistic\tVolume=Low\t_\t_\t_\t_\t_" in patch
 
 
 def test_volume_actually_removed_when_own_marker_is_removed(tmp_path):
     """Contrast case: the old span itself carried the literal `°`, so
-    Volume=low *was* locally derivable — if the edit removes it, that's a
+    Volume=Low *was* locally derivable — if the edit removes it, that's a
     genuine change and Volume should be dropped, same as before."""
     tsv_path = tmp_path / "CONV001.vert.tsv"
     csv_path = tmp_path / "wip" / "KIP" / "CONV001.csv"
@@ -630,7 +630,7 @@ def test_volume_actually_removed_when_own_marker_is_removed(tmp_path):
     patch_path = tmp_path / "CONV001.vert.tsv.patch"
 
     tsv_rows = [
-        "0-0\tSPK1\t0\t°vabbé°\tvabbé\tlinguistic\tVolume=low\t_\t_\t_\t_\t_",
+        "0-0\tSPK1\t0\t°vabbé°\tvabbé\tlinguistic\tVolume=Low\t_\t_\t_\t_\t_",
     ]
     csv_rows = [
         "0-0,SPK1,0,0,1,vabbè,vabbè,vabbè,INTJ,_",

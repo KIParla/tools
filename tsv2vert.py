@@ -213,14 +213,14 @@ def _pos_value(row, key):
 
 
 def variation_kind(row):
-    """Word-level code from the code-variation column (Code=...): 'other' for a
+    """Word-level code from the code_variation column (Code=...): 'other' for a
     '#' marker or a token covered by '#_', 'unsure' for '#*', 'underspecified'
     for a token in a '# ' unit, '' otherwise."""
     return row_variety(row)
 
 
 def is_nonce(row):
-    """True for a '$word' token (Nonce=Yes in the code-variation column) — a nonce / non-standard form,
+    """True for a '$word' token (Nonce=Yes in the code_variation column) — a nonce / non-standard form,
     not a variety, so tracked separately from variation_kind()."""
     return row_nonce(row)
 

@@ -87,11 +87,11 @@ class TestVarietyAttributes:
 
     def test_variety_and_nonce_columns_and_word_prefixes(self, tmp_path):
         v = _vertical(tmp_path, [
-            dict(form="ciao", **{"code-variation": "ContainsVariation=Yes"}),
-            dict(form="hola", **{"code-variation": "ContainsVariation=Yes|Code=Other|Language=NO_ISO_CODE"}),
-            dict(form="mah", **{"code-variation": "ContainsVariation=Yes|Code=Unsure|Language=NO_ISO_CODE"}),
-            dict(form="boh", **{"code-variation": "ContainsVariation=Yes|Code=Underspecified"}),
-            dict(form="forma", **{"code-variation": "ContainsVariation=Yes|Nonce=Yes"}),
+            dict(form="ciao", **{"code_variation": "ContainsVariation=Yes"}),
+            dict(form="hola", **{"code_variation": "ContainsVariation=Yes|Code=Other|Language=NO_ISO_CODE"}),
+            dict(form="mah", **{"code_variation": "ContainsVariation=Yes|Code=Unsure|Language=NO_ISO_CODE"}),
+            dict(form="boh", **{"code_variation": "ContainsVariation=Yes|Code=Underspecified"}),
+            dict(form="forma", **{"code_variation": "ContainsVariation=Yes|Nonce=Yes"}),
         ])
         toks = {t[1]: t for t in _token_lines(v) if t[1].startswith("0-")}
         # (word, token_id, lemma, upos, variety, nonce)
@@ -102,14 +102,14 @@ class TestVarietyAttributes:
         assert toks["0-4"][0] == "$forma" and toks["0-4"][-2:] == ["", "yes"]
 
     def test_unit_attribute_contains_variation(self, tmp_path):
-        v = _vertical(tmp_path, [dict(form="hola", **{"code-variation": "ContainsVariation=Yes|Code=Other"})])
+        v = _vertical(tmp_path, [dict(form="hola", **{"code_variation": "ContainsVariation=Yes|Code=Other"})])
         assert 'contains_variation="yes"' in v
         assert "language_variation" not in v
 
     def test_unit_attribute_absent_without_variation(self, tmp_path):
-        v = _vertical(tmp_path, [dict(form="ciao", **{"code-variation": "ContainsVariation=No"})])
+        v = _vertical(tmp_path, [dict(form="ciao", **{"code_variation": "ContainsVariation=No"})])
         assert "contains_variation" not in v
 
     def test_nonce_alone_does_not_set_contains_variation(self, tmp_path):
-        v = _vertical(tmp_path, [dict(form="forma", **{"code-variation": "ContainsVariation=No|Nonce=Yes"})])
+        v = _vertical(tmp_path, [dict(form="forma", **{"code_variation": "ContainsVariation=No|Nonce=Yes"})])
         assert "contains_variation" not in v

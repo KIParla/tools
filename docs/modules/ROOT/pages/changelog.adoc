@@ -4,6 +4,13 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* **Breaking — `code-variation` column renamed `code_variation`, `Volume` values capitalised.** All
+  column names of the vert.tsv are now underscore-separated (`token_id`, `tu_id`, `meta_label`,
+  `jefferson_feats`, `code_variation`); the hyphenated spelling was the only exception. The CSVW
+  schema, the TEI mapping and the docs follow. `Volume=low`/`Volume=high` are now `Volume=Low`/`Volume=High`,
+  like every other feature value (`jefferson_feats.py` and the module READMEs already described them
+  that way). Files with the old column name are refused with an "old-format vert.tsv" error instead of
+  being read as if they had no variation.
 * **Breaking — `topic`, `participants-relationship` and `moderator` removed from the conversation
   metadata.** The three columns are no longer part of `metadata/conversations.tsv`, the CSVW
   conversations schema, the merged collection table, the corpus explorer (filters, colour-by and CSV
