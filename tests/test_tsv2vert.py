@@ -4,7 +4,7 @@ import csv
 from pathlib import Path
 
 from serialize import VERT_FIELDNAMES
-from tsv2vert import convert_file, is_anonymized
+from tsv2vert import build_report_url, convert_file, is_anonymized
 
 
 def _vert_row(**overrides):
@@ -79,6 +79,20 @@ def _token_lines(vertical):
     return [l.split("\t") for l in vertical.splitlines() if "\t" in l]
 
 
+class TestReportUrl:
+    def test_opens_the_issue_form_with_the_page_prefilled(self):
+        from urllib.parse import parse_qs, urlparse
+        url = build_report_url("https://github.com/KIParla/", "ParlaBZ", "BXA4001", 7, "BX001",
+                               "https://kiparla.github.io/KIParla-artifacts/ParlaBZ/html/BXA4001.html")
+        u = urlparse(url)
+        assert f"{u.scheme}://{u.netloc}{u.path}" == "https://github.com/KIParla/ParlaBZ/issues/new"
+        q = parse_qs(u.query)
+        assert q["template"] == ["transcription-error.yml"]
+        assert q["page"] == ["https://kiparla.github.io/KIParla-artifacts/ParlaBZ/html/BXA4001.html"]
+        assert q["title"] == ["[BXA4001 · TU 7 · BX001] problema di trascrizione"]
+        assert "body" not in q
+
+
 class TestVarietyAttributes:
     """Every token carries `variety` and `nonce` (the last two positional
     attributes); the unit carries contains_variation when any token has a
@@ -87,11 +101,11 @@ class TestVarietyAttributes:
 
     def test_variety_and_nonce_columns_and_word_prefixes(self, tmp_path):
         v = _vertical(tmp_path, [
-            dict(form="ciao", **{"code-variation": "ContainsVariation=Yes"}),
-            dict(form="hola", **{"code-variation": "ContainsVariation=Yes|Code=Other|Language=NO_ISO_CODE"}),
-            dict(form="mah", **{"code-variation": "ContainsVariation=Yes|Code=Unsure|Language=NO_ISO_CODE"}),
-            dict(form="boh", **{"code-variation": "ContainsVariation=Yes|Code=Underspecified"}),
-            dict(form="forma", **{"code-variation": "ContainsVariation=Yes|Nonce=Yes"}),
+            dict(form="ciao", **{"code_variation": "ContainsVariation=Yes"}),
+            dict(form="hola", **{"code_variation": "ContainsVariation=Yes|Code=Other|Language=NO_ISO_CODE"}),
+            dict(form="mah", **{"code_variation": "ContainsVariation=Yes|Code=Unsure|Language=NO_ISO_CODE"}),
+            dict(form="boh", **{"code_variation": "ContainsVariation=Yes|Code=Underspecified"}),
+            dict(form="forma", **{"code_variation": "ContainsVariation=Yes|Nonce=Yes"}),
         ])
         toks = {t[1]: t for t in _token_lines(v) if t[1].startswith("0-")}
         # (word, token_id, lemma, upos, variety, nonce)
@@ -102,14 +116,14 @@ class TestVarietyAttributes:
         assert toks["0-4"][0] == "$forma" and toks["0-4"][-2:] == ["", "yes"]
 
     def test_unit_attribute_contains_variation(self, tmp_path):
-        v = _vertical(tmp_path, [dict(form="hola", **{"code-variation": "ContainsVariation=Yes|Code=Other"})])
+        v = _vertical(tmp_path, [dict(form="hola", **{"code_variation": "ContainsVariation=Yes|Code=Other"})])
         assert 'contains_variation="yes"' in v
         assert "language_variation" not in v
 
     def test_unit_attribute_absent_without_variation(self, tmp_path):
-        v = _vertical(tmp_path, [dict(form="ciao", **{"code-variation": "ContainsVariation=No"})])
+        v = _vertical(tmp_path, [dict(form="ciao", **{"code_variation": "ContainsVariation=No"})])
         assert "contains_variation" not in v
 
     def test_nonce_alone_does_not_set_contains_variation(self, tmp_path):
-        v = _vertical(tmp_path, [dict(form="forma", **{"code-variation": "ContainsVariation=No|Nonce=Yes"})])
+        v = _vertical(tmp_path, [dict(form="forma", **{"code_variation": "ContainsVariation=No|Nonce=Yes"})])
         assert "contains_variation" not in v

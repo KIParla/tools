@@ -36,7 +36,7 @@ def test_tsv2linear_writes_jefferson_and_orthographic_outputs(tmp_path):
 
 def _linear(tmp_path, rows):
     """Run tsv2linear on vert rows given as (tu_id, speaker, type, span, form, variation_feats)."""
-    header = "tu_id\tspeaker\ttype\tspan\tform\tcode-variation\tjefferson_feats"
+    header = "tu_id\tspeaker\ttype\tspan\tform\tcode_variation\tjefferson_feats"
     path = tmp_path / "v.vert.tsv"
     path.write_text(
         "\n".join([header] + ["\t".join(map(str, (*r, "_"))) for r in rows]),
@@ -101,7 +101,7 @@ def test_orthographic_state_resets_between_units(tmp_path):
 def test_old_format_vert_is_rejected(tmp_path):
     import pytest
     path = tmp_path / "old.vert.tsv"
-    path.write_text("tu_id\tspeaker\ttype\tspan\tform\tcode-variation\tjefferson_feats\n"
+    path.write_text("tu_id\tspeaker\ttype\tspan\tform\tcode_variation\tjefferson_feats\n"
                     "0\tS\tlinguistic\thola\thola\tall\t_\n", encoding="utf-8")
     (tmp_path / "j").mkdir()
     (tmp_path / "o").mkdir()

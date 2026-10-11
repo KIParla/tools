@@ -109,7 +109,7 @@ When `non_ita=all` the annotation is not normalized and tokenization labels ever
 token `Code=Other` (plus `Language=NO_ISO_CODE`). `non_ita=unspecified` labels every
 token that has no marker of its own `Code=Underspecified`. `non_ita` itself is only the
 parser's record of how the unit was written; the output columns are derived from the
-tokens (the `code-variation` column, below).
+tokens (the `code_variation` column, below).
 
 ### 2c. Normalization (warning) rules
 
@@ -154,10 +154,10 @@ Form C (NFC)**. Helpers live in `textutil.py`.
 ### Variation markers
 
 All variation information of a token is exported in **one feature-list column of the
-vert.tsv, `code-variation`** (pipe-separated `Key=Value`, CoNLL-U style). It holds the unit-level
+vert.tsv, `code_variation`** (pipe-separated `Key=Value`, CoNLL-U style). It holds the unit-level
 flag and every token-level variation feature; none of them is in `jefferson_feats`.
 
-| written as | in the `code-variation` column | modules |
+| written as | in the `code_variation` column | modules |
 |------------|---------------------------|---------|
 | `#word` | `Code=Other`, `Language=NO_ISO_CODE` | StraParlaBO, StraParlaTO |
 | `#_ ` anywhere in a TU | `Code=Other`, `Language=NO_ISO_CODE` on every token from the marker to the end of the TU (a unit-initial `#_ ` covers the whole TU) | StraParlaBO, StraParlaTO |
@@ -185,17 +185,17 @@ The dataflags enum `tokenvariety` carries `other`, `unsure`, `underspecified`; t
 #### Format change (breaking)
 
 Older vert.tsv files differ in four ways. Everything below is a rename or a move: no
-information was dropped, and the `variation` column (now `code-variation`) is the only column whose name is reused.
+information was dropped, and the `variation` column (now `code_variation`) is the only column whose name is reused.
 
 | before | now |
 |--------|-----|
-| column `variation`: one label per unit — `none` / `yes` / `unspecified` (`# `) / `all` (`#_`) (older files: `some`) | column `code-variation`: a feature list (above). The unit-level part is `ContainsVariation=Yes\|No`; *how* the unit was written (`# `, `#_ `) is read from the spans |
-| `jefferson_feats`: `Variation=Token` | `code-variation`: `Code=Other` |
-| `jefferson_feats`: `Variation=Doubtful` | `code-variation`: `Code=Unsure` |
-| `jefferson_feats`: `Variation=Emerging` **and** `Orthography=Yes` (`$word`) | `code-variation`: `Nonce=Yes` |
-| `jefferson_feats`: `Language=<code>` | `code-variation`: `Language=<code>` |
-| tokens of a unit starting with `# `: no token-level information | `code-variation`: `Code=Underspecified` |
-| tokens of a unit starting with `#_`: `Variation=Token` | `code-variation`: `Code=Other` (unchanged meaning) |
+| column `variation`: one label per unit — `none` / `yes` / `unspecified` (`# `) / `all` (`#_`) (older files: `some`) | column `code_variation`: a feature list (above). The unit-level part is `ContainsVariation=Yes\|No`; *how* the unit was written (`# `, `#_ `) is read from the spans |
+| `jefferson_feats`: `Variation=Token` | `code_variation`: `Code=Other` |
+| `jefferson_feats`: `Variation=Doubtful` | `code_variation`: `Code=Unsure` |
+| `jefferson_feats`: `Variation=Emerging` **and** `Orthography=Yes` (`$word`) | `code_variation`: `Nonce=Yes` |
+| `jefferson_feats`: `Language=<code>` | `code_variation`: `Language=<code>` |
+| tokens of a unit starting with `# `: no token-level information | `code_variation`: `Code=Underspecified` |
+| tokens of a unit starting with `#_`: `Variation=Token` | `code_variation`: `Code=Other` (unchanged meaning) |
 | `span`: the unit-initial `# ` / `#_ ` was **not** in any span (it was rebuilt from the `variation` label) | `span` of the unit's first token starts with `# ` / `#_ `, so every marker is in the spans |
 | NoSketch: positional `variation`, `non_standard_form`; unit attribute `language_variation` | positional `variety` (`other`/`unsure`/`underspecified`), `nonce`; unit attribute `contains_variation` (see `KIParla-NoSketch-Data`) |
 | linear-orthographic: a unit-initial `#_ ` was written once; a *mid-unit* `#_` had no meaning | `#_ ` is written once where it occurs and the words it covers are not re-marked with `#` |
@@ -553,7 +553,7 @@ schema file to regenerate every module's copy.
 | `deprel`        | `_` |
 | `type`          | token type flag (`linguistic`, `shortpause`, `nonverbalbehavior`, …) |
 | `meta_label`    | `_` |
-| `code-variation`     | variation features of the token and unit: `ContainsVariation=Yes\|No`, `Code=Other\|Unsure\|Underspecified`, `Language=ISO`, `Nonce=Yes` |
+| `code_variation`     | variation features of the token and unit: `ContainsVariation=Yes\|No`, `Code=Other\|Unsure\|Underspecified`, `Language=ISO`, `Nonce=Yes` |
 | `jefferson_feats` | pipe-separated: `Intonation=X`, `Interrupted=Yes`, `Truncated=Yes`, `Reduced=Yes`, `ProsodicLink=Yes`, `SpaceAfter=No`, `PauseAfter=Yes`, `Anonymized=Yes`, `Volume=X`, `Syllables=N` |
 | `align`         | `Begin=X` / `End=X` / `Begin=X\|End=X` for first/last token of TU |
 | `prolongations` | e.g. `3x2,7x1` (char_pos × length pairs) |

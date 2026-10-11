@@ -2,13 +2,13 @@
 
 The variation markers of the enriched transcription (`#word`, `#*word`, `$word`, `#_`,
 and a unit-initial `# `) are exported in a single feature-list column of the
-`.vert.tsv`, `code-variation`, and to NoSketch Engine as the attributes `variety`, `nonce` and
+`.vert.tsv`, `code_variation`, and to NoSketch Engine as the attributes `variety`, `nonce` and
 `contains_variation`. This page describes the format and how it differs from the one used
 before; it is a *breaking change* of the vert.tsv schema.
 
-== The `code-variation` column
+== The `code_variation` column
 
-`code-variation` holds every variation feature of a token as pipe-separated `Key=Value` pairs
+`code_variation` holds every variation feature of a token as pipe-separated `Key=Value` pairs
 (CoNLL-U style). None of them is in `jefferson_feats`.
 
 [cols="2,3", options="header"]
@@ -74,23 +74,23 @@ marked with `#` are the same data.
 
 | Column `variation`: one label per unit — `none`, `yes`, `unspecified` (a `# ` unit),
   `all` (a `#_` unit); older files have `some`
-| Column `code-variation`: the feature list above. How a unit was written (`# `, `#_ `) is read
+| Column `code_variation`: the feature list above. How a unit was written (`# `, `#_ `) is read
   from the spans
 
 | `jefferson_feats`: `Variation=Token`
-| `code-variation`: `Code=Other`
+| `code_variation`: `Code=Other`
 
 | `jefferson_feats`: `Variation=Doubtful`
-| `code-variation`: `Code=Unsure`
+| `code_variation`: `Code=Unsure`
 
 | `jefferson_feats`: `Variation=Emerging` and `Orthography=Yes` (`$word`)
-| `code-variation`: `Nonce=Yes`
+| `code_variation`: `Nonce=Yes`
 
 | `jefferson_feats`: `Language=<code>`
-| `code-variation`: `Language=<code>`
+| `code_variation`: `Language=<code>`
 
 | Tokens of a `# ` unit: no token-level information
-| `code-variation`: `Code=Underspecified`
+| `code_variation`: `Code=Underspecified`
 
 | `span`: a unit-initial `# ` / `#_ ` was not in any span (it was rebuilt from the unit label)
 | `span` of the first token starts with the marker
@@ -119,10 +119,10 @@ silently lose them. There is no in-place converter, because the EAF is the sourc
   `csv-metadata.json` and the NoSketch attributes change. A module that has not been
   released yet ships the new format as its first release.
 
-== Renaming to `code-variation`
+== Renaming to `code_variation`
 
 The column was first released as `variation` with the feature `Variety=Other|Unassignable|Unsure`.
-It is now `code-variation` with `Code=Other|Unsure|Underspecified`, because the features describe
+It is now `code_variation` with `Code=Other|Unsure|Underspecified`, because the features describe
 code switching and nonce formations rather than varieties:
 
 [cols="1,1", options="header"]
@@ -130,7 +130,7 @@ code switching and nonce formations rather than varieties:
 | Before | Now
 
 | Column `variation`
-| Column `code-variation`
+| Column `code_variation`
 
 | `Variety=Other`
 | `Code=Other`

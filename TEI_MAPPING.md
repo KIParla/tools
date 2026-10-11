@@ -37,7 +37,7 @@ This document describes how every field in the pipeline `vert.tsv` format is enc
 | `deprel`          | `<fs><f name="deprel">…</f></fs>` inside `<w>` (when not `_`)                             |
 | `type`            | determines element type (see **Token Types** below)                                       |
 | `meta_label`      | `<fs><f name="meta_label">…</f></fs>` inside `<w>` (when not `_`)                         |
-| `code-variation`  | `<fs><f name="code-variation">…</f></fs>` inside `<w>` (when not `_` or `none`)                |
+| `code_variation`  | `<fs><f name="code_variation">…</f></fs>` inside `<w>` (when not `_` or `none`)                |
 | `jefferson_feats` | split by key — see **jefferson_feats Keys** below                                         |
 | `align`           | `Begin` → `@start` on `<annotationBlock>`; `End` → `@end`; values reference `<timeline>`  |
 | `prolongations`   | inline `<c type="prolongation" n="N"/>` milestones inside `<w>` (see below)               |
@@ -89,7 +89,7 @@ Each entry in `jefferson_feats` (pipe-separated `key=value` pairs) is encoded as
 | Key            | Value(s)        | TEI encoding                                                            |
 | -------------- | --------------- | ----------------------------------------------------------------------- |
 | `Truncated`    | `Yes`           | `@type="interrupted"` on `<w>`                                          |
-| `Volume`       | `low` / `high`  | `<shift feature="loud" new="p"/>` / `new="f"/>` in `<u>`                |
+| `Volume`       | `Low` / `High`  | `<shift feature="loud" new="p"/>` / `new="f"/>` in `<u>`                |
 | `Language`     | language code   | `@xml:lang` on `<w>` (omitted when `ita`)                               |
 | `Intonation`   | see table below | `<shift feature="pitch" new="…"/>` inside `<w>` (word-final)            |
 | `SpaceAfter`   | `No`            | `@join="right"` on `<w>`                                                |

@@ -1,8 +1,8 @@
 """
-variety.py — reading the `code-variation` column of a vert.tsv.
+variety.py — reading the `code_variation` column of a vert.tsv.
 
 All variation information of a token row lives in ONE feature-list column,
-``code-variation`` (pipe-separated ``Key=Value``, CoNLL-U style):
+``code_variation`` (pipe-separated ``Key=Value``, CoNLL-U style):
 
     ContainsVariation=Yes|No   unit level, repeated on every token row of the unit:
                                Yes when any token of the unit has a Code
@@ -26,9 +26,11 @@ from __future__ import annotations
 
 import csv
 
-COLUMN = "code-variation"
+COLUMN = "code_variation"
 # Column name used before the rename to `code-variation` (features: `Variety=`).
 _LEGACY_COLUMN = "variation"
+# The hyphenated spelling, renamed to match the other underscore-separated columns.
+_HYPHENATED_COLUMN = "code-variation"
 # Written by intermediate builds of the tools; never released.
 _INTERIM_UNIT_COLUMN = "contains_variation"
 
@@ -80,7 +82,7 @@ def _old_format_error(source, why):
 
 def iter_vert_rows(fobj, source="vert.tsv", delimiter="\t"):
     """Yield the rows of a vert.tsv as dicts, refusing files written before the
-    ``code-variation`` column held feature lists.
+    ``code_variation`` column held feature lists.
 
     Older files have a ``variation`` column with a bare label
     (none/yes/unspecified/all/some), or the interim ``contains_variation``
@@ -96,6 +98,10 @@ def iter_vert_rows(fobj, source="vert.tsv", delimiter="\t"):
         raise _old_format_error(
             source, f"column '{_LEGACY_COLUMN}' was renamed '{COLUMN}', and the "
             f"'Variety=' feature 'Code=' (Unassignable -> Unsure, Unsure -> Underspecified)")
+    if _HYPHENATED_COLUMN in names:
+        raise _old_format_error(
+            source, f"column '{_HYPHENATED_COLUMN}' was renamed '{COLUMN}', and "
+            f"'Volume=low/high' became 'Volume=Low/High'")
     first = True
     for row in reader:
         if first:
