@@ -4,7 +4,7 @@ import csv
 from pathlib import Path
 
 from serialize import VERT_FIELDNAMES
-from tsv2vert import convert_file, is_anonymized
+from tsv2vert import build_report_url, convert_file, is_anonymized
 
 
 def _vert_row(**overrides):
@@ -77,6 +77,20 @@ def _vertical(tmp_path, rows):
 
 def _token_lines(vertical):
     return [l.split("\t") for l in vertical.splitlines() if "\t" in l]
+
+
+class TestReportUrl:
+    def test_opens_the_issue_form_with_the_page_prefilled(self):
+        from urllib.parse import parse_qs, urlparse
+        url = build_report_url("https://github.com/KIParla/", "ParlaBZ", "BXA4001", 7, "BX001",
+                               "https://kiparla.github.io/KIParla-artifacts/ParlaBZ/html/BXA4001.html")
+        u = urlparse(url)
+        assert f"{u.scheme}://{u.netloc}{u.path}" == "https://github.com/KIParla/ParlaBZ/issues/new"
+        q = parse_qs(u.query)
+        assert q["template"] == ["transcription-error.yml"]
+        assert q["page"] == ["https://kiparla.github.io/KIParla-artifacts/ParlaBZ/html/BXA4001.html"]
+        assert q["title"] == ["[BXA4001 · TU 7 · BX001] problema di trascrizione"]
+        assert "body" not in q
 
 
 class TestVarietyAttributes:

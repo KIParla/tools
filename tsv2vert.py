@@ -26,6 +26,8 @@ from variety import iter_vert_rows, row_contains_variation, row_nonce, row_varie
 
 DEFAULT_BASE_URL = "https://search.corpuskiparla.it/corpus"
 DEFAULT_ISSUES_BASE_URL = "https://github.com/KIParla"
+# Issue form linked by report_url; lives in the organisation .github repository.
+REPORT_TEMPLATE = "transcription-error.yml"
 
 # Extra positional (per-token) attributes emitted after `word` and `token_id`,
 # in this order. Empty when the token is not annotated. `upos` also drives the
@@ -279,12 +281,15 @@ def build_report_url(issues_base_url, module, code, tu_id, speaker, doc_url):
     """Prefilled "open a GitHub issue about this transcription unit" URL.
 
     Points at the issue tracker of the conversation's own module repository
-    (mapped by code prefix for the aggregated KIParla corpus). Kept short — it
-    is repeated on every transcription unit in the vertical.
+    (mapped by code prefix for the aggregated KIParla corpus) and opens the
+    ``transcription-error.yml`` issue form (KIParla/.github, inherited by every
+    repository), whose ``page`` field is prefilled with the conversation page.
+    Kept short — it is repeated on every transcription unit in the vertical.
     """
     query = urlencode({
+        "template": REPORT_TEMPLATE,
         "title": f"[{code} · TU {tu_id} · {speaker}] problema di trascrizione",
-        "body": f"{doc_url}\n\n",
+        "page": doc_url,
     })
     return f"{issues_base_url.rstrip('/')}/{module}/issues/new?{query}"
 
