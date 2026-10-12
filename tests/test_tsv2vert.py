@@ -95,8 +95,8 @@ class TestReportUrl:
 
 class TestVarietyAttributes:
     """Every token carries `variety` and `nonce` (the last two positional
-    attributes); the unit carries contains_variation when any token has a
-    variety. The word keeps its "#"/"#*"/"$" prefix, so the original marker
+    attributes); the unit carries contains_code_variation ("sì"/"no") depending on
+    whether any token has a variety. The word keeps its "#"/"#*"/"$" prefix, so the original marker
     can be read back from the vertical alone."""
 
     def test_variety_and_nonce_columns_and_word_prefixes(self, tmp_path):
@@ -110,20 +110,20 @@ class TestVarietyAttributes:
         toks = {t[1]: t for t in _token_lines(v) if t[1].startswith("0-")}
         # (word, token_id, lemma, upos, variety, nonce)
         assert toks["0-0"][0] == "ciao" and toks["0-0"][-2:] == ["", ""]
-        assert toks["0-1"][0] == "#hola" and toks["0-1"][-2:] == ["other", ""]
-        assert toks["0-2"][0] == "#*mah" and toks["0-2"][-2:] == ["unsure", ""]
-        assert toks["0-3"][0] == "boh" and toks["0-3"][-2:] == ["underspecified", ""]
-        assert toks["0-4"][0] == "$forma" and toks["0-4"][-2:] == ["", "yes"]
+        assert toks["0-1"][0] == "#hola" and toks["0-1"][-2:] == ["altro", ""]
+        assert toks["0-2"][0] == "#*mah" and toks["0-2"][-2:] == ["incerto", ""]
+        assert toks["0-3"][0] == "boh" and toks["0-3"][-2:] == ["non specificato", ""]
+        assert toks["0-4"][0] == "$forma" and toks["0-4"][-2:] == ["", "sì"]
 
-    def test_unit_attribute_contains_variation(self, tmp_path):
+    def test_unit_attribute_contains_code_variation(self, tmp_path):
         v = _vertical(tmp_path, [dict(form="hola", **{"code_variation": "ContainsVariation=Yes|Code=Other"})])
-        assert 'contains_variation="yes"' in v
+        assert 'contains_code_variation="sì"' in v
         assert "language_variation" not in v
 
-    def test_unit_attribute_absent_without_variation(self, tmp_path):
+    def test_unit_attribute_no_without_variation(self, tmp_path):
         v = _vertical(tmp_path, [dict(form="ciao", **{"code_variation": "ContainsVariation=No"})])
-        assert "contains_variation" not in v
+        assert 'contains_code_variation="no"' in v
 
     def test_nonce_alone_does_not_set_contains_variation(self, tmp_path):
         v = _vertical(tmp_path, [dict(form="forma", **{"code_variation": "ContainsVariation=No|Nonce=Yes"})])
-        assert "contains_variation" not in v
+        assert 'contains_code_variation="no"' in v

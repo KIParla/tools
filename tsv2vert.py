@@ -21,6 +21,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 from xml.sax.saxutils import escape
 from textutil import ENCODING_READ, ENCODING_WRITE
+from registry_attrs import TOKEN, common_attributes
 from variety import iter_vert_rows, row_contains_variation, row_nonce, row_variety
 
 
@@ -35,19 +36,43 @@ REPORT_TEMPLATE = "transcription-error.yml"
 #
 # Two further positional attributes are always emitted last (see
 # variation_kind()/is_nonce()/convert_file() below), in this order:
-#   variety  — "other" for a '#' marker or a token covered by a '#_' marker,
-#              "unsure" for '#*', "underspecified" for a token in a unit that
-#              starts with '# ', "" otherwise. To be extended later with which
-#              language the variety is from.
-#   nonce    — "yes" for a '$' marker, "" otherwise. Not a variety — a
+#   variety  — "altro" for a '#' marker or a token covered by a '#_' marker,
+#              "incerto" for '#*', "non specificato" for a token in a unit that
+#              starts with '# ', "" otherwise (see VARIETY_LABELS). To be
+#              extended later with which language the variety is from.
+#   nonce    — "sì" for a '$' marker, "" otherwise. Not a variety — a
 #              different phenomenon (nonce / non-standard form) — so tracked
 #              apart from `variety`.
 # Kept separate from LINGUISTIC_ATTRS since they are not read via
 # _pos_value() from a same-named TSV column.
 #
-# The transcription_unit structure carries contains_variation="yes" when any
-# of its tokens has a variety.
+# The transcription_unit structure carries contains_code_variation="sì"/"no":
+# "sì" when any of its tokens has a variety.
 LINGUISTIC_ATTRS = ("lemma", "upos")
+
+# Values of the NoSketch attributes are in Italian, like their labels.
+YES, NO = "sì", "no"
+VARIETY_LABELS = {"other": "altro", "unsure": "incerto", "underspecified": "non specificato"}
+YES_NO_METADATA = {"yes": YES, "no": NO}   # conversations.tsv unknown-participant
+
+# Positional attributes in the order they are written on a token line.
+TOKEN_ATTRS = ("word", "token_id", *LINGUISTIC_ATTRS, "variety", "nonce")
+
+
+def _keeps(keep, structure, name):
+    """True unless `keep` (registry_attrs.common_attributes) leaves `name` out."""
+    return keep is None or name in keep[structure]
+
+
+def corpus_has_variation(paths):
+    """True when any input marks code variation. Only then are the units given
+    `contains_code_variation`: a corpus without the convention (KIP, ParlaBZ)
+    does not declare it, so it would only show as an empty ===NONE=== value."""
+    for path in paths:
+        with open(path, encoding=ENCODING_READ) as f:
+            if "ContainsVariation=Yes" in f.read():
+                return True
+    return False
 
 
 def build_url(base_url, path):
@@ -178,6 +203,8 @@ def iter_conversation_attrs(conv, code, doc_url):
         attr_value = value
 
         attr_value = normalize_multivalue_value(value)
+        if attr_name == "unknown_participant":
+            attr_value = YES_NO_METADATA.get(attr_value, attr_value)
 
         yield (attr_name, attr_value)
 
@@ -297,6 +324,7 @@ def build_report_url(issues_base_url, module, code, tu_id, speaker, doc_url):
 def convert_file(
     tsv_path, conversations, participants, participant_attr_keys, out, base_url,
     artifacts_base_url, artifacts_module, issues_base_url, translations_dir,
+    keep=None, has_variation=True,
 ):
     code = Path(tsv_path).stem.split(".")[0]
 
@@ -315,8 +343,9 @@ def convert_file(
         f' {name}="{value}"'
         for name, value in [
             *iter_conversation_attrs(conv, code, doc_url),
-            ("linguistic_annotation", "yes" if has_linguistic else "no"),
+            ("linguistic_annotation", YES if has_linguistic else NO),
         ]
+        if _keeps(keep, "conversation", name)
     )
     print(f"<conversation{conversation_attrs}>", file=out)
 
@@ -353,11 +382,13 @@ def convert_file(
         if issues_base_url:
             attrs.append(("report_url", build_report_url(
                 issues_base_url, doc_module, code, tu_id, speaker, doc_url)))
-        if row_contains_variation(tu_rows[0]):
-            attrs.append(("contains_variation", "yes"))
+        if has_variation:
+            attrs.append(("contains_code_variation",
+                          YES if row_contains_variation(tu_rows[0]) else NO))
         if tu_id in translations:
             attrs.append(("translation", _xml_attr(translations[tu_id])))
-        return "<transcription_unit" + "".join(f' {n}="{v}"' for n, v in attrs) + ">"
+        return "<transcription_unit" + "".join(
+            f' {n}="{v}"' for n, v in attrs if _keeps(keep, "transcription_unit", n)) + ">"
 
     # Single pass over the conversation. Short pauses and non-verbal behaviour
     # become zero-width structures (<pause/> / <nvb/>) rather than tokens, so
@@ -417,10 +448,13 @@ def convert_file(
                 word = f"#*{word}"
             elif nonce:
                 word = f"${word}"
-            print("\t".join([
-                word, token_id, *(_pos_value(row, a) for a in LINGUISTIC_ATTRS),
-                kind, "yes" if nonce else "",
-            ]), file=out)
+            values = dict(
+                zip(TOKEN_ATTRS, [
+                    word, token_id, *(_pos_value(row, a) for a in LINGUISTIC_ATTRS),
+                    VARIETY_LABELS.get(kind, kind), YES if nonce else "",
+                ])
+            )
+            print("\t".join(v for n, v in values.items() if _keeps(keep, TOKEN, n)), file=out)
             glue_pending = has_space_after_no(row)
 
     if open_tu is not None:
@@ -481,6 +515,18 @@ def main():
             "'tsv/' directory."
         ),
     )
+    parser.add_argument(
+        "--common-attrs-of",
+        action="append",
+        default=None,
+        metavar="REGISTRY",
+        help=(
+            "Module registry (repeat the option once per module). Only the "
+            "attributes declared by all of them are written: used for the "
+            "aggregated KIParla corpus, which offers what every module offers. "
+            "Without it, every attribute is written."
+        ),
+    )
     parser.add_argument("conversations", help="Path to conversations.tsv metadata file")
     parser.add_argument("participants", help="Path to participants.tsv metadata file")
     parser.add_argument("input", nargs="+", help="Input vert.tsv file(s)")
@@ -494,6 +540,8 @@ def main():
     # The same conversation can ship in more than one module (e.g. TOD20xx in
     # both KIP and ParlaTO). In an aggregated run each code is emitted once:
     # the first input file wins, so list the preferred module first.
+    keep = common_attributes(args.common_attrs_of) if args.common_attrs_of else None
+    has_variation = corpus_has_variation(args.input)
     seen_codes = set()
     for tsv_path in args.input:
         code = Path(tsv_path).stem.split(".")[0]
@@ -512,6 +560,8 @@ def main():
             artifacts_module,
             args.issues_base_url,
             args.translations_dir,
+            keep,
+            has_variation,
         )
 
 
