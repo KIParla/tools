@@ -2,7 +2,7 @@
 
 import io
 
-from registry_attrs import common_attributes, prune_registry, read_attributes
+from registry_attrs import annotation_level, common_attributes, prune_registry, read_attributes
 from tsv2vert import convert_file, corpus_has_variation
 from test_tsv2vert import _vert_row, VERT_FIELDNAMES  # noqa: F401  (helpers)
 
@@ -83,3 +83,11 @@ def test_prune_registry_also_cleans_the_attribute_lists(tmp_path):
     text = a.read_text() + 'SUBCORPATTRS "conversation.year,transcription_unit.participant_gender,conversation.code"\n'
     keep = {"token": ["word", "lc"], "conversation": ["code", "year"], "transcription_unit": ["begin"]}
     assert 'SUBCORPATTRS "conversation.year,conversation.code"' in prune_registry(text, keep)
+
+
+def test_annotation_level_follows_the_registry_attributes(tmp_path):
+    base = _registry(tmp_path / "L0", [], ["code"], ["begin"])
+    variation = _registry(tmp_path / "L1", ["variety"], ["code"], ["begin", "contains_code_variation"])
+    translated = _registry(tmp_path / "L2", ["variety"], ["code"],
+                           ["begin", "contains_code_variation", "translation"])
+    assert [annotation_level(r) for r in (base, variation, translated)] == [0, 1, 2]

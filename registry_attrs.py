@@ -16,6 +16,7 @@ by the aggregate either.
 
 Usage:
     python3 tools/registry_attrs.py common  REGISTRY [REGISTRY ...]
+    python3 tools/registry_attrs.py level   REGISTRY
     python3 tools/registry_attrs.py prune --modules REGISTRY [REGISTRY ...] --registry KIParla-registry
 """
 
@@ -91,6 +92,27 @@ def _listed_ok(item, keep):
     return structure not in keep or name in keep[structure]
 
 
+# Annotation levels: each one adds to the previous. A corpus's level is read from
+# its registry, so it needs no list of its own to maintain.
+#   0  base transcription (what every module has)
+#   1  + code variation (`contains_code_variation`)
+#   2  + translation of the transcription units (`translation`)
+LEVEL_MARKERS = (("contains_code_variation", 1), ("translation", 2))
+
+
+def annotation_level(registry):
+    """Annotation level (0, 1, 2) of a corpus, from the attributes of its registry."""
+    names = {n for names in read_attributes(registry).values() for n in names}
+    # transcription_unit attributes are not in FILTERED's token/conversation lists
+    lines = Path(registry).read_text(encoding=ENCODING_READ).splitlines()
+    names |= {n for _, n, _, _ in _scan(lines)}
+    level = 0
+    for name, marker_level in LEVEL_MARKERS:
+        if name in names:
+            level = max(level, marker_level)
+    return level
+
+
 def prune_registry(text, keep):
     """Drop from a registry the attributes that are not in `keep` (a result of
     common_attributes)."""
@@ -117,11 +139,16 @@ def main():
     sub = ap.add_subparsers(dest="command", required=True)
     c = sub.add_parser("common", help="print the attributes shared by the registries")
     c.add_argument("registries", nargs="+")
+    lv = sub.add_parser("level", help="print the annotation level of a registry")
+    lv.add_argument("registry")
     p = sub.add_parser("prune", help="remove the non-shared attributes from a registry, in place")
     p.add_argument("--modules", nargs="+", required=True, help="module registries")
     p.add_argument("--registry", required=True, help="registry to prune")
     args = ap.parse_args()
 
+    if args.command == "level":
+        print(annotation_level(args.registry))
+        return
     if args.command == "common":
         for structure, names in common_attributes(args.registries).items():
             print(f"{structure}: {' '.join(names)}")
