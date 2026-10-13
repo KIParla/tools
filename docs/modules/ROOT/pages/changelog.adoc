@@ -4,6 +4,19 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* **Breaking (NoSketch) — Italian attribute values, `contains_code_variation`, and an aggregate with
+  only the attributes common to all modules.** `tsv2vert.py` now writes the yes/no values of the
+  NoSketch attributes in Italian (`sì`/`no`: `unknown_participant`, `linguistic_annotation`,
+  `contains_code_variation`, `nonce`) and the `variety` values as `altro`/`incerto`/`non specificato`.
+  The unit attribute `contains_variation` is renamed `contains_code_variation` (label "Contiene
+  variazione di codice"); it is written on every unit (`sì`/`no`) of a corpus that marks code
+  variation, and not at all in one that does not (KIP, ParlaBZ), so it never shows as `===NONE===`.
+  The aggregated `KIParla` corpus only offers what every module offers: new `registry_attrs.py` reads the
+  module registries, `tsv2vert.py --common-attrs-of REGISTRY` (repeatable) keeps only those attributes
+  in the vertical, and `registry_attrs.py prune` does the same for the aggregate registry (including
+  `SUBCORPATTRS`). `variety` and `nonce` are never offered by the aggregate.
+  New `registry_attrs.py level REGISTRY` gives the *annotation level* of a corpus (0 base, 1 with code
+  variation, 2 with translation), which the regeneration workflow writes in the registry `INFO`.
 * **Breaking — `code-variation` column renamed `code_variation`, `Volume` values capitalised.** All
   column names of the vert.tsv are now underscore-separated (`token_id`, `tu_id`, `meta_label`,
   `jefferson_feats`, `code_variation`); the hyphenated spelling was the only exception. The CSVW
