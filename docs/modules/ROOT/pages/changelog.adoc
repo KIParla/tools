@@ -4,6 +4,10 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* **`original/` is only for the first generation; later corrections start from `eaf/`.** The transcribers'
+  files in `<module>/original/` are now an untouched archive; after the first generation the editable
+  source is `eaf/X.eaf`, synced with `sync.py --from-eaf eaf/X.eaf`. `sync.py --from-eaf` on an
+  `original/` file whose `tsv/` already exists prints a warning. The release guide and the README say so.
 * **Breaking (NoSketch) — Italian attribute values, `contains_code_variation`, and an aggregate with
   only the attributes common to all modules.** `tsv2vert.py` now writes the yes/no values of the
   NoSketch attributes in Italian (`sì`/`no`: `unknown_participant`, `linguistic_annotation`,

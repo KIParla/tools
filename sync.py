@@ -28,6 +28,13 @@ ping-pong between the two commands.
     them would require reprocessing the freshly-written eaf, which is
     exactly the reverse-direction auto-trigger this script avoids.
 
+Which .eaf to start from: the transcribers' files in <module>/original/ are
+only used for the FIRST generation. They are then kept untouched, as an archive
+of the originals in case something goes wrong over time. From then on the
+editable source is <module>/eaf/X.eaf: edit that one and run
+`--from-eaf eaf/X.eaf`. Running --from-eaf on original/X.eaf once tsv/X.vert.tsv
+exists prints a warning, because it would silently drop every later correction.
+
 Module resolution: inferred from the path (a file at <module>/eaf/X.eaf or
 <module>/tsv/X.vert.tsv resolves module dir to <module>), with the config
 name derived by stripping "-" (Stra-ParlaBO -> StraParlaBO). Override with
@@ -38,6 +45,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 import tempfile
 from pathlib import Path
 
@@ -90,9 +98,24 @@ def _refresh_validation_report(module_dir: Path) -> None:
     print(f"refreshed docs/modules/ROOT/pages/{written[0].name} and validation.adoc")
 
 
+def _archive_warning(eaf_path: Path, module_dir: Path) -> str | None:
+    """Message if `eaf_path` is the archived original of an already generated file."""
+    if eaf_path.parent.name != "original":
+        return None
+    if not (module_dir / "tsv" / f"{eaf_path.stem}.vert.tsv").exists():
+        return None
+    return (f"WARNING {eaf_path.stem}: original/ is an archive used only for the first "
+            f"generation, and tsv/{eaf_path.stem}.vert.tsv already exists. Corrections "
+            f"made after the first generation live in eaf/{eaf_path.stem}.eaf: edit and "
+            f"sync that file instead, or they will be overwritten.")
+
+
 def sync_from_eaf(eaf_path: Path, module_override: str | None,
                   audio_dir: Path | None = None) -> None:
     module_dir, module_name = _resolve_module(eaf_path, module_override)
+    warning = _archive_warning(eaf_path, module_dir)
+    if warning:
+        print(warning, file=sys.stderr)
     cfg = config_mod.load_config(module_name)
     cfg.setdefault("overlaps", {}).setdefault("duration_threshold", 0.1)
 
