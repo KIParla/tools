@@ -259,6 +259,8 @@ def _add_token(parent: ET.Element, tok: dict, unit_id: str, idx: int) -> ET.Elem
         return w
 
     form = tok.get("form", "_")
+    if form == "_":
+        form = ""               # no word form (e.g. a stray bracket): do not emit a literal "_"
     tok_id = tok.get("token_id", f"{unit_id}_{idx}")
     attribs: dict[str, str] = {f"{X}id": f"w{tok_id}"}
 

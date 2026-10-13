@@ -120,7 +120,10 @@ def _join(tokens, field, prosodic_link="="):
     """
     parts = []
     for i, tok in enumerate(tokens):
-        parts.append(tok.get(field, "") or "")
+        value = tok.get(field, "") or ""
+        if field == "form" and value == "_":
+            value = ""          # no word form (e.g. a stray bracket): keep it out of the orthographic text
+        parts.append(value)
         if i == len(tokens) - 1:
             continue
         feats = tok.get("jefferson_feats", "") or ""

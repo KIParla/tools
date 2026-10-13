@@ -67,7 +67,9 @@ def tsv2linear(input_files_paths, output_jefferson_path, output_orthographic_pat
 
 				elif row['type'] in ['linguistic']:
 					text_jefferson.append(row['span'])
-					text_orthographic.append(word_prefix + row['form'])
+					# form '_' marks a token with no word form (e.g. a stray bracket):
+					# it must not leak into the orthographic text
+					text_orthographic.append(word_prefix + ('' if row['form'] == '_' else row['form']))
 
 				elif row['type'] in ['error']:
 					text_jefferson.append(row['span'])

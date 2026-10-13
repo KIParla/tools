@@ -107,3 +107,14 @@ def test_old_format_vert_is_rejected(tmp_path):
     (tmp_path / "o").mkdir()
     with pytest.raises(SystemExit, match="old-format"):
         tsv2formats.tsv2linear([path], tmp_path / "j", tmp_path / "o")
+
+
+def test_form_underscore_is_kept_out_of_the_orthographic_text(tmp_path):
+    # a stray bracket token carries form "_": visible in the enriched text, not in the orthographic one
+    jeff, ortho = _linear(tmp_path, [
+        (0, "S", "linguistic", "#_ [", "_", "ContainsVariation=Yes|Code=Other|Language=NO_ISO_CODE"),
+        (0, "S", "linguistic", "ciao]", "ciao", "ContainsVariation=Yes|Code=Other|Language=NO_ISO_CODE"),
+    ])
+    assert jeff == "S\t#_ [ ciao]\n"
+    # the unit-level "#_ " marker stays; the "_" form of the bracket token does not
+    assert ortho == "S\t#_ ciao\n"
