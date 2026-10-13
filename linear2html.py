@@ -160,7 +160,8 @@ def _append_unit_text(text_jefferson, text_orthographic, row, markers):
         text_orthographic.append("".join(c for c in span if c == "x"))
     elif rtype in ["linguistic"]:
         text_jefferson.append(span)
-        text_orthographic.append(word_prefix + form)
+        # form '_' marks a token with no word form (mirrors tools/tsv2formats.py)
+        text_orthographic.append(word_prefix + ("" if form == "_" else form))
     elif rtype in ["error"]:
         text_jefferson.append(span)
         text_orthographic.append("".join(c for c in form if c.isalpha()))

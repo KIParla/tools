@@ -21,7 +21,7 @@ import json
 from pathlib import Path
 
 SCHEMA_DIR = Path(__file__).resolve().parent
-MODULES = ["KIP", "KIPasti", "ParlaBO", "ParlaTO", "Stra-ParlaBO", "Stra-ParlaTO",
+MODULES = ["KIP", "KIPasti", "ParlaBO", "ParlaBZ", "ParlaTO", "Stra-ParlaBO", "Stra-ParlaTO",
            "KIParla-collection"]
 
 
@@ -68,39 +68,36 @@ def build_vert_tables(tsv_dir: Path) -> list[dict]:
 
     Column *sets* are not guaranteed uniform even within one directory (e.g.
     KIParla-collection/tsv mixes a 12- and a 13-column shape, with/without
-    `variation`), so files are grouped by their real header. Each distinct
-    shape gets one inline tableSchema (tagged with a unique @id); every other
-    file with that shape just references it — DRY without assuming
-    uniformity.
+    `variation`), so the schema is built from each file's real header.
+
+    Every table carries its own complete inline tableSchema. Sharing one schema
+    between tables (a back-reference by @id, or a group-level tableSchema) is
+    not resolved by CSVW tools such as the `csvw` Python package, which then
+    see zero columns and silently skip validation for all but the first table.
+    The cost is a larger file, which is generated and not meant to be read.
     """
     known = load_schema("vert-schema.json")
     paths = sorted(p for p in tsv_dir.glob("*.vert.tsv"))
     if not paths:
         raise ValueError(f"No *.vert.tsv files found in {tsv_dir}")
 
-    schema_id_by_shape: dict[tuple, str] = {}
+    shapes: set[tuple] = set()
     tables = []
     for path in paths:
         header = tuple(read_header(path))
         code = path.stem.removesuffix(".vert")
-        table = {"url": f"tsv/{code}.vert.tsv"}
-
-        if header not in schema_id_by_shape:
-            shape_id = f"#vert-schema-{len(schema_id_by_shape) + 1}"
-            schema_id_by_shape[header] = shape_id
-            table["tableSchema"] = {
-                "@id": shape_id,
+        shapes.add(header)
+        tables.append({
+            "url": f"tsv/{code}.vert.tsv",
+            "tableSchema": {
                 "columns": columns_from_header(list(header), known["known_columns"]),
                 "foreignKeys": known["foreignKeys"],
                 "primaryKey": known["primaryKey"],
-            }
-        else:
-            table["tableSchema"] = {"@id": schema_id_by_shape[header]}
+            },
+        })
 
-        tables.append(table)
-
-    if len(schema_id_by_shape) > 1:
-        print(f"  {tsv_dir}: {len(schema_id_by_shape)} distinct vert.tsv column shapes found")
+    if len(shapes) > 1:
+        print(f"  {tsv_dir}: {len(shapes)} distinct vert.tsv column shapes found")
 
     return tables
 
