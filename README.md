@@ -91,8 +91,10 @@ python -m pytest tests/test_tsv2formats.py
 
 - **Rebuilding EAFs from TSVs:** `python sync.py --from-vert <X.vert.tsv> --audio-ext mp3`
   overwrites `eaf/X.eaf` (translations reattached from `translations/`, audio linked by the
-  relative path `X.mp3`, no empty `default` tier). Keep the transcribers' files elsewhere first
-  (e.g. `original/`): the rebuilt EAF contains the *normalized* text. Re-processing rebuilt EAFs
+  relative path `X.mp3`, no empty `default` tier). Keep the transcribers' files in
+  `original/`, used only for the first generation and then left untouched as an archive: the rebuilt
+  EAF contains the *normalized* text, and is the file to edit from then on (`sync.py --from-eaf eaf/X.eaf`;
+  `sync.py` warns if you start again from `original/`). Re-processing rebuilt EAFs
   reproduces the TSVs except for a handful of tokens next to brackets/intonation marks
   (39 of 629,677 tokens in Stra-ParlaBO).
 - **Validation report:** `sync.py` refreshes the synced module's page
