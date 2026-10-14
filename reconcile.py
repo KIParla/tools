@@ -137,12 +137,22 @@ class _Unit:
         return abs(self.begin - other.begin)
 
 
-def match_units(old: dict[int, list[dict]], new: dict[int, list[dict]]) -> dict[int, int]:
-    """Pair new units with old units. Returns {new tu_id: old tu_id}."""
+def match_units(old: dict[int, list[dict]], new: dict[int, list[dict]],
+                hints: dict[int, int] | None = None) -> dict[int, int]:
+    """Pair new units with old units. Returns {new tu_id: old tu_id}.
+
+    `hints` ({new tu_id: old tu_id}, from the unit ids stored in a layered .eaf) are taken
+    as they are, as long as the old unit exists and is not claimed twice; the remaining
+    units are paired by what they contain.
+    """
     old_units = [_Unit(k, v) for k, v in old.items()]
     new_units = [_Unit(k, v) for k, v in new.items()]
     matched: dict[int, int] = {}
     used_old: set[int] = set()
+    for n_id, o_id in sorted((hints or {}).items()):
+        if n_id in new and o_id in old and o_id not in used_old:
+            matched[n_id] = o_id
+            used_old.add(o_id)
 
     def stage(accept, score):
         # greedy: best candidate pairs first; only units still unmatched take part
@@ -208,12 +218,25 @@ def _same_time(old_align: str, new_align: str) -> bool:
     return True
 
 
-def _keep_old(old_row: dict, new_row: dict, tu_id: int) -> dict:
+def _align_value(old_align: str, new_align: str, keep: set[str]) -> str:
+    """`Begin=`/`End=` of a token: the new ones, except the edges listed in `keep`, which
+    stay as the old file had them (their time was not edited in the .eaf)."""
+    if _same_time(old_align, new_align):
+        return old_align
+    old = dict(p.partition("=")[::2] for p in old_align.split("|") if "=" in p)
+    new = [p.partition("=")[::2] for p in new_align.split("|") if "=" in p]
+    if not new:
+        return new_align
+    return "|".join(f"{k}={old[k] if k in keep and k in old else v}" for k, v in new)
+
+
+def _keep_old(old_row: dict, new_row: dict, tu_id: int, keep: set[str] = frozenset()) -> dict:
     row = dict(old_row)
     for col in FROM_NEW:
-        if col == "align" and _same_time(old_row.get("align", "_"), new_row.get("align", "_")):
-            continue
-        row[col] = new_row.get(col, "_")
+        if col == "align":
+            row[col] = _align_value(old_row.get("align", "_"), new_row.get("align", "_"), keep)
+        else:
+            row[col] = new_row.get(col, "_")
     row["tu_id"] = str(tu_id)
     return row
 
@@ -226,8 +249,9 @@ def _hidden_row(old_row: dict, tu_id: int) -> dict:
     return row
 
 
-def _replace(old_row: dict, new_row: dict, tu_id: int) -> dict:
+def _replace(old_row: dict, new_row: dict, tu_id: int, keep: set[str] = frozenset()) -> dict:
     row = dict(new_row)
+    row["align"] = _align_value(old_row.get("align", "_"), new_row.get("align", "_"), keep)
     row["tu_id"] = str(tu_id)
     row["token_id"] = old_row["token_id"]
     if old_row.get("form") == new_row.get("form"):
@@ -245,8 +269,27 @@ def _overlap_ids(value: str) -> list[str]:
     return _SID.findall(value) if value not in ("", "_") else []
 
 
+def unchanged_edges(old_rows: list[dict], raw_times: tuple[float, float] | None) -> set[str]:
+    """Which of `Begin` / `End` of a unit were not touched in the .eaf.
+
+    `raw_times` are the start and end of the unit as written in the .eaf. The pipeline
+    adjusts the times it reads (overlaps), so comparing its output with the old file would
+    mistake those adjustments for edits: the raw times are compared instead.
+    """
+    if raw_times is None:
+        return set()
+    begin, end = _times(old_rows)
+    keep = set()
+    if begin is not None and abs(begin - raw_times[0]) <= TOLERANCE:
+        keep.add("Begin")
+    if end is not None and abs(end - raw_times[1]) <= TOLERANCE:
+        keep.add("End")
+    return keep
+
+
 def merge_unit(old_rows: list[dict], new_rows: list[dict], tu_id: int, stats: dict,
-               sid_votes: collections.Counter | None = None) -> list[dict]:
+               sid_votes: collections.Counter | None = None,
+               keep_times: set[str] = frozenset()) -> list[dict]:
     """Token rows of one paired unit.
 
     Old tokens whose `form` is `_` (no word form) cannot be written in the .eaf, so they
@@ -265,7 +308,7 @@ def merge_unit(old_rows: list[dict], new_rows: list[dict], tu_id: int, stats: di
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
             for (pos, o), n in zip(aligned[i1:i2], new_rows[j1:j2]):
-                out.append((pos, _keep_old(o, n, tu_id)))
+                out.append((pos, _keep_old(o, n, tu_id, keep_times)))
                 if sid_votes is not None:
                     old_ids, new_ids = _overlap_ids(o["overlaps"]), _overlap_ids(n["overlaps"])
                     if len(old_ids) == len(new_ids):
@@ -274,7 +317,7 @@ def merge_unit(old_rows: list[dict], new_rows: list[dict], tu_id: int, stats: di
             continue
         paired = min(i2 - i1, j2 - j1) if tag == "replace" else 0
         for (pos, o), n in zip(aligned[i1:i1 + paired], new_rows[j1:j1 + paired]):
-            out.append((pos, _replace(o, n, tu_id)))
+            out.append((pos, _replace(o, n, tu_id, keep_times)))
         stats["tokens_changed"] += paired
         for n in new_rows[j1 + paired:j2]:
             row = dict(n)
@@ -332,15 +375,20 @@ def _keep_overlap_ids(old_rows: list[dict], merged: dict[int, list[dict]],
                 row["overlaps"] = _SID.sub(lambda m: f"({mapping[m.group(1)]})", row["overlaps"])
 
 
-def reconcile_rows(old_rows: list[dict], new_rows: list[dict]) -> tuple[list[dict], dict, dict]:
+def reconcile_rows(old_rows: list[dict], new_rows: list[dict],
+                   hints: dict[int, int] | None = None,
+                   raw_times: dict[int, tuple[float, float]] | None = None) -> tuple[list[dict], dict, dict]:
     """Reconcile two vert.tsv row lists.
+
+    `raw_times` ({new tu_id: (start, end)} as written in the .eaf) lets a unit keep the
+    `Begin=`/`End=` it had when its time was not edited.
 
     Returns (rows, mapping, stats): `mapping` is {tu_id in the new file: tu_id in the
     result}, also for units that did not exist before.
     """
     old = group_by_tu(old_rows)
     new = group_by_tu(new_rows)
-    matched = match_units(old, new)
+    matched = match_units(old, new, hints)
     stats = {"tus_kept": len(matched), "tus_added": 0, "tus_removed": 0,
              "tokens_kept": 0, "tokens_changed": 0, "tokens_added": 0, "tokens_removed": 0}
 
@@ -358,7 +406,9 @@ def reconcile_rows(old_rows: list[dict], new_rows: list[dict]) -> tuple[list[dic
     for n_id, rows in new.items():
         final = mapping[n_id]
         if n_id in matched:
-            merged[final] = merge_unit(old[matched[n_id]], rows, final, stats, sid_votes)
+            merged[final] = merge_unit(
+                old[matched[n_id]], rows, final, stats, sid_votes,
+                unchanged_edges(old[matched[n_id]], (raw_times or {}).get(n_id)))
         else:
             fresh = []
             for idx, n in enumerate(rows):
@@ -394,30 +444,44 @@ def reconcile_rows(old_rows: list[dict], new_rows: list[dict]) -> tuple[list[dic
     return rows_out, mapping, stats
 
 
-def reconcile_vert(old_path: Path | None, new_path: Path, out_path: Path) -> tuple[dict, dict]:
+def reconcile_vert(old_path: Path | None, new_path: Path, out_path: Path,
+                   hints: dict[int, int] | None = None,
+                   raw_times: dict[int, tuple[float, float]] | None = None) -> tuple[dict, dict]:
     """Write the reconciled vert.tsv. Without an old file, the new one is copied as is."""
     fieldnames, new_rows = read_vert(new_path)
     if old_path is None or not Path(old_path).is_file():
         write_vert(out_path, fieldnames, new_rows)
         return {t: t for t in group_by_tu(new_rows)}, {"tus_added": len(group_by_tu(new_rows))}
     _, old_rows = read_vert(old_path)
-    rows, mapping, stats = reconcile_rows(old_rows, new_rows)
+    rows, mapping, stats = reconcile_rows(old_rows, new_rows, hints, raw_times)
     write_vert(out_path, fieldnames, rows)
     return mapping, stats
 
 
 def reconcile_translations(old_path: Path | None, new_rows: list[dict],
-                           mapping: dict[int, int], used_tu_ids: set[int]) -> list[dict]:
+                           mapping: dict[int, int], used_tu_ids: set[int],
+                           old_unit_ids: set[int] | None = None) -> list[dict]:
     """Renumber translation rows with the tu_id mapping of `reconcile_rows`.
 
     `parent_tu_id` follows its parent. The row's own `tu_id` is kept from the old file
-    when the same (speaker, parent) translation was already there, otherwise a fresh one.
+    when that unit already had a translation, otherwise a fresh one.
+
+    A translation of the old file whose parent is not a unit of the old tsv (a translation
+    tier with no unit to hang from) cannot be written to the .eaf, so it can never come
+    back from it: it is kept as it was instead of being lost.
     """
     old_by_key: dict[tuple, str] = {}
+    old_rows_by_key: dict[tuple, dict] = {}
+    orphans: list[dict] = []
     if old_path is not None and Path(old_path).is_file():
         with open(old_path, encoding=ENCODING_READ) as f:
             for row in json.load(f):
-                old_by_key[(row["speaker"], str(row["parent_tu_id"]))] = str(row["tu_id"])
+                old_by_key[str(row["parent_tu_id"])] = str(row["tu_id"])
+                old_rows_by_key[str(row["parent_tu_id"])] = row
+                parent = str(row["parent_tu_id"])
+                if old_unit_ids is not None and not (parent.isdigit() and int(parent) in old_unit_ids):
+                    if (row.get("text") or "").strip():
+                        orphans.append(row)
 
     taken = set(used_tu_ids) | {int(v) for v in old_by_key.values() if str(v).isdigit()}
     next_id = max(taken, default=0) + 1
@@ -427,13 +491,19 @@ def reconcile_translations(old_path: Path | None, new_rows: list[dict],
         parent = str(row.get("parent_tu_id", "_"))
         if parent.isdigit() and int(parent) in mapping:
             row["parent_tu_id"] = str(mapping[int(parent)])
-        key = (row["speaker"], str(row["parent_tu_id"]))
+        key = str(row["parent_tu_id"])   # one translation per unit
         if key in old_by_key:
+            old_row = old_rows_by_key[key]
+            if (old_row.get("text") or "").strip() == (row.get("text") or "").strip():
+                row = dict(old_row)   # unchanged: keep it exactly (its own times included)
             row["tu_id"] = old_by_key[key]
         else:
             row["tu_id"] = str(next_id)
             next_id += 1
         out.append(row)
+    kept = {(r["speaker"], str(r["parent_tu_id"]), str(r["tu_id"])) for r in out}
+    out.extend(r for r in orphans
+               if (r["speaker"], str(r["parent_tu_id"]), str(r["tu_id"])) not in kept)
     return out
 
 

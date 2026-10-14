@@ -141,3 +141,58 @@ def test_overlap_group_numbers_follow_the_old_file():
     new[2]["overlaps"] = "0-1(8)"
     rows, _, _ = reconcile.reconcile_rows(old, new)
     assert [r["overlaps"] for r in rows] == ["0-1(53)", "0-1(53)", "0-1(54)"]
+
+
+def test_hints_pair_units_exactly_even_when_text_and_times_changed():
+    old = unit(10, ["uno", "due"], start=1.0) + unit(20, ["tre"], "B", start=5.0)
+    new = unit(1, ["quattro"], "A", start=40.0) + unit(2, ["tre"], "B", start=5.0)  # unit 10 rewritten
+    rows, mapping, _ = reconcile.reconcile_rows(old, new, hints={1: 10})
+    assert mapping == {1: 10, 2: 20}
+    assert {r["token_id"] for r in rows if r["tu_id"] == "10"} == {"10-0"}
+
+
+def test_wrong_hints_are_ignored():
+    old = unit(10, ["uno"], start=1.0)
+    new = unit(1, ["uno"], start=1.0) + unit(2, ["due"], start=9.0)
+    _, mapping, _ = reconcile.reconcile_rows(old, new, hints={2: 99, 1: 10})
+    assert mapping == {1: 10, 2: 11}
+
+
+def test_translations_without_a_unit_are_kept(tmp_path):
+    old_json = tmp_path / "X.translations.json"
+    old_json.write_text(json.dumps([
+        {"tu_id": "11", "speaker": "A_trad", "start": "1", "end": "2", "parent_tu_id": "10", "text": "hello"},
+        {"tu_id": "50", "speaker": "A_trad", "start": "9", "end": "9.5", "parent_tu_id": "_", "text": "floating"},
+        {"tu_id": "51", "speaker": "A_trad", "start": "9", "end": "9.5", "parent_tu_id": "99", "text": "gone"},
+        {"tu_id": "52", "speaker": "A_trad", "start": "9", "end": "9.5", "parent_tu_id": "_", "text": ""},
+    ]))
+    new_rows = [{"tu_id": "_", "speaker": "A_trad", "start": "1", "end": "2",
+                 "parent_tu_id": "1", "text": "hello!"}]
+    out = reconcile.reconcile_translations(old_json, new_rows, {1: 10}, {10}, old_unit_ids={10})
+    assert [(r["parent_tu_id"], r["text"]) for r in out] == [("10", "hello!"), ("_", "floating"), ("99", "gone")]
+
+
+def test_a_unit_whose_time_was_not_edited_keeps_its_times():
+    old = unit(10, ["a", "b"], start=1.0)
+    old[0]["align"], old[1]["align"] = "Begin=1.619", "End=2.778"
+    new = unit(1, ["a", "b"], start=1.0)
+    new[0]["align"], new[1]["align"] = "Begin=1.7305", "End=2.9"   # pipeline moved both edges
+    # the .eaf still says 1.619-2.778: nobody touched the unit
+    rows, _, _ = reconcile.reconcile_rows(old, new, raw_times={1: (1.619, 2.778)})
+    assert (rows[0]["align"], rows[1]["align"]) == ("Begin=1.619", "End=2.778")
+    # begin edited in ELAN, end untouched
+    rows, _, _ = reconcile.reconcile_rows(old, new, raw_times={1: (1.7305, 2.778)})
+    assert (rows[0]["align"], rows[1]["align"]) == ("Begin=1.7305", "End=2.778")
+    # without raw times the new values win
+    rows, _, _ = reconcile.reconcile_rows(old, new)
+    assert (rows[0]["align"], rows[1]["align"]) == ("Begin=1.7305", "End=2.9")
+
+
+def test_unchanged_translation_is_kept_exactly(tmp_path):
+    old_json = tmp_path / "X.translations.json"
+    old_json.write_text(json.dumps([{"tu_id": "11", "speaker": "A_trad", "start": "1.000",
+                                     "end": "2.203", "parent_tu_id": "10", "text": "hello"}]))
+    new_rows = [{"tu_id": "_", "speaker": "A_trad", "start": "1.000", "end": "2.200",
+                 "parent_tu_id": "1", "text": "hello"}]
+    out = reconcile.reconcile_translations(old_json, new_rows, {1: 10}, {10}, old_unit_ids={10})
+    assert out[0]["end"] == "2.203"

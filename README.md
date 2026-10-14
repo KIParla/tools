@@ -73,8 +73,8 @@ Standalone scripts to handle and transform KIParla data.
     tokens without word form (`form` `_`) are kept; units and tokens added in ELAN get fresh ids
     → `tsv2formats` (linear-enriched/orthographic) → `check_participants` (this module)
     → `generate_validation_report` (this module's page).
-  - `python sync.py --from-vert <path/to/X.vert.tsv>`: `vert2eaf` (overwrites `eaf/X.eaf`
-    in place) → `tsv2formats` → `check_participants` → `generate_validation_report`.
+  - `python sync.py --from-vert <path/to/X.vert.tsv>`: `vert2eaf-layered` (overwrites `eaf/X.eaf`
+    in place; `--layout flat` for the old one-tier-per-speaker file) → `tsv2formats` → `check_participants` → `generate_validation_report`.
     Pipeline warnings/errors in the report are *not* refreshed for this file (that would
     require reprocessing the freshly-written eaf — the reverse direction this command
     deliberately doesn't auto-trigger, to avoid ping-ponging between the two commands).

@@ -91,16 +91,14 @@ def _tid(key_or_code, speaker):
 def _units(fobj):
     """Yield (speaker, tu_id, unit_id, token_rows) for each unit in the file.
 
-    Groups on the ``unit`` column when present, otherwise falls back to
-    ``tu_id`` (older schema without intonation-unit segmentation).
+    The unit id written in the ``ref@`` tier is the ``tu_id`` of the vert.tsv: it is what
+    ties the unit to its tsv rows when the .eaf is read back (see eaf_layered.py).
     """
     reader = csv.DictReader(fobj, delimiter="\t")
-    has_unit = reader.fieldnames is not None and "unit" in reader.fieldnames
     curr_key = None
     curr_rows = []
     for row in reader:
-        unit_id = row["unit"] if has_unit else row["tu_id"]
-        key = (row["speaker"], row["tu_id"], unit_id)
+        key = (row["speaker"], row["tu_id"], row["tu_id"])
         if key != curr_key:
             if curr_rows:
                 yield (*curr_key, curr_rows)
@@ -151,6 +149,14 @@ def _load_translations(translations_path):
     return out
 
 
+_MIME_TYPES = {"mp3": "audio/mpeg", "wav": "audio/x-wav", "flac": "audio/flac",
+               "ogg": "audio/ogg", "m4a": "audio/mp4"}
+
+
+def _mime_type(media_file):
+    return _MIME_TYPES.get(str(media_file).rsplit(".", 1)[-1].lower(), "audio/*")
+
+
 class _EafBuilder:
     def __init__(self, media_file=""):
         self._aid = 0
@@ -174,7 +180,7 @@ class _EafBuilder:
         if media_file:
             ET.SubElement(header, "MEDIA_DESCRIPTOR", {
                 "MEDIA_URL": media_file,
-                "MIME_TYPE": "audio/x-wav",
+                "MIME_TYPE": _mime_type(media_file),
                 "RELATIVE_MEDIA_URL": media_file,
             })
 
@@ -350,6 +356,7 @@ def vert2eaf_layered(vert_path, output_filename, media_file="",
 
     builder = _EafBuilder(media_file=media_file)
     tiers = {}  # speaker -> dict of tier entries
+    used_translations = set()
 
     def speaker_tiers(speaker):
         if speaker not in tiers:
@@ -360,21 +367,21 @@ def vert2eaf_layered(vert_path, output_filename, media_file="",
         for speaker, tu_id, unit_id, tok_rows in _units(f):
             m_start = _BEGIN_RE.search(tok_rows[0].get("align", "") or "")
             m_end = _END_RE.search(tok_rows[-1].get("align", "") or "")
+            # a unit that cannot be placed in time must not silently vanish from the .eaf
             if m_start is None or m_end is None:
-                logger.warning("%s: unit %s/%s (%s) missing Begin=/End=, skipping",
-                               vert_path.stem, tu_id, unit_id, speaker)
-                continue
+                raise ValueError(f"{vert_path.stem}: unit {tu_id} ({speaker}) has no Begin=/End= "
+                                 "in `align`, cannot be written to the .eaf")
             start_ms = round(float(m_start.group(1)) * 1000)
             end_ms = round(float(m_end.group(1)) * 1000)
             if end_ms <= start_ms:
-                logger.warning("%s: unit %s/%s (%s) non-positive duration, skipping",
-                               vert_path.stem, tu_id, unit_id, speaker)
-                continue
+                raise ValueError(f"{vert_path.stem}: unit {tu_id} ({speaker}) has a non-positive "
+                                 f"duration ({start_ms}-{end_ms} ms), cannot be written to the .eaf")
 
             st = speaker_tiers(speaker)
             unit_aid = builder.add_aligned(st["units"], start_ms, end_ms, unit_id)
 
             translation = translations.get(_safe_int(tu_id))
+            used_translations.add(_safe_int(tu_id))
             if translation:
                 builder.add_ref(st["translation"], unit_aid, translation)
 
@@ -384,9 +391,7 @@ def vert2eaf_layered(vert_path, output_filename, media_file="",
 
             prev = None
             for tok in tok_rows:
-                value = tok.get("form", "") or ""
-                if value == "_":
-                    value = tok.get("span", "") or ""
+                value = tok.get("form", "") or "_"
                 tok_aid = builder.add_ref(st["tokens"], ortho_aid, value, prev_aid=prev)
                 prev = tok_aid
 
@@ -406,9 +411,30 @@ def vert2eaf_layered(vert_path, output_filename, media_file="",
                     if cell != "_":
                         builder.add_ref(st[key], tok_aid, cell)
 
-    output_filename = Path(output_filename)
+    for parent in sorted(set(translations) - used_translations):
+        logger.warning("%s: translation of unit %s has no unit with that tu_id, not written",
+                       vert_path.stem, parent)
+    return _write_unless_unchanged(builder.to_tree(), Path(output_filename))
+
+
+_DATE_RE = re.compile(rb'DATE="[^"]*"')
+
+
+def _write_unless_unchanged(tree, output_filename):
+    """Write the .eaf, but leave an existing file alone if only its DATE would change.
+
+    Regenerating a whole corpus then produces no diff for the files that did not change.
+    """
+    import io
+    buffer = io.BytesIO()
+    tree.write(buffer, encoding="UTF-8", xml_declaration=True)
+    content = buffer.getvalue()
     output_filename.parent.mkdir(parents=True, exist_ok=True)
-    builder.to_tree().write(output_filename, encoding="UTF-8", xml_declaration=True)
+    if output_filename.is_file():
+        current = output_filename.read_bytes()
+        if _DATE_RE.sub(b"", current, count=1) == _DATE_RE.sub(b"", content, count=1):
+            return output_filename
+    output_filename.write_bytes(content)
     return output_filename
 
 
