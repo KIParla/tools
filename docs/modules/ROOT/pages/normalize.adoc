@@ -61,6 +61,10 @@ If `config` is `None` or a key is absent, each rule falls back to its `enabled_b
 |Removes characters outside the enriched transcription alphabet
 |yes
 
+|`PAUSE_LABEL`
+|Writes the non-verbal tag `((P))` as the standard short pause `(.)`
+|yes
+
 |`META_TAG`
 |Converts `((…))` → `{…}` and `(.)` → `{P}`
 |yes

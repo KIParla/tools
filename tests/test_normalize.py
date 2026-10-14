@@ -209,6 +209,17 @@ def test_remove_spaces_tabs_and_newlines():
 def test_meta_tag_shortpause_unchanged():
     assert normalize.meta_tag("(.) ciao") == (0, "(.) ciao")
 
+def test_pause_label_becomes_shortpause():
+    assert normalize.pause_label("ciao ((P)) mondo") == (1, "ciao (.) mondo")
+    assert normalize.pause_label("((P)) a ((P))") == (2, "(.) a (.)")
+    assert normalize.pause_label("ciao ((ride))") == (0, "ciao ((ride))")
+
+
+def test_pause_label_is_applied_by_the_full_normalization():
+    normalized, warnings, _ = normalize.validate_and_normalize("ciao ((P)) mondo")
+    assert normalized == "ciao (.) mondo" and warnings["PAUSE_LABEL"] == 1
+
+
 def test_meta_tag_comment():
     assert normalize.meta_tag("ciao ((bla bla)) ciao") == (1, "ciao ((bla_bla)) ciao")
 

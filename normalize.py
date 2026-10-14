@@ -169,6 +169,15 @@ def check_spaces(annotation: str) -> tuple[int, str]:
     return total, annotation.strip()
 
 
+PAUSE_LABEL_RE = re.compile(r"\(\(P\)\)")
+
+
+def pause_label(annotation: str) -> tuple[int, str]:
+    """`((P))` is a short pause written as a non-verbal tag: use the standard `(.)`."""
+    annotation, n = PAUSE_LABEL_RE.subn("(.)", annotation)
+    return n, annotation
+
+
 def remove_pauses(annotation: str) -> tuple[int, str]:
     """Strip leading and trailing short-pause markers (.)."""
     annotation, n = re.subn(
@@ -592,6 +601,8 @@ def hash_unit_space(annotation: str) -> tuple[int, str]:
 WARNING_RULES.extend([
     # Remove illegal symbols first so later rules see clean input.
     ValidationRule("SYMBOL_NOT_ALLOWED",   clean_non_jefferson_symbols),
+    # `((P))` is the same thing as a shortpause: from here on only `(.)` exists.
+    ValidationRule("PAUSE_LABEL",          pause_label),
     # Normalize spacing inside NVB spans before trimming pauses, so TRIM_PAUSES
     # sees a single well-formed (.) / ((...)) token.
     ValidationRule("META_TAGS",            meta_tag),
