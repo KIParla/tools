@@ -302,6 +302,7 @@ In order of priority:
 | starts with `@` | `anonymized` | |
 | `(.)` | `shortpause` | |
 | starts with `((` and ends with `))` | `nonverbalbehavior` | checked before the generic `[]()<>°` marker strip, since `(.)`/`((…))` reuse guess/pace-span parens |
+| `.h`, `.hh`, … (after stripping `[]()<>°`), only if `nonverbal_tokens.inhalation` is on | `nonverbalbehavior` | Jefferson inhalation (breathing); text unchanged; off by default, on for ParlaBZ |
 | all `x` characters | `unknown` | form kept as-is; `Syllables=N` added (N = number of `x`s) |
 | starts with `$` | `linguistic` + `non_ortho=True` | strip `$` prefix |
 | starts with `#` | `linguistic` + `non_ita=True`, `iso_code=NO_ISO_CODE` | strip `#` prefix |

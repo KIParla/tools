@@ -1,6 +1,7 @@
 * xref:index.adoc[Home]
 * xref:scripts.adoc[Scripts]
 * xref:normalize.adoc[Normalization pipeline]
+* xref:eaf-structure.adoc[The ELAN file]
 * xref:testing.adoc[Testing]
 * xref:workflows.adoc[Workflows]
 * xref:pipeline-verification.adoc[Pipeline verification]

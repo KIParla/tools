@@ -4,6 +4,24 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* **Sync from the `.eaf` keeps the ids and the tsv-only annotations.** `sync.py --from-eaf` no longer replaces
+  `tsv/X.vert.tsv`: the new file is reconciled with the existing one (new `reconcile.py`). `tu_id`, `token_id`,
+  overlap group numbers, `lemma`/`upos`/`xpos`/`feats`/`deprel`/`meta_label` and `Language=` survive an `.eaf` edit;
+  new units and tokens get fresh ids. Before this, 243 of the 512 conversations got different ids on a round trip.
+* **The layered `.eaf` is the editable file.** `tsv2eaf_layered.py` writes the `tu_id` in `ref@`, the right MIME
+  type for the audio, and does not rewrite a file that would only change its date; new `eaf_layered.py` reads
+  `ref@`/`tx@`/`ft@` back (`tx@` is the only text read). `sync.py --from-vert` writes the layered layout by default
+  (`--layout flat` for the old one), `--from-eaf` reads both. New page "The ELAN file".
+* **Fix — `switch_symbols` moved intonation marks across letters and brackets.** The pattern `[:-~]` is a range of
+  characters (`:` to `~`, which includes `< > [ ] =` and every lowercase letter), not the three characters
+  `: - ~`. It rewrote `n.ove` as `no.ve`, `[h.]` as `[h].` and `telefono?<]` as `telefono<]?` whenever a unit was
+  normalized.
+* **Fix — `check_spaces` split an inhalation `.h` from its space.** `word .h` became `word. h`: a spurious dot on
+  the previous word and a bare `h` token.
+* **`((P))` is written as the short pause `(.)`** (rule `PAUSE_LABEL`).
+* **New config `nonverbal_tokens.inhalation`** (default `false`, `true` in `configs/ParlaBZ.yml`): a standalone
+  `.h` / `.hh` is classified `nonverbalbehavior` instead of `linguistic`, text unchanged.
+* `serialize.py`: `Begin=`/`End=` no longer print float noise (`1602.7305000000001`).
 * **`original/` is only for the first generation; later corrections start from `eaf/`.** The transcribers'
   files in `<module>/original/` are now an untouched archive; after the first generation the editable
   source is `eaf/X.eaf`, synced with `sync.py --from-eaf eaf/X.eaf`. `sync.py --from-eaf` on an

@@ -1,0 +1,112 @@
+= The ELAN file (`.eaf`)
+
+Every conversation of a module has an `.eaf` file in `eaf/`, to be opened with
+https://archive.mpi.nl/tla/elan[ELAN]. The `tsv/` file is the master: the `.eaf` is generated
+from it (`sync.py --from-vert`), and can be edited and read back (`sync.py --from-eaf`).
+
+NOTE: `.eaf` files generated before the layered format have one tier per speaker, named exactly as the
+speaker, with the unit text as its annotations (no `ref@`/`tx@`). `sync.py --from-eaf` reads both layouts,
+and `sync.py --from-vert` rewrites a file in the layered layout (`--layout flat` keeps the old one).
+
+== Tiers
+
+Each speaker has the same group of tiers, named `<code>@<speaker>` (Toolbox/ELAN interlinear
+convention). The code in the name tells whether a tier is edited or generated:
+
+[cols="2,3,1"]
+|===
+| tier | content | edit it?
+
+| `ref@<speaker>`
+| the Transcription Units, time-aligned. The value is the `tu_id` of the `tsv/` file.
+| times only: do not touch the value
+
+| `tx@<speaker>`
+| the enriched transcription of the unit (the `span`s of its tokens, joined)
+| *yes: this is the text*
+
+| `ft@<speaker>`
+| free translation of the unit (only in modules with translations)
+| yes
+
+| `tx_ortho@<speaker>`
+| orthographic text of the unit
+| no, derived
+
+| `tok@<speaker>`
+| one annotation per token (its `form`)
+| no, derived
+
+| `nvb@<speaker>`
+| for non-verbal tokens, pauses and unknown tokens: the token `type` (and `meta_label`)
+| no, derived
+|===
+
+Optional tiers (`lemma@`, `pos@`, `xpos@`, `feats@`, `dep@`, `sent_id@`) hang from `tok@`; see
+xref:scripts.adoc#_vert2eaf_layered_tsv2eaf_layered_py[`vert2eaf-layered`]. Empty tiers are not written.
+
+`tx@` is the *only* text that is read back. The orthographic and token tiers are rebuilt from it,
+so changing them in ELAN has no effect (and can never make the file inconsistent with the text).
+
+== Editing and syncing
+
+. Edit the text in `tx@<speaker>` (and the translation in `ft@<speaker>`); move the boundaries of
+  `ref@<speaker>` if needed. A new unit is a new annotation of `ref@` with its text in `tx@`.
+. Run `python sync.py --from-eaf eaf/X.eaf`. The file is read, processed and *reconciled* with the
+  `tsv/X.vert.tsv` already in the module (`reconcile.py`), then the linear files and the validation
+  page are refreshed.
+. To go the other way (after editing the tsv by hand), run `python sync.py --from-vert tsv/X.vert.tsv`:
+  the `.eaf` is rewritten from the tsv. A file that would come out identical is left untouched.
+
+=== What stays the same when the `.eaf` is read back
+
+[cols="2,3"]
+|===
+| `tu_id` of a unit
+| kept. The value of `ref@` pairs each unit with its tsv rows exactly. A missing, non-numeric
+  or duplicated value (an annotation split or copied in ELAN) gives no pairing for that unit: it is
+  then matched by speaker, text and times. A unit added in ELAN gets a new id, never one that
+  was used before.
+
+| `token_id` of a token
+| kept. Tokens of a unit are aligned on their `span`; a token whose text changed keeps its id,
+  a token that is split gets a new id for the second part, a deleted token disappears. Token ids are
+  *not* written in the `.eaf`: they are not needed, and a second copy of the ids would be one more
+  thing that could go out of step with the text.
+
+| overlap group numbers
+| kept (the number in `overlaps`, e.g. `0-5(895)`).
+
+| columns the `.eaf` cannot carry
+| kept: `lemma`, `upos`, `xpos`, `feats`, `deprel`, `meta_label` and the `Language=` labels. If the
+  `form` of a token changes, its linguistic annotation is cleared.
+
+| `Begin=` / `End=` of a unit
+| kept if the unit's time was not edited in ELAN (the pipeline adjusts times when it resolves overlaps,
+  so its output is not compared with the old file).
+
+| translations
+| `ft@` is read; a translation without a unit to hang from (it cannot be a child of `ref@`) stays in
+  `translations/` as it was.
+|===
+
+=== What can still change
+
+The tokenizer is not the exact inverse of the `span` column: forms that it would not produce from the
+text (typically stray symbols written apart from the word, such as `° ma`, `> io`, a lone `(.)` next to
+`<`) are tokenized as the rules say when the unit is read back. The ids of the other tokens do not
+change. The cases are listed in the validation page and fixed in the transcription.
+
+== Inhalations (`.h`)
+
+In Jefferson notation `.h`, `.hh` is an inhalation: breathing, not a word. For modules that ask for it
+(`nonverbal_tokens.inhalation: true` in `configs/<Module>.yml`; ParlaBZ) a standalone `.h` / `.hh`, also
+inside an overlap bracket (`[.h]`), is classified `nonverbalbehavior` instead of `linguistic`. The text is
+never changed, so the `.eaf` and the linear files show `.h`; the orthographic text leaves it out.
+
+== Checks
+
+The generated files are valid against the official
+https://www.mpi.nl/tools/elan/EAFv3.0.xsd[EAFv3.0.xsd]; `tests/test_layered_eaf.py` checks the rules ELAN
+enforces on tier hierarchies that the schema does not express, and the round trip
+tsv → `.eaf` → tsv.
