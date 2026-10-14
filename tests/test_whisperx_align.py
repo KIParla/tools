@@ -6,10 +6,11 @@ from conftest import load_tool_module
 wx = load_tool_module("whisperx_align")
 
 HEADER = ["token_id", "speaker", "tu_id", "id", "span", "form", "type", "align"]
+ALIGN = {0: "Begin=1.5", 1: "End=2.5"}  # first / last token of the unit
 
 
 def _row(i, form, type_="linguistic"):
-    return dict(zip(HEADER, [f"0-{i}", "S1", "0", str(i), form, form, type_, "Begin=1"]))
+    return dict(zip(HEADER, [f"0-{i}", "S1", "7", str(i), form, form, type_, ALIGN.get(i, "_")]))
 
 
 def _write_tsv(tmp_path, forms):
@@ -68,7 +69,10 @@ def test_timestamps_and_alignment_labels(tmp_path):
     assert list(rows[0]) == wx.OUTPUT_COLUMNS         # only the requested columns
     assert by["0-0"]["alignment"] == by["0-1"]["alignment"] == "match"
     assert by["0-0"]["whisper_begin"] == "0.000" and by["0-1"]["whisper_end"] == "0.600"
-    assert (by["0-0"]["speaker"], by["0-0"]["form"]) == ("S1", "l'")
+    assert (by["0-0"]["speaker"], by["0-0"]["form"], by["0-0"]["tu_id"]) == ("S1", "l'", "7")
+    assert by["0-0"]["whisper_segment"] == "0"
+    assert (by["0-0"]["tsv_begin"], by["0-0"]["tsv_end"]) == ("1.5", "_")
+    assert (by["0-1"]["tsv_begin"], by["0-1"]["tsv_end"]) == ("_", "2.5")
     assert by["0-3"]["alignment"] == "mismatch"      # mh <-> bella, paired positionally
     assert by["0-4"]["whisper_begin"] == "3.000"
 
@@ -104,3 +108,18 @@ def test_non_linguistic_and_empty_forms_are_skipped_in_tsv_order(tmp_path, capsy
 def test_plain_whisper_json_falls_back_to_interpolation(tmp_path):
     rows = _run(tmp_path, ["a", "b"], "a", "b", plain=True)
     assert [(r["whisper_begin"], r["whisper_end"]) for r in rows] == [("0.000", "2.000"), ("2.000", "4.000")]
+
+
+def test_tsv_times_formats():
+    assert wx.tsv_times("_") == ("_", "_")
+    assert wx.tsv_times("Begin=1.28") == ("1.28", "_")
+    assert wx.tsv_times("End=2.0") == ("_", "2.0")
+    assert wx.tsv_times("Begin=1.28|End=2.0") == ("1.28", "2.0")
+    assert wx.tsv_times(None) == ("_", "_")
+
+
+def test_whisper_only_row_has_segment_and_times_only(tmp_path):
+    rows = _run(tmp_path, ["ciao"], ("ciao", 0, 1), ("extra", 1, 2))
+    extra = [r for r in rows if r["alignment"] == "whisper_only"][0]
+    assert extra["whisper_segment"] == "0" and extra["whisper_begin"] == "1.000"
+    assert extra["token_id"] == extra["tu_id"] == extra["tsv_begin"] == "_"

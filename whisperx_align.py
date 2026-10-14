@@ -22,7 +22,11 @@ are then interpolated linearly across each segment, as in align_nw.py.
 
 Output TSV, one row per TSV row (in the TSV's order) plus the WhisperX words
 that matched nothing:
-  token_id, speaker, form   copied from the TSV ("_" on whisper_only rows)
+  token_id, tu_id, speaker, form
+                            copied from the TSV ("_" on whisper_only rows)
+  tsv_begin, tsv_end        Begin=/End= of the TSV's `align` column: only the
+                            first / last token of a unit carries them, "_" otherwise
+  whisper_segment           index of the WhisperX segment of the aligned word
   whisper_begin             start (s) of the aligned WhisperX word
   whisper_end               end (s) of the aligned WhisperX word
   alignment                 match | mismatch | whisper_only | tsv_only | skipped
@@ -58,7 +62,12 @@ GAP = -1
 GAP_SYMBOL = "<GAP>"  # normalized forms are alphanumeric only: no collision
 
 EMPTY = "_"
-OUTPUT_COLUMNS = ["token_id", "speaker", "form", "whisper_begin", "whisper_end", "alignment"]
+OUTPUT_COLUMNS = [
+    "token_id", "tu_id", "speaker", "form", "tsv_begin", "tsv_end",
+    "whisper_segment", "whisper_begin", "whisper_end", "alignment",
+]
+
+_ALIGN_TIME = re.compile(r"\b(Begin|End)=([0-9.]+)")
 
 # l'ho -> l' ho  (split after an apostrophe followed by a letter)
 _ELISION_SPLIT = re.compile(r"(?<=\p{L}['’])(?=\p{L})")
@@ -205,6 +214,12 @@ def _time(value: Optional[float]) -> str:
     return f"{value:.3f}" if value is not None else EMPTY
 
 
+def tsv_times(align: str) -> tuple[str, str]:
+    """(begin, end) from an `align` cell: "_", "Begin=1.2", "End=3.4" or "Begin=1.2|End=3.4"."""
+    found = dict(_ALIGN_TIME.findall(align or ""))
+    return found.get("Begin", EMPTY), found.get("End", EMPTY)
+
+
 def build_rows(pairs, whisper_words, all_tokens):
     """Return (output rows as lists, stats). Skipped rows keep the TSV order."""
     aligned = [t for t in all_tokens if t.alignable]
@@ -213,28 +228,29 @@ def build_rows(pairs, whisper_words, all_tokens):
              "skipped": len(pending)}
     rows = []
 
-    def tsv_row(t, begin, end, aln):
-        return [t.row.get("token_id", ""), t.row.get("speaker", ""), t.row.get("form", ""),
-                begin, end, aln]
+    def tsv_row(t, segment, begin, end, aln):
+        t_begin, t_end = tsv_times(t.row.get("align", ""))
+        return [t.row.get("token_id", ""), t.row.get("tu_id", ""), t.row.get("speaker", ""),
+                t.row.get("form", ""), t_begin, t_end, segment, begin, end, aln]
 
     for a, b in pairs:
         if b is not None:  # emit the skipped rows that precede this token
             while pending and pending[0].index < aligned[b].index:
-                rows.append(tsv_row(pending.pop(0), EMPTY, EMPTY, "skipped"))
+                rows.append(tsv_row(pending.pop(0), EMPTY, EMPTY, EMPTY, "skipped"))
         if a is not None and b is not None:
             w, t = whisper_words[a], aligned[b]
             aln = "match" if w.norm == t.norm else "mismatch"
-            rows.append(tsv_row(t, _time(w.start), _time(w.end), aln))
+            rows.append(tsv_row(t, w.segment, _time(w.start), _time(w.end), aln))
         elif a is not None:
             w = whisper_words[a]
             aln = "whisper_only"
-            rows.append([EMPTY, EMPTY, EMPTY, _time(w.start), _time(w.end), aln])
+            rows.append([EMPTY] * 6 + [w.segment, _time(w.start), _time(w.end), aln])
         else:
             aln = "tsv_only"
-            rows.append(tsv_row(aligned[b], EMPTY, EMPTY, aln))
+            rows.append(tsv_row(aligned[b], EMPTY, EMPTY, EMPTY, aln))
         stats[aln] += 1
     for t in pending:
-        rows.append(tsv_row(t, EMPTY, EMPTY, "skipped"))
+        rows.append(tsv_row(t, EMPTY, EMPTY, EMPTY, "skipped"))
     return rows, stats
 
 
