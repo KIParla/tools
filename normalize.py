@@ -369,7 +369,10 @@ def check_numbers(annotation: str) -> tuple[int, str]:
 
 def switch_symbols(annotation: str) -> tuple[int, str]:
     """Move intonation markers before prosodic/interruption symbols: .,? must follow :, -, ~."""
-    annotation, n = re.subn(r"([.,?])([:-~])", r"\2\1", annotation)
+    # `[:\-~]` is a set of three characters. (`[:-~]` is a range from ':' to '~', which
+    # also covers `<`, `>`, `[`, `]`, `=` and every lowercase letter: it moved the mark
+    # across them, e.g. `n.ove` -> `no.ve` or `[h.]` -> `[h].`)
+    annotation, n = re.subn(r"([.,?])([:\-~])", r"\2\1", annotation)
     return n, annotation.strip()
 
 

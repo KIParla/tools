@@ -404,6 +404,16 @@ def test_switch_symbols_intonation_before_colon():
 def test_switch_symbols_question_before_tilde():
     assert normalize.switch_symbols("ciao?~") == (1, "ciao~?")
 
+def test_switch_symbols_leaves_marks_before_letters_and_brackets_alone():
+    for text in ("n.ove", "rom.ania.", "[h.]", "[h.h]", "telefono?<]", "tutto,]<", "e,:x", "sì,[:]", "bene.>"):
+        assert normalize.switch_symbols(text)[1] == text.replace("e,:x", "e:,x"), text
+
+
+def test_switch_symbols_hyphen_and_tilde():
+    assert normalize.switch_symbols("fa.-") == (1, "fa-.")
+    assert normalize.switch_symbols("va,~") == (1, "va~,")
+
+
 def test_switch_symbols_no_change():
     assert normalize.switch_symbols("ciao.") == (0, "ciao.")
 
