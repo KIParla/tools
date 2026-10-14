@@ -8,30 +8,24 @@ same output layout), extended to use WhisperX's word-level timestamps and to
 report the WER.
 
 Only 'linguistic' rows of the TSV are aligned. Normalization for comparison:
-lowercase, accent-strip, punctuation-strip (so `l~` matches `l`). TSV rows
-typed 'linguistic' whose form has no letter or digit (e.g. `(.)`) cannot be
-compared: they are written as `skipped` and ignored by the WER.
+lowercase, accent-strip, punctuation-strip (so `l~` matches `l`). Every other
+row (shortpause, nonverbal, unknown, ... and rows typed 'linguistic' whose form
+has no letter or digit) is written as `skipped` and ignored by the WER.
 
 Timestamps: WhisperX word `start`/`end` (needs the forced-alignment step, i.e.
 not `--no_align`). The TSV splits elisions (`l'` `ho`) that WhisperX keeps in
 one word (`l'ho`): WhisperX words are split after the apostrophe and the time
 span is shared out by character length. Words WhisperX could not time (numbers,
-"%", "€"...) are interpolated between their timed neighbours and get score "_".
+"%", "€"...) are interpolated between their timed neighbours.
 A plain Whisper JSON (segments without `words`) is also accepted: timestamps
 are then interpolated linearly across each segment, as in align_nw.py.
 
-Output TSV: the TSV's own columns (linguistic rows), then
-  whisper_segment    index of the WhisperX segment
-  whisper_text       lowercase, all punctuation stripped
-  whisper_question   "?" if the WhisperX word contained a question mark
-  whisper_begin      start (s) of the WhisperX word
-  whisper_end        end (s) of the WhisperX word
-  whisper_score      WhisperX alignment confidence
-  whisper_speaker    WhisperX diarization label, if any
-  alignment          match | mismatch | whisper_only | tsv_only | skipped
-
-The existing `align` column (Begin=/End= from the EAF) is left as it is.
-WhisperX words with no TSV counterpart are kept as `whisper_only` rows.
+Output TSV, one row per TSV row (in the TSV's order) plus the WhisperX words
+that matched nothing:
+  token_id, speaker, form   copied from the TSV ("_" on whisper_only rows)
+  whisper_begin             start (s) of the aligned WhisperX word
+  whisper_end               end (s) of the aligned WhisperX word
+  alignment                 match | mismatch | whisper_only | tsv_only | skipped
 
 WER, with the TSV linguistic tokens as reference and WhisperX as hypothesis:
   (substitutions + deletions + insertions) / reference tokens
@@ -64,11 +58,7 @@ GAP = -1
 GAP_SYMBOL = "<GAP>"  # normalized forms are alphanumeric only: no collision
 
 EMPTY = "_"
-WHISPER_COLUMNS = [
-    "whisper_segment", "whisper_text", "whisper_question",
-    "whisper_begin", "whisper_end", "whisper_score", "whisper_speaker",
-    "alignment",
-]
+OUTPUT_COLUMNS = ["token_id", "speaker", "form", "whisper_begin", "whisper_end", "alignment"]
 
 # l'ho -> l' ho  (split after an apostrophe followed by a letter)
 _ELISION_SPLIT = re.compile(r"(?<=\p{L}['’])(?=\p{L})")
@@ -77,7 +67,6 @@ _ELISION_SPLIT = re.compile(r"(?<=\p{L}['’])(?=\p{L})")
 @dataclass
 class WhisperWord:
     display: str   # lowercase, all punctuation stripped
-    question: str  # "?" if original contained "?", else ""
     norm: str      # for NW comparison: also accent-stripped
     segment: str   # index of the Whisper segment this word belongs to
     start: Optional[float]
@@ -88,8 +77,10 @@ class WhisperWord:
 
 @dataclass
 class TSVToken:
-    row: dict   # full original row
-    norm: str   # for NW comparison
+    row: dict        # full original row
+    norm: str        # for NW comparison
+    index: int       # position in the TSV
+    alignable: bool  # linguistic, and with something to compare
 
 
 def normalize(text: str) -> str:
@@ -99,11 +90,9 @@ def normalize(text: str) -> str:
     return re.sub(r"[^\p{L}\p{N}]", "", text)
 
 
-def whisper_display(raw: str) -> tuple[str, str]:
-    """Return (display_text, question_mark) for a raw Whisper word."""
-    question = "?" if "?" in raw else ""
-    display = re.sub(r"[^\p{L}\p{N}]", "", nfc(raw).lower())
-    return display, question
+def whisper_display(raw: str) -> str:
+    """Lowercase, punctuation stripped."""
+    return re.sub(r"[^\p{L}\p{N}]", "", nfc(raw).lower())
 
 
 def _split_word(raw: str, start, end, score, speaker, segment) -> list[WhisperWord]:
@@ -113,17 +102,14 @@ def _split_word(raw: str, start, end, score, speaker, segment) -> list[WhisperWo
     pieces = [(p, n) for p, n in pieces if n]
     total = sum(len(n) for _, n in pieces)
     out, offset = [], 0
-    for idx, (piece, norm) in enumerate(pieces):
+    for piece, norm in pieces:
         if start is not None and end is not None:
             p_start = start + (end - start) * offset / total
             p_end = start + (end - start) * (offset + len(norm)) / total
         else:
             p_start = p_end = None
         offset += len(norm)
-        display, question = whisper_display(piece)
-        # the question mark belongs to the end of the word
-        question = question if idx == len(pieces) - 1 else ""
-        out.append(WhisperWord(display, question, norm, segment,
+        out.append(WhisperWord(whisper_display(piece), norm, segment,
                                p_start, p_end, score, speaker))
     return out
 
@@ -179,14 +165,13 @@ def load_whisper(path: str) -> list[WhisperWord]:
     return words
 
 
-def load_tsv(path: str) -> tuple[list[str], list[TSVToken]]:
+def load_tsv(path: str) -> list[TSVToken]:
     tokens = []
     with open(path, encoding=ENCODING_READ, newline="") as f:
-        reader = csv.DictReader(f, delimiter="\t")
-        for row in reader:
-            if row["type"] == "linguistic":
-                tokens.append(TSVToken(row=dict(row), norm=normalize(row["form"])))
-        return list(reader.fieldnames or []), tokens
+        for i, row in enumerate(csv.DictReader(f, delimiter="\t")):
+            norm = normalize(row["form"]) if row["type"] == "linguistic" else ""
+            tokens.append(TSVToken(row=dict(row), norm=norm, index=i, alignable=bool(norm)))
+    return tokens
 
 
 def run_needleman_wunsch(seq1, seq2) -> list[tuple[Optional[int], Optional[int]]]:
@@ -220,35 +205,36 @@ def _time(value: Optional[float]) -> str:
     return f"{value:.3f}" if value is not None else EMPTY
 
 
-def build_rows(pairs, whisper_words, tsv_tokens, skipped_tokens, fieldnames):
-    """Return (output rows as lists, stats)."""
+def build_rows(pairs, whisper_words, all_tokens):
+    """Return (output rows as lists, stats). Skipped rows keep the TSV order."""
+    aligned = [t for t in all_tokens if t.alignable]
+    pending = [t for t in all_tokens if not t.alignable]  # TSV order
     stats = {"match": 0, "mismatch": 0, "whisper_only": 0, "tsv_only": 0,
-             "skipped": len(skipped_tokens)}
-    blank = [""] * len(fieldnames)
+             "skipped": len(pending)}
     rows = []
 
-    def tsv_cells(t):
-        return [t.row.get(c, "") for c in fieldnames]
+    def tsv_row(t, begin, end, aln):
+        return [t.row.get("token_id", ""), t.row.get("speaker", ""), t.row.get("form", ""),
+                begin, end, aln]
 
     for a, b in pairs:
+        if b is not None:  # emit the skipped rows that precede this token
+            while pending and pending[0].index < aligned[b].index:
+                rows.append(tsv_row(pending.pop(0), EMPTY, EMPTY, "skipped"))
         if a is not None and b is not None:
-            w, t = whisper_words[a], tsv_tokens[b]
+            w, t = whisper_words[a], aligned[b]
             aln = "match" if w.norm == t.norm else "mismatch"
-            rows.append(tsv_cells(t) + [w.segment, w.display, w.question,
-                                        _time(w.start), _time(w.end),
-                                        f"{w.score:.3f}" if w.score is not None else "",
-                                        w.speaker or "", aln])
+            rows.append(tsv_row(t, _time(w.start), _time(w.end), aln))
         elif a is not None:
             w = whisper_words[a]
             aln = "whisper_only"
-            rows.append(blank + [w.segment, w.display, w.question,
-                                 _time(w.start), _time(w.end),
-                                 f"{w.score:.3f}" if w.score is not None else "",
-                                 w.speaker or "", aln])
+            rows.append([EMPTY, EMPTY, EMPTY, _time(w.start), _time(w.end), aln])
         else:
             aln = "tsv_only"
-            rows.append(tsv_cells(tsv_tokens[b]) + [""] * 7 + [aln])
+            rows.append(tsv_row(aligned[b], EMPTY, EMPTY, aln))
         stats[aln] += 1
+    for t in pending:
+        rows.append(tsv_row(t, EMPTY, EMPTY, "skipped"))
     return rows, stats
 
 
@@ -260,18 +246,15 @@ def align_files(json_path: str, tsv_path: str, output: Optional[str] = None,
     ``output`` (the path written).
     """
     whisper_words = load_whisper(json_path)
-    fieldnames, all_tokens = load_tsv(tsv_path)
-    tsv_tokens = [t for t in all_tokens if t.norm]
-    skipped = [t for t in all_tokens if not t.norm]
+    all_tokens = load_tsv(tsv_path)
+    tsv_tokens = [t for t in all_tokens if t.alignable]
     if verbose:
         print(f"{len(whisper_words)} WhisperX words, {len(tsv_tokens)} linguistic tokens "
-              f"({len(skipped)} without letters/digits skipped)", file=sys.stderr)
+              f"({len(all_tokens) - len(tsv_tokens)} other rows skipped)", file=sys.stderr)
 
     pairs = run_needleman_wunsch([w.norm for w in whisper_words],
                                  [t.norm for t in tsv_tokens])
-    rows, stats = build_rows(pairs, whisper_words, tsv_tokens, skipped, fieldnames)
-    for t in skipped:
-        rows.append([t.row.get(c, "") for c in fieldnames] + [""] * 7 + ["skipped"])
+    rows, stats = build_rows(pairs, whisper_words, all_tokens)
 
     if output:
         out_path = output
@@ -282,7 +265,7 @@ def align_files(json_path: str, tsv_path: str, output: Optional[str] = None,
 
     with open(out_path, "w", encoding=ENCODING_WRITE, newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
-        writer.writerow(fieldnames + WHISPER_COLUMNS)
+        writer.writerow(OUTPUT_COLUMNS)
         for r in rows:
             writer.writerow([EMPTY if c == "" else c for c in r])
 

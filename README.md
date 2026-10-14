@@ -14,10 +14,11 @@ Standalone scripts to handle and transform KIParla data.
 - `linear2html.py`: generate publication HTML and PDF artifacts in the `KIParla-artifacts` layout.
 - `whisperx_align.py`: align a WhisperX word-level JSON with the *linguistic* tokens of a
   `.vert.tsv` (Needleman-Wunsch on accent/punctuation-stripped forms; adapted from
-  `intonation-cues-whisper/src/align_nw.py`). The output keeps the TSV columns and adds
-  `whisper_segment/text/question/begin/end/score/speaker` and `alignment`
-  (`match` / `mismatch` / `whisper_only` / `tsv_only` / `skipped`). It prints the WER
-  (TSV as reference, linguistic tokens only). The `align` column is untouched.
+  `intonation-cues-whisper/src/align_nw.py`). The output has one row per TSV row with
+  `token_id`, `speaker`, `form`, `whisper_begin`, `whisper_end` and `alignment`
+  (`match` / `mismatch` / `tsv_only` / `skipped`, plus `whisper_only` rows for WhisperX words
+  with no token); every non-linguistic row is `skipped`. It prints the WER
+  (TSV as reference, linguistic tokens only).
   `python whisperx_align.py <whisperx.json> <X.vert.tsv> [-o out.tsv]`.
 - `whisperx_run.py`: run WhisperX (transcription, forced alignment, speaker diarization) on the audio
   of every conversation of one or more modules, passing the diarizer the expected number of
