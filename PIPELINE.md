@@ -546,9 +546,8 @@ back to matching by speaker/text/times), tokens inside a unit are aligned on the
 So `tu_id`, `token_id`, overlap group numbers and every column the .eaf cannot carry
 (lemma, upos, xpos, feats, deprel, meta_label, `Language=`) survive an .eaf edit; units and
 tokens added in ELAN get fresh ids; the `Begin=`/`End=` of a unit whose time was not
-edited stay as they were; tokens without word form (`form` `_`) and translations without a
-parent unit (which cannot hang from a `ref@` tier) are kept as they are in the tsv /
-`translations.json`. Writing never loses a unit: a unit without `Begin=`/`End=` is an error.
+edited stay as they were; translations without a parent unit (which cannot hang from a `ref@`
+tier) are kept as they are in `translations.json`. Writing never loses a unit: a unit without `Begin=`/`End=` is an error.
 Regenerating an unchanged file leaves it untouched (only the `DATE` would differ).
 
 This schema (plus `metadata/conversations.tsv` and `metadata/participants.tsv`,

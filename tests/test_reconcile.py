@@ -85,13 +85,22 @@ def test_same_form_keeps_the_lemma_and_language_when_only_the_span_changes():
     assert rows[0]["code_variation"] == "ContainsVariation=Yes|Language=eng"
 
 
-def test_removed_token_disappears_but_token_without_form_stays():
-    old = unit(10, ["a", "b", "c"], start=1.0)
-    old[1].update(form="_", span="b")
-    new = unit(1, ["a", "c"], start=1.0)
-    rows, _, _ = reconcile.reconcile_rows(old, new)
+def test_token_without_form_is_matched_on_its_span_like_any_other():
+    old = unit(10, ["a", "]", "c"], start=1.0)
+    old[1].update(form="_")           # stray bracket: no word form, but it is in the text
+    new = unit(1, ["a", "]", "c"], start=1.0)
+    rows, _, stats = reconcile.reconcile_rows(old, new)
     assert [r["token_id"] for r in rows] == ["10-0", "10-1", "10-2"]
     assert rows[1]["form"] == "_"
+    assert stats["tokens_added"] == stats["tokens_removed"] == 0
+
+
+def test_removed_token_disappears():
+    old = unit(10, ["a", "b", "c"], start=1.0)
+    new = unit(1, ["a", "c"], start=1.0)
+    rows, _, stats = reconcile.reconcile_rows(old, new)
+    assert [r["token_id"] for r in rows] == ["10-0", "10-2"]
+    assert stats["tokens_removed"] == 1
 
 
 def test_rounded_align_is_not_a_change():

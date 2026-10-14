@@ -31,7 +31,6 @@ transcription, tier renamed). Inside a paired unit, the tokens are aligned on th
                `Language=` of code_variation / jefferson_feats kept
   insert    -> new row with a fresh `token_id`
   delete    -> dropped
-  (old tokens with form `_` are not representable in the .eaf: they are never dropped)
 
 Usage:
     python reconcile.py <old.vert.tsv> <new.vert.tsv> [-o OUT.vert.tsv]
@@ -241,14 +240,6 @@ def _keep_old(old_row: dict, new_row: dict, tu_id: int, keep: set[str] = frozens
     return row
 
 
-def _hidden_row(old_row: dict, tu_id: int) -> dict:
-    """Old token without form: kept untouched (marked, so its overlap ids are not remapped)."""
-    row = dict(old_row)
-    row["tu_id"] = str(tu_id)
-    row["_hidden"] = True
-    return row
-
-
 def _replace(old_row: dict, new_row: dict, tu_id: int, keep: set[str] = frozenset()) -> dict:
     row = dict(new_row)
     row["align"] = _align_value(old_row.get("align", "_"), new_row.get("align", "_"), keep)
@@ -290,25 +281,18 @@ def unchanged_edges(old_rows: list[dict], raw_times: tuple[float, float] | None)
 def merge_unit(old_rows: list[dict], new_rows: list[dict], tu_id: int, stats: dict,
                sid_votes: collections.Counter | None = None,
                keep_times: set[str] = frozenset()) -> list[dict]:
-    """Token rows of one paired unit.
-
-    Old tokens whose `form` is `_` (no word form) cannot be written in the .eaf, so they
-    are not part of the alignment: they stay where they were.
-    """
+    """Token rows of one paired unit."""
     suffixes = [int(r["token_id"].split("-")[1]) for r in old_rows
                 if r["token_id"].split("-")[1].isdigit()]
     next_suffix = max(suffixes, default=-1) + 1
 
-    aligned = [(i, r) for i, r in enumerate(old_rows) if r.get("form") != "_"]
-    hidden = [(i, r) for i, r in enumerate(old_rows) if r.get("form") == "_"]
-
-    out: list[tuple[int | None, dict]] = []  # (position in old_rows, row)
+    out: list[dict] = []
     matcher = difflib.SequenceMatcher(
-        None, [r["span"] for _, r in aligned], [r["span"] for r in new_rows], autojunk=False)
+        None, [r["span"] for r in old_rows], [r["span"] for r in new_rows], autojunk=False)
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal":
-            for (pos, o), n in zip(aligned[i1:i2], new_rows[j1:j2]):
-                out.append((pos, _keep_old(o, n, tu_id, keep_times)))
+            for o, n in zip(old_rows[i1:i2], new_rows[j1:j2]):
+                out.append(_keep_old(o, n, tu_id, keep_times))
                 if sid_votes is not None:
                     old_ids, new_ids = _overlap_ids(o["overlaps"]), _overlap_ids(n["overlaps"])
                     if len(old_ids) == len(new_ids):
@@ -316,30 +300,18 @@ def merge_unit(old_rows: list[dict], new_rows: list[dict], tu_id: int, stats: di
             stats["tokens_kept"] += i2 - i1
             continue
         paired = min(i2 - i1, j2 - j1) if tag == "replace" else 0
-        for (pos, o), n in zip(aligned[i1:i1 + paired], new_rows[j1:j1 + paired]):
-            out.append((pos, _replace(o, n, tu_id, keep_times)))
+        for o, n in zip(old_rows[i1:i1 + paired], new_rows[j1:j1 + paired]):
+            out.append(_replace(o, n, tu_id, keep_times))
         stats["tokens_changed"] += paired
         for n in new_rows[j1 + paired:j2]:
             row = dict(n)
             row["tu_id"] = str(tu_id)
             row["token_id"] = f"{tu_id}-{next_suffix}"
             next_suffix += 1
-            out.append((None, row))
+            out.append(row)
             stats["tokens_added"] += 1
         stats["tokens_removed"] += (i2 - i1) - paired
-
-    result: list[dict] = []
-    pending = list(hidden)
-    for pos, row in out:
-        while pos is not None and pending and pending[0][0] < pos:
-            hidden_pos, hidden_row = pending.pop(0)
-            result.append(_hidden_row(hidden_row, tu_id))
-            stats["tokens_kept"] += 1
-        result.append(row)
-    for _, hidden_row in pending:
-        result.append(_hidden_row(hidden_row, tu_id))
-        stats["tokens_kept"] += 1
-    return result
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -363,14 +335,12 @@ def _keep_overlap_ids(old_rows: list[dict], merged: dict[int, list[dict]],
     top = max((int(s) for r in old_rows for s in _overlap_ids(r["overlaps"])), default=0)
     for rows in merged.values():
         for row in rows:
-            for sid in ([] if row.get("_hidden") else _overlap_ids(row["overlaps"])):
+            for sid in _overlap_ids(row["overlaps"]):
                 if sid not in mapping:
                     top += 1
                     mapping[sid] = str(top)
     for rows in merged.values():
         for row in rows:
-            if row.pop("_hidden", False):
-                continue
             if row["overlaps"] not in ("", "_"):
                 row["overlaps"] = _SID.sub(lambda m: f"({mapping[m.group(1)]})", row["overlaps"])
 

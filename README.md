@@ -70,7 +70,7 @@ Standalone scripts to handle and transform KIParla data.
     The new tsv is merged with the one already in the module: every unit and token that still
     exists in the eaf keeps its `tu_id` / `token_id` (and its overlap group numbers); lemma, upos,
     xpos, feats, deprel, meta_label and `Language=` labels, which the eaf cannot carry, are kept;
-    tokens without word form (`form` `_`) are kept; units and tokens added in ELAN get fresh ids
+    units and tokens added in ELAN get fresh ids
     → `tsv2formats` (linear-enriched/orthographic) → `check_participants` (this module)
     → `generate_validation_report` (this module's page).
   - `python sync.py --from-vert <path/to/X.vert.tsv>`: `vert2eaf-layered` (overwrites `eaf/X.eaf`
