@@ -119,6 +119,10 @@ kept when the file is read back. The media link uses the MIME type of the audio 
 `.mp3`). A unit without `Begin=`/`End=` in `align`, or with a non-positive duration, is an error (it would
 otherwise vanish from the `.eaf`). A file that would only differ in its `DATE` is not rewritten.
 
+By default only `ref@`, `tx@` and `ft@` are written (the tiers that are edited, about as large as a flat `.eaf`);
+`--words` adds `tx_ortho@`, `tok@`, `nvb@` and `sent_id@` (6-7 times larger), and `--linguistic` (which implies `--words`)
+the per-token linguistic tiers.
+
 Empty leaf tiers are dropped: `ft@` when there are no translations, `nvb@` when
 there are no non-verbal tokens, and any `--linguistic` tier whose column is `_`
 for every token in the file.

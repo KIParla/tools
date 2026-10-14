@@ -11,7 +11,9 @@ and `sync.py --from-vert` rewrites a file in the layered layout (`--layout flat`
 == Tiers
 
 Each speaker has the same group of tiers, named `<code>@<speaker>` (Toolbox/ELAN interlinear
-convention). The code in the name tells whether a tier is edited or generated:
+convention). The `.eaf` files in the modules have only the tiers that are edited: `ref@`, `tx@` and,
+for modules with translations, `ft@`. The derived word-level tiers are written only on request
+(`sync.py --from-vert --words`), because they make the file 6-7 times larger and are not read back.
 
 [cols="2,3,1"]
 |===
@@ -29,18 +31,23 @@ convention). The code in the name tells whether a tier is edited or generated:
 | free translation of the unit (only in modules with translations)
 | yes
 
-| `tx_ortho@<speaker>`
+| `tx_ortho@<speaker>` (with `--words`)
 | orthographic text of the unit
 | no, derived
 
-| `tok@<speaker>`
+| `tok@<speaker>` (with `--words`)
 | one annotation per token (its `form`)
 | no, derived
 
-| `nvb@<speaker>`
+| `nvb@<speaker>` (with `--words`)
 | for non-verbal tokens, pauses and unknown tokens: the token `type` (and `meta_label`)
 | no, derived
 |===
+
+With the derived tiers a file is about 6.5 times larger (for the 512 conversations of the corpus: 1.2 GB
+instead of 190 MB), which is why the modules keep the small version. To see the division in words in ELAN,
+generate the full version of one file (`python sync.py --from-vert tsv/X.vert.tsv --words`, or
+`vert2eaf-layered --words`) or add the tiers with the `.etf` template (`--template`).
 
 Optional tiers (`lemma@`, `pos@`, `xpos@`, `feats@`, `dep@`, `sent_id@`) hang from `tok@`; see
 xref:scripts.adoc#_vert2eaf_layered_tsv2eaf_layered_py[`vert2eaf-layered`]. Empty tiers are not written.

@@ -538,7 +538,7 @@ Both consume `<name>.translations.json` when present.
 | `ref@<speaker>` | time-aligned unit; **value = the `tu_id` of the vert.tsv** | times and id |
 | `tx@<speaker>` | enriched transcription (the `span`s joined) | **the only text read** |
 | `ft@<speaker>` | free translation (only if the module has translations) | yes |
-| `tx_ortho@`, `tok@`, `nvb@`, `lemma@`… | derived from the tsv | never (editing them has no effect) |
+| `tx_ortho@`, `tok@`, `nvb@`, `lemma@`… | derived from the tsv; written only with `--words` (6-7 times larger) | never (editing them has no effect) |
 
 Token ids are deliberately **not** written to the .eaf. Reading goes eaf → `eaf_layered.py`
 (csv) → `process` → `reconcile.py` against the tsv already in the module: the `ref@` value

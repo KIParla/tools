@@ -38,16 +38,38 @@ def tiers(eaf):
     return {t.get("TIER_ID"): t for t in root.findall("TIER")}, root
 
 
-def test_every_speaker_gets_the_same_tier_set(tmp_path):
+def test_by_default_only_the_edited_tiers_are_written(tmp_path):
     vert = make_vert(tmp_path)
     out = tsv2eaf_layered.vert2eaf_layered(vert, tmp_path / "X001.eaf", media_file="X001.mp3")
+    t, _ = tiers(out)
+    assert sorted(t) == ["ref@A", "ref@B", "tx@A", "tx@B"]       # no ft@ (no translations), no word tiers
+    for speaker in ("A", "B"):
+        assert t[f"tx@{speaker}"].get("PARENT_REF") == f"ref@{speaker}"
+
+
+def test_words_adds_the_derived_word_tiers(tmp_path):
+    vert = make_vert(tmp_path)
+    out = tsv2eaf_layered.vert2eaf_layered(vert, tmp_path / "X001.eaf", media_file="X001.mp3", words=True)
     t, _ = tiers(out)
     for speaker in ("A", "B"):
         for code in ("ref", "tx", "tx_ortho", "tok"):
             assert f"{code}@{speaker}" in t
-        assert t[f"tx@{speaker}"].get("PARENT_REF") == f"ref@{speaker}"
         assert t[f"tok@{speaker}"].get("PARENT_REF") == f"tx_ortho@{speaker}"
-    assert "ft@A" not in t  # no translations
+    assert check_elan_constraints(out)
+
+
+def test_the_default_file_is_much_smaller_than_the_one_with_words(tmp_path):
+    vert = make_vert(tmp_path)
+    lean = tsv2eaf_layered.vert2eaf_layered(vert, tmp_path / "lean.eaf")
+    full = tsv2eaf_layered.vert2eaf_layered(vert, tmp_path / "full.eaf", words=True)
+    assert lean.stat().st_size < full.stat().st_size / 2
+
+
+def test_both_layouts_are_read_back_the_same(tmp_path):
+    vert = make_vert(tmp_path)
+    lean = eaf_layered.read_layered(tsv2eaf_layered.vert2eaf_layered(vert, tmp_path / "lean.eaf"))
+    full = eaf_layered.read_layered(tsv2eaf_layered.vert2eaf_layered(vert, tmp_path / "full.eaf", words=True))
+    assert lean.units == full.units and lean.hints == full.hints
 
 
 def test_unit_value_is_the_tu_id_and_tx_the_enriched_text(tmp_path):
@@ -103,7 +125,7 @@ def test_reader_returns_units_by_time_with_hints(tmp_path):
 
 def test_only_tx_is_read(tmp_path):
     vert = make_vert(tmp_path)
-    eaf = tsv2eaf_layered.vert2eaf_layered(vert, tmp_path / "X001.eaf")
+    eaf = tsv2eaf_layered.vert2eaf_layered(vert, tmp_path / "X001.eaf", words=True)
     tree = ET.parse(eaf)
     for tier in tree.getroot().findall("TIER"):
         for value in tier.iter("ANNOTATION_VALUE"):
@@ -227,4 +249,6 @@ def test_generated_file_obeys_the_elan_tier_constraints(tmp_path):
     translations.write_text(json.dumps([{"tu_id": "9", "speaker": "A_trad", "start": "0", "end": "1",
                                          "parent_tu_id": "0", "text": "hello"}]))
     eaf = tsv2eaf_layered.vert2eaf_layered(vert, tmp_path / "X001.eaf", translations_path=translations)
+    assert check_elan_constraints(eaf)
+    eaf = tsv2eaf_layered.vert2eaf_layered(vert, tmp_path / "words.eaf", translations_path=translations, words=True)
     assert check_elan_constraints(eaf)

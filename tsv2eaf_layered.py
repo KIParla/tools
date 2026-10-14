@@ -278,18 +278,25 @@ _SA = "Symbolic_Association"
 _SSUB = "Symbolic_Subdivision"
 
 
-def _add_speaker_tiers(builder, speaker, active_ling, has_sent):
+def _add_speaker_tiers(builder, speaker, active_ling, has_sent, words=True):
     """Create one speaker's tier hierarchy on ``builder``; return the entry dict.
 
     ``active_ling`` is the subset of ``_LINGUISTIC_TIERS`` to include and
     ``has_sent`` whether to add the ``sent_id@`` tier. The ``.etf`` template
-    passes the full set for both.
+    passes the full set for both. With ``words=False`` only the tiers that are
+    edited are created (``ref@``, ``tx@``, ``ft@``): the derived word-level tiers
+    (``tx_ortho@``, ``tok@``, ``nvb@`` and the token annotations) make the file
+    several times larger and are not read back.
     """
     ref, tok = _tid("units", speaker), _tid("tokens", speaker)
     entry = {
         "units": builder.add_tier(ref, "ref-lt"),
         "translation": builder.add_tier(_tid("translation", speaker), "ft-sa", _SA, ref),
         "transcription": builder.add_tier(_tid("transcription", speaker), "tx-sa", _SA, ref),
+    }
+    if not words:
+        return entry
+    entry |= {
         "orthographic": builder.add_tier(_tid("orthographic", speaker), "tx_ortho-sa", _SA, ref),
         "tokens": builder.add_tier(tok, "tok-ssub", _SSUB, _tid("orthographic", speaker)),
         "nvb": builder.add_tier(_tid("nvb", speaker), "nvb-sa", _SA, tok),
@@ -327,7 +334,7 @@ def write_template(vert_paths, output_path):
 
 
 def vert2eaf_layered(vert_path, output_filename, media_file="",
-                     translations_path=None, linguistic=False):
+                     translations_path=None, linguistic=False, words=False):
     """Convert one ``.vert.tsv`` to a layered ELAN ``.eaf``.
 
     Args:
@@ -336,8 +343,13 @@ def vert2eaf_layered(vert_path, output_filename, media_file="",
             the ``ft@<speaker>`` tier.
         linguistic: also emit per-token ``lemma@`` / ``pos@`` / ``xpos@`` /
             ``feats@`` / ``dep@`` tiers. A tier whose column is ``_`` for
-            every token in the file is skipped.
+            every token in the file is skipped. Implies ``words``.
+        words: also emit the derived word-level tiers (``tx_ortho@``,
+            ``tok@``, ``nvb@``, ``sent_id@``). Off by default: the file then has
+            only ``ref@``, ``tx@`` and ``ft@`` (the tiers that are edited), which
+            is about as large as a flat .eaf instead of 6-7 times larger.
     """
+    words = words or linguistic
     vert_path = Path(vert_path)
     translations = _load_translations(translations_path) if translations_path else {}
 
@@ -350,7 +362,7 @@ def vert2eaf_layered(vert_path, output_filename, media_file="",
             for key, col, _code in scan_cols:
                 if (row.get(col, "_") or "_") != "_":
                     active_ling.add(key)
-            if (row.get(_SENT_COL, "_") or "_") != "_":
+            if words and (row.get(_SENT_COL, "_") or "_") != "_":
                 has_sent = True
     active_ling = [t for t in _LINGUISTIC_TIERS if t[0] in active_ling]
 
@@ -360,7 +372,7 @@ def vert2eaf_layered(vert_path, output_filename, media_file="",
 
     def speaker_tiers(speaker):
         if speaker not in tiers:
-            tiers[speaker] = _add_speaker_tiers(builder, speaker, active_ling, has_sent)
+            tiers[speaker] = _add_speaker_tiers(builder, speaker, active_ling, has_sent, words)
         return tiers[speaker]
 
     with vert_path.open(encoding="utf-8", newline="") as f:
@@ -386,6 +398,8 @@ def vert2eaf_layered(vert_path, output_filename, media_file="",
                 builder.add_ref(st["translation"], unit_aid, translation)
 
             builder.add_ref(st["transcription"], unit_aid, _join(tok_rows, "span"))
+            if not words:
+                continue
             ortho_aid = builder.add_ref(
                 st["orthographic"], unit_aid, _join(tok_rows, "form", prosodic_link=" "))
 
@@ -457,7 +471,10 @@ def main(argv=None):
     parser.add_argument("--translations-dir",
                         help="folder with <name>.translations.json files to attach as __translation tiers.")
     parser.add_argument("--linguistic", action="store_true",
-                        help="also emit per-token lemma/upos/xpos/feats/deprel tiers.")
+                        help="also emit per-token lemma/upos/xpos/feats/deprel tiers (implies --words).")
+    parser.add_argument("--words", action="store_true",
+                        help="also emit the derived word-level tiers (tx_ortho@, tok@, nvb@, sent_id@); "
+                             "makes the file 6-7 times larger.")
     parser.add_argument("--template",
                         help="also write an ELAN .etf template at this path with the "
                              "full tier set for every speaker seen across the inputs.")
@@ -482,7 +499,7 @@ def main(argv=None):
             cand = tdir / f"{stem}.translations.json"
             tpath = cand if cand.is_file() else None
         vert2eaf_layered(f, out_dir / f"{stem}.eaf", translations_path=tpath,
-                         linguistic=args.linguistic)
+                         linguistic=args.linguistic, words=args.words)
         logger.info("wrote %s", out_dir / f"{stem}.eaf")
 
     if args.template:

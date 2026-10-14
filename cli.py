@@ -113,7 +113,7 @@ def _vert2eaf_layered(args):
             translations_path = cand if cand.is_file() else None
         tsv2eaf_layered.vert2eaf_layered(
             filename, args.output_dir / f"{stem}.eaf", media_file=media_file,
-            translations_path=translations_path, linguistic=args.linguistic,
+            translations_path=translations_path, linguistic=args.linguistic, words=args.words,
         )
 
     if args.template:
@@ -379,7 +379,10 @@ def main():
                    help="directory with <name>.translations.json files to attach "
                         "as __translation tiers")
     p.add_argument("--linguistic", action="store_true",
-                   help="also emit per-token lemma/upos/xpos/feats/deprel tiers")
+                   help="also emit per-token lemma/upos/xpos/feats/deprel tiers (implies --words)")
+    p.add_argument("--words", action="store_true",
+                   help="also emit the derived word-level tiers (tx_ortho@, tok@, nvb@, sent_id@); "
+                        "the file is 6-7 times larger")
     p.add_argument("--template", type=pathlib.Path,
                    help="also write an ELAN .etf template at this path with the full "
                         "tier set for every speaker seen across the inputs")

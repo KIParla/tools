@@ -23,9 +23,10 @@ ping-pong between the two commands.
     (this module) -> generate_validation_report (all modules).
 
   --from-vert <X.vert.tsv>:
-    vert2eaf-layered (overwrites eaf/X.eaf in place; ref@/tx@/ft@/tok@ tiers per
-    speaker, translations/X.translations.json attached as ft@; --layout flat for
-    the old one-tier-per-speaker eaf) -> tsv2formats
+    vert2eaf-layered (overwrites eaf/X.eaf in place; ref@/tx@/ft@ tiers per
+    speaker, translations/X.translations.json attached as ft@; --words adds the
+    derived tx_ortho@/tok@/nvb@ tiers; --layout flat for the old
+    one-tier-per-speaker eaf) -> tsv2formats
     -> check_participants -> generate_validation_report.
 
     NOTE: pipeline warnings/errors in the validation report reflect the
@@ -204,7 +205,7 @@ def sync_from_eaf(eaf_path: Path, module_override: str | None,
 
 
 def sync_from_vert(vert_path: Path, module_override: str | None, audio_dir: Path | None,
-                   audio_ext: str = "wav", layout: str = "layered") -> None:
+                   audio_ext: str = "wav", layout: str = "layered", words: bool = False) -> None:
     module_dir, _module_name = _resolve_module(vert_path, module_override)
 
     stem = vert_path.name
@@ -222,7 +223,7 @@ def sync_from_vert(vert_path: Path, module_override: str | None, audio_dir: Path
     eaf_out = module_dir / "eaf" / f"{stem}.eaf"
     if layout == "layered":
         tsv2eaf_layered.vert2eaf_layered(vert_path, eaf_out, media_file=linked_file,
-                                         translations_path=translations_path)
+                                         translations_path=translations_path, words=words)
     else:
         serialize.vert2eaf(vert_path, linked_file, eaf_out, translations_path=translations_path)
     print(f"vert.tsv -> eaf/{stem}.eaf ({layout})")
@@ -254,6 +255,9 @@ def main():
     ap.add_argument("--layout", choices=("layered", "flat"), default="layered",
                     help="--from-vert only: layered eaf (ref/tx/ft/tok tiers per speaker, default) "
                          "or the flat one-tier-per-speaker eaf.")
+    ap.add_argument("--words", action="store_true",
+                    help="--from-vert, layered only: also write the derived word-level tiers "
+                         "(tx_ortho@, tok@, nvb@); the file is 6-7 times larger.")
     args = ap.parse_args()
 
     if args.from_eaf:
@@ -263,7 +267,7 @@ def main():
     else:
         if not args.from_vert.is_file():
             raise SystemExit(f"Not a file: {args.from_vert}")
-        sync_from_vert(args.from_vert, args.module, args.audio_dir, args.audio_ext, args.layout)
+        sync_from_vert(args.from_vert, args.module, args.audio_dir, args.audio_ext, args.layout, args.words)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,9 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 * **The layered `.eaf` is the editable file.** `tsv2eaf_layered.py` writes the `tu_id` in `ref@`, the right MIME
   type for the audio, and does not rewrite a file that would only change its date; new `eaf_layered.py` reads
   `ref@`/`tx@`/`ft@` back (`tx@` is the only text read). `sync.py --from-vert` writes the layered layout by default
-  (`--layout flat` for the old one), `--from-eaf` reads both. New page "The ELAN file".
+  (`--layout flat` for the old one), `--from-eaf` reads both. By default only `ref@`, `tx@` and `ft@` are written: the
+  derived word-level tiers (`tx_ortho@`, `tok@`, `nvb@`) are 6-7 times larger and are only written with `--words`
+  (`sync.py --from-vert --words`, `vert2eaf-layered --words`). New page "The ELAN file".
 * **Fix — `switch_symbols` moved intonation marks across letters and brackets.** The pattern `[:-~]` is a range of
   characters (`:` to `~`, which includes `< > [ ] =` and every lowercase letter), not the three characters
   `: - ~`. It rewrote `n.ove` as `no.ve`, `[h.]` as `[h].` and `telefono?<]` as `telefono<]?` whenever a unit was
