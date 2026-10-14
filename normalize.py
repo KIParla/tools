@@ -154,10 +154,11 @@ def check_spaces(annotation: str) -> tuple[int, str]:
         (r"([^ ]) ([\)\]])",                 r"\1\2"),
         # Space before punctuation with a word following: move space to after.
         # e.g. "ciao ,bla" → "ciao, bla"
-        (r"([^ ]) ([.,:?])([^ ])",           r"\1\2 \3"),
+        # Not for an inhalation `.h` / `.hh` (Jefferson), which is a word of its own.
+        (r"([^ ]) (?!\.h+(?![^\W\d_]))([.,:?])([^ ])", r"\1\2 \3"),
         # Space before punctuation at end (or before another space).
         # e.g. "ciao ," → "ciao,"
-        (r"([^ ]) ([.,:?])",                 r"\1\2"),
+        (r"([^ ]) (?!\.h+(?![^\W\d_]))([.,:?])",       r"\1\2"),
         # Missing space before NVB/pause tag.
         (r"([^ \[\(<>°])(\(\([^()]*\)\)|\(\.\))",        r"\1 \2"),
         # Missing space after NVB/pause tag.

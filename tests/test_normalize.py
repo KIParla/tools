@@ -220,6 +220,18 @@ def test_pause_label_is_applied_by_the_full_normalization():
     assert normalized == "ciao (.) mondo" and warnings["PAUSE_LABEL"] == 1
 
 
+def test_check_spaces_keeps_an_inhalation_apart_from_the_previous_word():
+    assert normalize.check_spaces("ci sono, .h insomma") == (0, "ci sono, .h insomma")
+    assert normalize.check_spaces("no .hh") == (0, "no .hh")
+    assert normalize.check_spaces("no .h]") == (0, "no .h]")
+
+
+def test_check_spaces_still_moves_punctuation_next_to_a_word():
+    assert normalize.check_spaces("ciao ,bla") == (1, "ciao, bla")
+    assert normalize.check_spaces("ciao .hanno") == (1, "ciao. hanno")
+    assert normalize.check_spaces("ciao ,") == (1, "ciao,")
+
+
 def test_meta_tag_comment():
     assert normalize.meta_tag("ciao ((bla bla)) ciao") == (1, "ciao ((bla_bla)) ciao")
 

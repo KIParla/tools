@@ -4,6 +4,7 @@
 # Key reference:
 #   tiers_to_ignore       — speaker tiers skipped entirely
 #   overlaps.*            — overlap graph pruning behaviour
+#   nonverbal_tokens.*    — standalone symbols classified as nonverbalbehavior
 #   variation_markers.*   — which token-level variation prefixes are active;
 #                           inactive prefixes are stripped by SYMBOL_NOT_ALLOWED
 #   normalization.*       — enable/disable individual normalization rules
@@ -75,6 +76,14 @@ variation_markers:
   hash_token: false    # #word  → Variation=Token
   dollar: false        # $word  → Variation=Emerging
   hash_doubtful: false # #*word → Variation=Doubtful
+
+# Standalone tokens that are not words although they are not written ((...)):
+# they are classified as nonverbalbehavior instead of linguistic. The text is
+# never changed.
+nonverbal_tokens:
+  # `.h`, `.hh`, ... (inhalation in Jefferson notation), also inside an overlap
+  # bracket: `[.h]`.
+  inhalation: false
 
 # Characters (beyond \w and whitespace) that SYMBOL_NOT_ALLOWED keeps.
 # $ is added automatically when variation_markers.dollar is true.
