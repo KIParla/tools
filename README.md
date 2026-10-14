@@ -16,7 +16,7 @@ Standalone scripts to handle and transform KIParla data.
   `.vert.tsv` (Needleman-Wunsch on accent/punctuation-stripped forms; adapted from
   `intonation-cues-whisper/src/align_nw.py`). The output has one row per TSV row with
   `token_id`, `tu_id`, `speaker`, `form`, `tsv_begin`/`tsv_end` (the `Begin=`/`End=` of the
-  TSV's `align` column), `whisper_segment`, `whisper_begin`, `whisper_end` and `alignment`
+  TSV's `align` column), `whisper_segment`, `whisper_text`, `whisper_begin`, `whisper_end` and `alignment`
   (`match` / `mismatch` / `tsv_only` / `skipped`, plus `whisper_only` rows for WhisperX words
   with no token); every non-linguistic row is `skipped`. It prints the WER
   (TSV as reference, linguistic tokens only).

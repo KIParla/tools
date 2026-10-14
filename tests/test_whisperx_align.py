@@ -71,6 +71,9 @@ def test_timestamps_and_alignment_labels(tmp_path):
     assert by["0-0"]["whisper_begin"] == "0.000" and by["0-1"]["whisper_end"] == "0.600"
     assert (by["0-0"]["speaker"], by["0-0"]["form"], by["0-0"]["tu_id"]) == ("S1", "l'", "7")
     assert by["0-0"]["whisper_segment"] == "0"
+    assert (by["0-0"]["whisper_text"], by["0-1"]["whisper_text"]) == ("l", "ho")
+    assert by["0-3"]["whisper_text"] == "bella"      # mismatch: you can see what was heard
+    assert by["0-3"]["form"] == "mh"
     assert (by["0-0"]["tsv_begin"], by["0-0"]["tsv_end"]) == ("1.5", "_")
     assert (by["0-1"]["tsv_begin"], by["0-1"]["tsv_end"]) == ("_", "2.5")
     assert by["0-3"]["alignment"] == "mismatch"      # mh <-> bella, paired positionally
@@ -122,4 +125,5 @@ def test_whisper_only_row_has_segment_and_times_only(tmp_path):
     rows = _run(tmp_path, ["ciao"], ("ciao", 0, 1), ("extra", 1, 2))
     extra = [r for r in rows if r["alignment"] == "whisper_only"][0]
     assert extra["whisper_segment"] == "0" and extra["whisper_begin"] == "1.000"
+    assert extra["whisper_text"] == "extra"
     assert extra["token_id"] == extra["tu_id"] == extra["tsv_begin"] == "_"
