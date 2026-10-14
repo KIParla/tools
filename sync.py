@@ -13,8 +13,11 @@ TO a format never re-triggers regeneration OF that format, so there's no
 ping-pong between the two commands.
 
   --from-eaf <X.eaf>:
-    eaf2csv -> process (writes tsv/X.vert.tsv, translations/X.translations.*,
-    tmp/process/{csv,json}/X.* and updates tmp/process/json/summary.json)
+    eaf2csv -> process -> reconcile with the existing tsv/X.vert.tsv (units and
+    tokens that still exist keep their tu_id / token_id; lemma, upos, xpos, feats,
+    deprel, meta_label and Language labels, which the .eaf cannot carry, are kept;
+    see reconcile.py) -> writes tsv/X.vert.tsv, translations/X.translations.*,
+    tmp/process/{csv,json}/X.* and updates tmp/process/json/summary.json
     -> tsv2formats (linear-enriched/orthographic) -> check_participants
     (this module) -> generate_validation_report (all modules).
 
@@ -51,6 +54,7 @@ from pathlib import Path
 
 import audio_check
 import config as config_mod
+import reconcile
 import serialize
 import tsv2formats
 from check_participants import check_module, add_unknown_participant_column, report as report_module
@@ -125,15 +129,40 @@ def sync_from_eaf(eaf_path: Path, module_override: str | None,
     reports_dir.mkdir(parents=True, exist_ok=True)
     csv_dir.mkdir(parents=True, exist_ok=True)
 
+    vert_path = module_dir / "tsv" / f"{eaf_path.stem}.vert.tsv"
+    translations_path = translations_dir / f"{eaf_path.stem}.translations.json"
+
     with tempfile.TemporaryDirectory() as tmp:
         raw_csv = Path(tmp) / f"{eaf_path.stem}.csv"
         serialize.eaf2csv(eaf_path, raw_csv, {})
 
+        # Process into a scratch directory, then reconcile with the tsv already in the
+        # module: units and tokens that still exist keep their tu_id / token_id and the
+        # annotations that live only in the tsv (see reconcile.py).
+        new_dir, new_translations = Path(tmp) / "new", Path(tmp) / "new-translations"
         summary, transcript = serialize.process(
-            raw_csv, module_dir / "tsv", cfg=cfg, return_transcript=True,
-            translations_dir=translations_dir, reports_dir=reports_dir,
+            raw_csv, new_dir, cfg=cfg, return_transcript=True,
+            translations_dir=new_translations, reports_dir=reports_dir,
         )
         serialize.conversation_to_linear(transcript, csv_dir / f"{eaf_path.stem}.csv")
+
+        (module_dir / "tsv").mkdir(exist_ok=True)
+        mapping, stats = reconcile.reconcile_vert(
+            vert_path if vert_path.is_file() else None,
+            new_dir / f"{eaf_path.stem}.vert.tsv", vert_path)
+        print(f"reconcile: {reconcile.format_stats(stats)}")
+
+        new_translations_json = new_translations / f"{eaf_path.stem}.translations.json"
+        if new_translations_json.is_file():
+            with new_translations_json.open(encoding="utf-8") as f:
+                new_rows = json.load(f)
+            used = {int(r["tu_id"]) for r in reconcile.read_vert(vert_path)[1]}
+            rows = reconcile.reconcile_translations(
+                translations_path, new_rows, mapping, used)
+            translations_dir.mkdir(exist_ok=True)
+            serialize.write_translations_json(rows, translations_path)
+            serialize.write_translations(
+                rows, translations_dir / f"{eaf_path.stem}.translations.tsv")
 
     audio_check.annotate_summary(summary, transcript, module_dir, audio_dir, cfg)
     check = summary.get("AUDIO_CHECK") or {}
@@ -145,7 +174,6 @@ def sync_from_eaf(eaf_path: Path, module_override: str | None,
     _update_summary_json(reports_dir, summary)
     print(f"eaf -> tsv/{eaf_path.stem}.vert.tsv")
 
-    vert_path = module_dir / "tsv" / f"{eaf_path.stem}.vert.tsv"
     tsv2formats.tsv2linear([vert_path], module_dir / "linear-enriched", module_dir / "linear-orthographic")
     print(f"tsv -> linear-enriched/, linear-orthographic/ ({eaf_path.stem})")
 

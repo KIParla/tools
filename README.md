@@ -12,6 +12,21 @@ Standalone scripts to handle and transform KIParla data.
   `csv2eaf` does.
 - `tsv2formats.py`: generate linear enriched and orthographic text files from `.vert.tsv`.
 - `linear2html.py`: generate publication HTML and PDF artifacts in the `KIParla-artifacts` layout.
+- `whisperx_align.py`: align a WhisperX word-level JSON with the *linguistic* tokens of a
+  `.vert.tsv` (Needleman-Wunsch on accent/punctuation-stripped forms; adapted from
+  `intonation-cues-whisper/src/align_nw.py`). The output keeps the TSV columns and adds
+  `whisper_segment/text/question/begin/end/score/speaker` and `alignment`
+  (`match` / `mismatch` / `whisper_only` / `tsv_only` / `skipped`). It prints the WER
+  (TSV as reference, linguistic tokens only). The `align` column is untouched.
+  `python whisperx_align.py <whisperx.json> <X.vert.tsv> [-o out.tsv]`.
+- `whisperx_run.py`: run WhisperX (transcription, forced alignment, speaker diarization) on the audio
+  of every conversation of one or more modules, passing the diarizer the expected number of
+  speakers from `conversations.tsv` (`participants-number`; one fewer as minimum when
+  `unknown-participant` is `yes`). Models are loaded once; finished conversations are skipped, so
+  it can be restarted. `--align` also runs `whisperx_align.py` and collects the WER per
+  conversation in `wer.tsv`; `--dry-run` prints the plan. Needs `pip install whisperx` and an
+  `HF_TOKEN` for diarization.
+  `python whisperx_run.py <module_dir> ... --audio-dir <dir> --output-dir <dir> [--align]`.
 - `merge_metadata.py`: merge metadata tables from module repositories.
 - `check_participants.py`: cross-check each conversation's `metadata/conversations.tsv`
   `participants` list against the actual `speaker` values in its `tsv/<code>.vert.tsv`,
@@ -50,8 +65,12 @@ Standalone scripts to handle and transform KIParla data.
   Run again (and commit) after reprocessing a module, or via `sync.py`, to keep the pages current.
 - `sync.py`: one-shot, one-directional sync for a single edited file — run manually
   after opening/saving a `.eaf` in ELAN, or hand-editing a `.vert.tsv`:
-  - `python sync.py --from-eaf <path/to/X.eaf>`: eaf2csv → process (updates
-    `tsv/X.vert.tsv`, `translations/`, `tmp/process/{csv,json}/`, `tmp/process/json/summary.json`)
+  - `python sync.py --from-eaf <path/to/X.eaf>`: eaf2csv → process → `reconcile.py` (updates
+    `tsv/X.vert.tsv`, `translations/`, `tmp/process/{csv,json}/`, `tmp/process/json/summary.json`).
+    The new tsv is merged with the one already in the module: every unit and token that still
+    exists in the eaf keeps its `tu_id` / `token_id` (and its overlap group numbers); lemma, upos,
+    xpos, feats, deprel, meta_label and `Language=` labels, which the eaf cannot carry, are kept;
+    tokens without word form (`form` `_`) are kept; units and tokens added in ELAN get fresh ids
     → `tsv2formats` (linear-enriched/orthographic) → `check_participants` (this module)
     → `generate_validation_report` (this module's page).
   - `python sync.py --from-vert <path/to/X.vert.tsv>`: `vert2eaf` (overwrites `eaf/X.eaf`
