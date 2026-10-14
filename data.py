@@ -269,6 +269,7 @@ class TranscriptionUnit:
             tu_id=self.tu_id,
             variation_context=self.non_ita,
             cfg_variation=cfg.get("variation_markers", {}),
+            cfg_nonverbal=cfg.get("nonverbal_tokens", {}),
         )
         # Update TU-level non_ita based on token-level flags. `unspecified`
         # (explicit TU-level "# " prefix, set in step 2b) is never downgraded

@@ -83,7 +83,7 @@ Toolbox/ELAN interlinear `<code>@<speaker>` convention; the codes live in the
 
 | `ref@<speaker>`
 | time-alignable (top)
-| unit id, time-aligned on the unit's `Begin=`/`End=`
+| the unit's `tu_id`, time-aligned on its `Begin=`/`End=`. It is what ties the unit to its tsv rows when the `.eaf` is read back
 
 | `ft@<speaker>`
 | `Symbolic_Association` (under `ref@`)
@@ -113,6 +113,15 @@ Toolbox/ELAN interlinear `<code>@<speaker>` convention; the codes live in the
 | `Symbolic_Association` (under `tok@`)
 | per-token linguistic annotation; only with `--linguistic`
 |===
+
+See xref:eaf-structure.adoc[The ELAN file] for which tiers are edited and which are derived, and what is
+kept when the file is read back. The media link uses the MIME type of the audio extension (`audio/mpeg` for
+`.mp3`). A unit without `Begin=`/`End=` in `align`, or with a non-positive duration, is an error (it would
+otherwise vanish from the `.eaf`). A file that would only differ in its `DATE` is not rewritten.
+
+By default only `ref@`, `tx@` and `ft@` are written (the tiers that are edited, about as large as a flat `.eaf`);
+`--words` adds `tx_ortho@`, `tok@`, `nvb@` and `sent_id@` (6-7 times larger), and `--linguistic` (which implies `--words`)
+the per-token linguistic tiers.
 
 Empty leaf tiers are dropped: `ft@` when there are no translations, `nvb@` when
 there are no non-verbal tokens, and any `--linguistic` tier whose column is `_`
@@ -156,6 +165,7 @@ plus all linguistic types and constraints. Two uses:
 python -m cli vert2eaf-layered --input-dir KIP/tsv/ -o KIP/eaf_layered/ \
     --linguistic --template KIP/eaf_layered/KIP.etf
 ----
+
 
 == `linear2html.py`
 
@@ -478,11 +488,24 @@ python sync.py --from-eaf <path/to/X.eaf>
 python sync.py --from-vert <path/to/X.vert.tsv>
 ----
 
-`--from-eaf` chains `eaf2csv` → `process` (updates `tsv/`, `translations/`, `tmp/process/`) → `tsv2formats` → `check_participants` → `generate_validation_report`.
+`--from-eaf` chains `eaf2csv` (`eaf_layered.py` for a layered `.eaf`) → `process` → `reconcile` with the `tsv/` file already in the module (updates `tsv/`, `translations/`, `tmp/process/`) → `tsv2formats` → `check_participants` → `generate_validation_report`. The new tsv is *reconciled* with the existing one, not written over it: units and tokens that still exist keep their `tu_id` / `token_id`, overlap group numbers and the annotations that exist only in the tsv (`lemma`, `upos`, `xpos`, `feats`, `deprel`, `meta_label`, `Language=`); see xref:eaf-structure.adoc[The ELAN file].
 
-`--from-vert` chains `vert2eaf` (overwrites `eaf/X.eaf` in place) → `tsv2formats` → `check_participants` → `generate_validation_report`. Pipeline warnings/errors in the report are not refreshed in this direction — that would mean reprocessing the freshly-written eaf, which is exactly the reverse-direction auto-trigger this command avoids, so the two commands never ping-pong off each other.
+`--from-vert` chains `vert2eaf-layered` (overwrites `eaf/X.eaf` in place, layered; `--layout flat` for the old one-tier-per-speaker file) → `tsv2formats` → `check_participants` → `generate_validation_report`. Pipeline warnings/errors in the report are not refreshed in this direction — that would mean reprocessing the freshly-written eaf, which is exactly the reverse-direction auto-trigger this command avoids, so the two commands never ping-pong off each other.
 
 Module is inferred from the file's path; pass `--module` to override.
+
+=== `eaf_layered.py`
+
+Reads the `ref@`, `tx@` and `ft@` tiers of a layered `.eaf` into the linear CSV that `process` reads, and returns
+the unit ids (as hints for the reconciliation), the translations and warnings (units without text, duplicated
+ids). `python eaf_layered.py X.eaf out.csv` does the same from the command line.
+
+=== `reconcile.py`
+
+`python reconcile.py old.vert.tsv new.vert.tsv -o out.vert.tsv`: merges a freshly processed vert.tsv into the one
+in the module. Units are paired by the ids from the `.eaf`, then by speaker, text and times; the tokens of a paired
+unit are aligned on their `span` (equal: old row kept; replaced: old `token_id`; inserted: fresh `token_id`;
+deleted: dropped). Prints how many units and tokens were kept, changed, added and removed.
 
 == Design note
 

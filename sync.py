@@ -13,14 +13,20 @@ TO a format never re-triggers regeneration OF that format, so there's no
 ping-pong between the two commands.
 
   --from-eaf <X.eaf>:
-    eaf2csv -> process (writes tsv/X.vert.tsv, translations/X.translations.*,
-    tmp/process/{csv,json}/X.* and updates tmp/process/json/summary.json)
+    eaf2csv (or eaf_layered.py for a layered eaf: tx@ is the text, ref@ carries the
+    tu_id) -> process -> reconcile with the existing tsv/X.vert.tsv (units and
+    tokens that still exist keep their tu_id / token_id; lemma, upos, xpos, feats,
+    deprel, meta_label and Language labels, which the .eaf cannot carry, are kept;
+    see reconcile.py) -> writes tsv/X.vert.tsv, translations/X.translations.*,
+    tmp/process/{csv,json}/X.* and updates tmp/process/json/summary.json
     -> tsv2formats (linear-enriched/orthographic) -> check_participants
     (this module) -> generate_validation_report (all modules).
 
   --from-vert <X.vert.tsv>:
-    vert2eaf (overwrites eaf/X.eaf in place, reattaching
-    translations/X.translations.json if present) -> tsv2formats
+    vert2eaf-layered (overwrites eaf/X.eaf in place; ref@/tx@/ft@ tiers per
+    speaker, translations/X.translations.json attached as ft@; --words adds the
+    derived tx_ortho@/tok@/nvb@ tiers; --layout flat for the old
+    one-tier-per-speaker eaf) -> tsv2formats
     -> check_participants -> generate_validation_report.
 
     NOTE: pipeline warnings/errors in the validation report reflect the
@@ -44,14 +50,18 @@ name derived by stripping "-" (Stra-ParlaBO -> StraParlaBO). Override with
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 import tempfile
 from pathlib import Path
 
 import audio_check
+import eaf_layered
 import config as config_mod
+import reconcile
 import serialize
+import tsv2eaf_layered
 import tsv2formats
 from check_participants import check_module, add_unknown_participant_column, report as report_module
 from generate_validation_report import discover_modules, generate_report
@@ -125,15 +135,57 @@ def sync_from_eaf(eaf_path: Path, module_override: str | None,
     reports_dir.mkdir(parents=True, exist_ok=True)
     csv_dir.mkdir(parents=True, exist_ok=True)
 
+    vert_path = module_dir / "tsv" / f"{eaf_path.stem}.vert.tsv"
+    translations_path = translations_dir / f"{eaf_path.stem}.translations.json"
+
     with tempfile.TemporaryDirectory() as tmp:
         raw_csv = Path(tmp) / f"{eaf_path.stem}.csv"
-        serialize.eaf2csv(eaf_path, raw_csv, {})
+        layered = None
+        if eaf_layered.is_layered(eaf_path):
+            layered = eaf_layered.layered2csv(eaf_path, raw_csv)
+            for warning in layered.warnings:
+                print(f"WARNING {eaf_path.stem}: {warning}", file=sys.stderr)
+        else:
+            serialize.eaf2csv(eaf_path, raw_csv, {})
 
+        # Process into a scratch directory, then reconcile with the tsv already in the
+        # module: units and tokens that still exist keep their tu_id / token_id and the
+        # annotations that live only in the tsv (see reconcile.py).
+        new_dir, new_translations = Path(tmp) / "new", Path(tmp) / "new-translations"
         summary, transcript = serialize.process(
-            raw_csv, module_dir / "tsv", cfg=cfg, return_transcript=True,
-            translations_dir=translations_dir, reports_dir=reports_dir,
+            raw_csv, new_dir, cfg=cfg, return_transcript=True,
+            translations_dir=new_translations, reports_dir=reports_dir,
         )
         serialize.conversation_to_linear(transcript, csv_dir / f"{eaf_path.stem}.csv")
+
+        (module_dir / "tsv").mkdir(exist_ok=True)
+        old_unit_ids = ({int(r["tu_id"]) for r in reconcile.read_vert(vert_path)[1]}
+                        if vert_path.is_file() else set())
+        with open(raw_csv, encoding="utf-8", newline="") as f:
+            raw_times = {int(r["tu_id"]): (float(r["start"]), float(r["end"]))
+                         for r in csv.DictReader(f, delimiter="\t")}
+        mapping, stats = reconcile.reconcile_vert(
+            vert_path if vert_path.is_file() else None,
+            new_dir / f"{eaf_path.stem}.vert.tsv", vert_path,
+            hints=layered.hints if layered else None, raw_times=raw_times)
+        print(f"reconcile: {reconcile.format_stats(stats)}")
+
+        new_translations_json = new_translations / f"{eaf_path.stem}.translations.json"
+        new_rows = None
+        if layered is not None:
+            new_rows = layered.translations  # ft@ tiers, not part of the csv
+        elif new_translations_json.is_file():
+            with new_translations_json.open(encoding="utf-8") as f:
+                new_rows = json.load(f)
+        if new_rows or (layered is not None and translations_path.is_file()):
+            new_rows = new_rows or []
+            used = {int(r["tu_id"]) for r in reconcile.read_vert(vert_path)[1]}
+            rows = reconcile.reconcile_translations(
+                translations_path, new_rows, mapping, used, old_unit_ids)
+            translations_dir.mkdir(exist_ok=True)
+            serialize.write_translations_json(rows, translations_path)
+            serialize.write_translations(
+                rows, translations_dir / f"{eaf_path.stem}.translations.tsv")
 
     audio_check.annotate_summary(summary, transcript, module_dir, audio_dir, cfg)
     check = summary.get("AUDIO_CHECK") or {}
@@ -145,7 +197,6 @@ def sync_from_eaf(eaf_path: Path, module_override: str | None,
     _update_summary_json(reports_dir, summary)
     print(f"eaf -> tsv/{eaf_path.stem}.vert.tsv")
 
-    vert_path = module_dir / "tsv" / f"{eaf_path.stem}.vert.tsv"
     tsv2formats.tsv2linear([vert_path], module_dir / "linear-enriched", module_dir / "linear-orthographic")
     print(f"tsv -> linear-enriched/, linear-orthographic/ ({eaf_path.stem})")
 
@@ -154,7 +205,7 @@ def sync_from_eaf(eaf_path: Path, module_override: str | None,
 
 
 def sync_from_vert(vert_path: Path, module_override: str | None, audio_dir: Path | None,
-                   audio_ext: str = "wav") -> None:
+                   audio_ext: str = "wav", layout: str = "layered", words: bool = False) -> None:
     module_dir, _module_name = _resolve_module(vert_path, module_override)
 
     stem = vert_path.name
@@ -170,8 +221,12 @@ def sync_from_vert(vert_path: Path, module_override: str | None, audio_dir: Path
         linked_file = str(audio_dir / f"{stem}.{audio_ext}")
 
     eaf_out = module_dir / "eaf" / f"{stem}.eaf"
-    serialize.vert2eaf(vert_path, linked_file, eaf_out, translations_path=translations_path)
-    print(f"vert.tsv -> eaf/{stem}.eaf")
+    if layout == "layered":
+        tsv2eaf_layered.vert2eaf_layered(vert_path, eaf_out, media_file=linked_file,
+                                         translations_path=translations_path, words=words)
+    else:
+        serialize.vert2eaf(vert_path, linked_file, eaf_out, translations_path=translations_path)
+    print(f"vert.tsv -> eaf/{stem}.eaf ({layout})")
 
     tsv2formats.tsv2linear([vert_path], module_dir / "linear-enriched", module_dir / "linear-orthographic")
     print(f"tsv -> linear-enriched/, linear-orthographic/ ({stem})")
@@ -197,6 +252,12 @@ def main():
     ap.add_argument("--audio-ext", default="wav",
                     help="--from-vert only: extension of the linked audio file (default: wav; "
                          "use mp3 for modules distributed with MP3 audio).")
+    ap.add_argument("--layout", choices=("layered", "flat"), default="layered",
+                    help="--from-vert only: layered eaf (ref/tx/ft/tok tiers per speaker, default) "
+                         "or the flat one-tier-per-speaker eaf.")
+    ap.add_argument("--words", action="store_true",
+                    help="--from-vert, layered only: also write the derived word-level tiers "
+                         "(tx_ortho@, tok@, nvb@); the file is 6-7 times larger.")
     args = ap.parse_args()
 
     if args.from_eaf:
@@ -206,7 +267,7 @@ def main():
     else:
         if not args.from_vert.is_file():
             raise SystemExit(f"Not a file: {args.from_vert}")
-        sync_from_vert(args.from_vert, args.module, args.audio_dir, args.audio_ext)
+        sync_from_vert(args.from_vert, args.module, args.audio_dir, args.audio_ext, args.layout, args.words)
 
 
 if __name__ == "__main__":

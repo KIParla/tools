@@ -209,6 +209,29 @@ def test_remove_spaces_tabs_and_newlines():
 def test_meta_tag_shortpause_unchanged():
     assert normalize.meta_tag("(.) ciao") == (0, "(.) ciao")
 
+def test_pause_label_becomes_shortpause():
+    assert normalize.pause_label("ciao ((P)) mondo") == (1, "ciao (.) mondo")
+    assert normalize.pause_label("((P)) a ((P))") == (2, "(.) a (.)")
+    assert normalize.pause_label("ciao ((ride))") == (0, "ciao ((ride))")
+
+
+def test_pause_label_is_applied_by_the_full_normalization():
+    normalized, warnings, _ = normalize.validate_and_normalize("ciao ((P)) mondo")
+    assert normalized == "ciao (.) mondo" and warnings["PAUSE_LABEL"] == 1
+
+
+def test_check_spaces_keeps_an_inhalation_apart_from_the_previous_word():
+    assert normalize.check_spaces("ci sono, .h insomma") == (0, "ci sono, .h insomma")
+    assert normalize.check_spaces("no .hh") == (0, "no .hh")
+    assert normalize.check_spaces("no .h]") == (0, "no .h]")
+
+
+def test_check_spaces_still_moves_punctuation_next_to_a_word():
+    assert normalize.check_spaces("ciao ,bla") == (1, "ciao, bla")
+    assert normalize.check_spaces("ciao .hanno") == (1, "ciao. hanno")
+    assert normalize.check_spaces("ciao ,") == (1, "ciao,")
+
+
 def test_meta_tag_comment():
     assert normalize.meta_tag("ciao ((bla bla)) ciao") == (1, "ciao ((bla_bla)) ciao")
 
@@ -392,6 +415,16 @@ def test_switch_symbols_intonation_before_colon():
 
 def test_switch_symbols_question_before_tilde():
     assert normalize.switch_symbols("ciao?~") == (1, "ciao~?")
+
+def test_switch_symbols_leaves_marks_before_letters_and_brackets_alone():
+    for text in ("n.ove", "rom.ania.", "[h.]", "[h.h]", "telefono?<]", "tutto,]<", "e,:x", "sì,[:]", "bene.>"):
+        assert normalize.switch_symbols(text)[1] == text.replace("e,:x", "e:,x"), text
+
+
+def test_switch_symbols_hyphen_and_tilde():
+    assert normalize.switch_symbols("fa.-") == (1, "fa-.")
+    assert normalize.switch_symbols("va,~") == (1, "va~,")
+
 
 def test_switch_symbols_no_change():
     assert normalize.switch_symbols("ciao.") == (0, "ciao.")

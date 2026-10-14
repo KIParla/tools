@@ -189,9 +189,9 @@ def _align(tok, tu) -> str:
     """Render the align field (Begin/End timestamps) for one token."""
     parts = []
     if tok.position_in_tu & df.position.start:
-        parts.append(f"Begin={tu.start}")
+        parts.append(f"Begin={round(tu.start, 4)}")
     if tok.position_in_tu & df.position.end:
-        parts.append(f"End={tu.end}")
+        parts.append(f"End={round(tu.end, 4)}")
     return "|".join(parts) if parts else "_"
 
 

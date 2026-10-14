@@ -302,6 +302,7 @@ In order of priority:
 | starts with `@` | `anonymized` | |
 | `(.)` | `shortpause` | |
 | starts with `((` and ends with `))` | `nonverbalbehavior` | checked before the generic `[]()<>°` marker strip, since `(.)`/`((…))` reuse guess/pace-span parens |
+| `.h`, `.hh`, … (after stripping `[]()<>°`), only if `nonverbal_tokens.inhalation` is on | `nonverbalbehavior` | Jefferson inhalation (breathing); text unchanged; off by default, on for ParlaBZ |
 | all `x` characters | `unknown` | form kept as-is; `Syllables=N` added (N = number of `x`s) |
 | starts with `$` | `linguistic` + `non_ortho=True` | strip `$` prefix |
 | starts with `#` | `linguistic` + `non_ita=True`, `iso_code=NO_ISO_CODE` | strip `#` prefix |
@@ -526,6 +527,29 @@ twice, into sibling folders of the tsv output dir:
    subsets can be made uniform in ELAN.
 
 Both consume `<name>.translations.json` when present.
+
+#### The layered .eaf as the editable file (`sync.py`)
+
+`sync.py --from-vert` writes the layered hierarchy to `<module>/eaf/<name>.eaf`, and
+`sync.py --from-eaf` reads either layout (`eaf_layered.is_layered`). Per speaker:
+
+| tier | content | read back |
+|---|---|---|
+| `ref@<speaker>` | time-aligned unit; **value = the `tu_id` of the vert.tsv** | times and id |
+| `tx@<speaker>` | enriched transcription (the `span`s joined) | **the only text read** |
+| `ft@<speaker>` | free translation (only if the module has translations) | yes |
+| `tx_ortho@`, `tok@`, `nvb@`, `lemma@`… | derived from the tsv; written only with `--words` (6-7 times larger) | never (editing them has no effect) |
+
+Token ids are deliberately **not** written to the .eaf. Reading goes eaf → `eaf_layered.py`
+(csv) → `process` → `reconcile.py` against the tsv already in the module: the `ref@` value
+pairs each unit with its tsv rows exactly (a missing, non-numeric or duplicated value falls
+back to matching by speaker/text/times), tokens inside a unit are aligned on their `span`.
+So `tu_id`, `token_id`, overlap group numbers and every column the .eaf cannot carry
+(lemma, upos, xpos, feats, deprel, meta_label, `Language=`) survive an .eaf edit; units and
+tokens added in ELAN get fresh ids; the `Begin=`/`End=` of a unit whose time was not
+edited stay as they were; translations without a parent unit (which cannot hang from a `ref@`
+tier) are kept as they are in `translations.json`. Writing never loses a unit: a unit without `Begin=`/`End=` is an error.
+Regenerating an unchanged file leaves it untouched (only the `DATE` would differ).
 
 This schema (plus `metadata/conversations.tsv` and `metadata/participants.tsv`,
 including the foreign keys between `speaker`/`participants`/`conversations`)

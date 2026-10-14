@@ -297,3 +297,29 @@ class TestTokenizeTU:
         cfg = {"hash_token": True}
         tokens = tokenize_tu("#ciao mondo", tu_id=0, cfg_variation=cfg)
         assert tokens[0].variety == df.tokenvariety.other
+
+
+# ---------------------------------------------------------------------------
+# nonverbal_tokens.inhalation (config): Jefferson `.h` is breathing, not a word
+# ---------------------------------------------------------------------------
+
+def _types(annotation, cfg=None):
+    from data import TranscriptionUnit
+    import dataflags as df
+    tu = TranscriptionUnit(0, "A", 0.0, 3.0, 3.0, annotation, cfg=cfg or {})
+    tu.tokenize()
+    return [(t.orig_text, t.token_type) for t in tu.tokens], df
+
+
+def test_inhalation_is_nonverbal_only_when_the_module_asks_for_it():
+    on, df = _types("ci sono, .h insomma [.hh] sì", {"nonverbal_tokens": {"inhalation": True}})
+    assert [(t, ty) for t, ty in on if t.strip("[]") in (".h", ".hh")] == [
+        (".h", df.tokentype.nonverbalbehavior), ("[.hh]", df.tokentype.nonverbalbehavior)]
+    off, df = _types("ci sono, .h insomma [.hh] sì")
+    assert all(ty != df.tokentype.nonverbalbehavior for _, ty in off)
+
+
+def test_inhalation_text_is_not_changed_and_words_are_not_affected():
+    on, df = _types("va. hanno .h", {"nonverbal_tokens": {"inhalation": True}})
+    assert [t for t, _ in on] == ["va.", "hanno", ".h"]
+    assert [ty for _, ty in on] == [df.tokentype.linguistic, df.tokentype.linguistic, df.tokentype.nonverbalbehavior]

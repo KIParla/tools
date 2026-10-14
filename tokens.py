@@ -78,6 +78,9 @@ class Token:
     # Config controlling which variation markers are active.
     # Passed in at construction; not serialized as a "feature".
     _cfg_variation: dict = field(default_factory=dict, repr=False)
+    # `nonverbal_tokens` config: which standalone symbols are classified as
+    # nonverbalbehavior although they are not written ((...)).
+    _cfg_nonverbal: dict = field(default_factory=dict, repr=False)
 
     def __post_init__(self):
         self.form = self.orig_text
@@ -120,6 +123,13 @@ class Token:
         # Strip enriched span markers — they are position markers only.
         for ch in "[]()<>°":
             text = text.replace(ch, "")
+
+        # 0b. Inhalation (Jefferson `.h`, `.hh`): breathing, not a word. Only for modules
+        # that ask for it (`nonverbal_tokens.inhalation`); the text is left as written.
+        if self._cfg_nonverbal.get("inhalation") and re.fullmatch(r"\.h+:*", text):
+            self.form = text
+            self.token_type = df.tokentype.nonverbalbehavior
+            return
 
         if not text.strip():
             self.form = ""
@@ -313,6 +323,7 @@ def tokenize_tu(
     tu_id: int,
     variation_context: df.languagevariation = df.languagevariation.none,
     cfg_variation: dict | None = None,
+    cfg_nonverbal: dict | None = None,
 ) -> list[Token]:
     """Split a normalized TU annotation into tokens.
 
@@ -321,12 +332,15 @@ def tokenize_tu(
         tu_id:             TU identifier, used for debug context only.
         variation_context: TU-level variation flag (for post-tokenize language pass).
         cfg_variation:     variation_markers config dict.
+        cfg_nonverbal:     nonverbal_tokens config dict.
 
     Returns:
         Ordered list of Token objects.
     """
     if cfg_variation is None:
         cfg_variation = {}
+    if cfg_nonverbal is None:
+        cfg_nonverbal = {}
 
     # 5a. Split on spaces and prosodic links; keep delimiters.
     parts = re.split(r"( |=)", annotation)
@@ -371,18 +385,18 @@ def tokenize_tu(
                 tok2_text = part[apos_idx + 1:]  # e.g. "albero"
 
                 tok1 = Token(tok1_text, span=(char_pos, char_pos + len(tok1_text)),
-                             _cfg_variation=cfg_variation)
+                             _cfg_variation=cfg_variation, _cfg_nonverbal=cfg_nonverbal)
                 tok1.set_space_after_no()
                 tokens.append(tok1)
 
                 tok2 = Token(tok2_text, span=(char_pos + len(tok1_text), end_pos),
-                             _cfg_variation=cfg_variation)
+                             _cfg_variation=cfg_variation, _cfg_nonverbal=cfg_nonverbal)
                 tokens.append(tok2)
 
                 char_pos = end_pos
                 continue
 
-        tok = Token(part, span=(char_pos, end_pos), _cfg_variation=cfg_variation)
+        tok = Token(part, span=(char_pos, end_pos), _cfg_variation=cfg_variation, _cfg_nonverbal=cfg_nonverbal)
         tokens.append(tok)
         char_pos = end_pos
 

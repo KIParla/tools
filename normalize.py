@@ -154,10 +154,11 @@ def check_spaces(annotation: str) -> tuple[int, str]:
         (r"([^ ]) ([\)\]])",                 r"\1\2"),
         # Space before punctuation with a word following: move space to after.
         # e.g. "ciao ,bla" → "ciao, bla"
-        (r"([^ ]) ([.,:?])([^ ])",           r"\1\2 \3"),
+        # Not for an inhalation `.h` / `.hh` (Jefferson), which is a word of its own.
+        (r"([^ ]) (?!\.h+(?![^\W\d_]))([.,:?])([^ ])", r"\1\2 \3"),
         # Space before punctuation at end (or before another space).
         # e.g. "ciao ," → "ciao,"
-        (r"([^ ]) ([.,:?])",                 r"\1\2"),
+        (r"([^ ]) (?!\.h+(?![^\W\d_]))([.,:?])",       r"\1\2"),
         # Missing space before NVB/pause tag.
         (r"([^ \[\(<>°])(\(\([^()]*\)\)|\(\.\))",        r"\1 \2"),
         # Missing space after NVB/pause tag.
@@ -167,6 +168,15 @@ def check_spaces(annotation: str) -> tuple[int, str]:
         annotation, n = re.subn(pattern, replacement, annotation)
         total += n
     return total, annotation.strip()
+
+
+PAUSE_LABEL_RE = re.compile(r"\(\(P\)\)")
+
+
+def pause_label(annotation: str) -> tuple[int, str]:
+    """`((P))` is a short pause written as a non-verbal tag: use the standard `(.)`."""
+    annotation, n = PAUSE_LABEL_RE.subn("(.)", annotation)
+    return n, annotation
 
 
 def remove_pauses(annotation: str) -> tuple[int, str]:
@@ -360,7 +370,10 @@ def check_numbers(annotation: str) -> tuple[int, str]:
 
 def switch_symbols(annotation: str) -> tuple[int, str]:
     """Move intonation markers before prosodic/interruption symbols: .,? must follow :, -, ~."""
-    annotation, n = re.subn(r"([.,?])([:-~])", r"\2\1", annotation)
+    # `[:\-~]` is a set of three characters. (`[:-~]` is a range from ':' to '~', which
+    # also covers `<`, `>`, `[`, `]`, `=` and every lowercase letter: it moved the mark
+    # across them, e.g. `n.ove` -> `no.ve` or `[h.]` -> `[h].`)
+    annotation, n = re.subn(r"([.,?])([:\-~])", r"\2\1", annotation)
     return n, annotation.strip()
 
 
@@ -592,6 +605,8 @@ def hash_unit_space(annotation: str) -> tuple[int, str]:
 WARNING_RULES.extend([
     # Remove illegal symbols first so later rules see clean input.
     ValidationRule("SYMBOL_NOT_ALLOWED",   clean_non_jefferson_symbols),
+    # `((P))` is the same thing as a shortpause: from here on only `(.)` exists.
+    ValidationRule("PAUSE_LABEL",          pause_label),
     # Normalize spacing inside NVB spans before trimming pauses, so TRIM_PAUSES
     # sees a single well-formed (.) / ((...)) token.
     ValidationRule("META_TAGS",            meta_tag),

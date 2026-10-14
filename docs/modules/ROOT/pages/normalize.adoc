@@ -61,12 +61,16 @@ If `config` is `None` or a key is absent, each rule falls back to its `enabled_b
 |Removes characters outside the enriched transcription alphabet
 |yes
 
+|`PAUSE_LABEL`
+|Writes the non-verbal tag `((P))` as the standard short pause `(.)`
+|yes
+
 |`META_TAG`
 |Converts `((…))` → `{…}` and `(.)` → `{P}`
 |yes
 
 |`UNEVEN_SPACES`
-|Fixes spacing around brackets and punctuation; removes stray spaces inside `°…°` and `<…>` markers; removes spaces around `=` prosodic-link markers
+|Fixes spacing around brackets and punctuation; removes stray spaces inside `°…°` and `<…>` markers; removes spaces around `=` prosodic-link markers. A standalone `.h` / `.hh` (inhalation in Jefferson notation) is never split from its space: `word .h` stays as it is
 |yes
 
 |`TRIM_PAUSES`
@@ -94,7 +98,7 @@ If `config` is `None` or a key is absent, each rule falls back to its `enabled_b
 |yes
 
 |`SWITCHES`
-|Moves intonation markers (`. , ?`) before prosodic/interruption symbols (`: - ~`) when they appear in the wrong order; moves NVB tags and shortpause `(.)` outside guess/pace/volume spans (both are exempt at overlap-span `[…]` edges, unconditionally)
+|Moves intonation markers (`. , ?`) before prosodic/interruption symbols (`:`, `-`, `~`: exactly those three characters, never a letter or a bracket) when they appear in the wrong order; moves NVB tags and shortpause `(.)` outside guess/pace/volume spans (both are exempt at overlap-span `[…]` edges, unconditionally)
 |yes
 |===
 

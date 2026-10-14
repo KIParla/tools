@@ -7,3 +7,8 @@
 # the same rule).
 overlaps:
   nvb_participates_in_overlaps: true
+
+# The originals write inhalations as `.h` / `.hh` (Jefferson notation). They are
+# breathing, not words: type nonverbalbehavior, text unchanged.
+nonverbal_tokens:
+  inhalation: true
