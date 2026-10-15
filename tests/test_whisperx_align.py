@@ -127,3 +127,20 @@ def test_whisper_only_row_has_segment_and_times_only(tmp_path):
     assert extra["whisper_segment"] == "0" and extra["whisper_begin"] == "1.000"
     assert extra["whisper_text"] == "extra"
     assert extra["token_id"] == extra["tu_id"] == extra["tsv_begin"] == "_"
+
+
+def test_whisper_speaker_from_word_then_segment(tmp_path):
+    p = tmp_path / "wx.json"
+    p.write_text(json.dumps({"segments": [{"start": 0, "end": 9, "speaker": "SPEAKER_01", "words": [
+        {"word": "ciao", "start": 0, "end": 1, "score": .9, "speaker": "SPEAKER_00"},
+        {"word": "bene", "start": 1, "end": 2, "score": .9},          # falls back to the segment's
+    ]}]}))
+    out = tmp_path / "o.tsv"
+    wx.main([str(p), _write_tsv(tmp_path, ["ciao", "bene", "ok"]), "-o", str(out)])
+    got = list(csv.DictReader(open(out), delimiter="\t"))
+    assert [r["whisper_speaker"] for r in got] == ["SPEAKER_00", "SPEAKER_01", "_"]
+
+
+def test_no_diarization_gives_empty_speaker(tmp_path):
+    rows = _run(tmp_path, ["ciao"], ("ciao", 0, 1))
+    assert rows[0]["whisper_speaker"] == "_"
