@@ -27,7 +27,7 @@ In practice, the most relevant scripts for this workflow are:
 * `tsv2formats.py`
 * `merge_metadata.py`
 
-This is the same collection rebuild process described in xref:portal::collection-automation.adoc[Collection automation].
+The collection is rebuilt locally with `regenerate_local.py` (see xref:scripts.adoc[Scripts]); the process is described in xref:portal::collection-automation.adoc[Collection automation].
 
 == Typical maintenance scenarios
 
