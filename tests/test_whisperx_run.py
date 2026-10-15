@@ -93,6 +93,7 @@ def test_run_skips_done_aligns_and_survives_failures(module, monkeypatch):
     assert [c[0] for c in calls] == ["C2"]
     wer = list(csv.DictReader(open(out / "Mod" / "wer.tsv"), delimiter="\t"))
     assert [r["code"] for r in wer] == ["C1"] and wer[0]["wer"] == "0.0000"
+    assert wer[0]["speaker_map"] == "_" and wer[0]["speaker_agreement"] == "_"  # no diarization here
 
 
 def test_audio_in_module_audio_dir(module):

@@ -29,10 +29,20 @@ that matched nothing:
   whisper_segment           index of the WhisperX segment of the aligned word
   whisper_speaker           speaker label predicted by WhisperX diarization of the
                             aligned word (SPEAKER_00...), "_" if there is none
+  whisper_speaker_mapped    the same speaker as a KIParla speaker code (see below),
+                            "_" where WhisperX has no speaker or no code could be assigned
   whisper_text              the aligned WhisperX word (lowercase, no punctuation)
   whisper_begin             start (s) of the aligned WhisperX word
   whisper_end               end (s) of the aligned WhisperX word
   alignment                 match | mismatch | whisper_only | tsv_only | skipped
+
+Speaker mapping (per conversation): the WhisperX labels (SPEAKER_00...) mean nothing
+across conversations, so each is assigned to one TSV speaker. The `match` tokens
+give a confusion table (WhisperX label x TSV speaker); the one-to-one assignment
+with the most agreeing tokens wins (all permutations up to a size limit, greedy
+beyond it). Unknown speakers (`???`) are left out. Extra WhisperX labels stay
+unmapped. The share of agreeing tokens is the mapping's quality: low values flag
+a bad diarization, a speaker count that differs from the metadata, or heavy overlap.
 
 WER, with the TSV linguistic tokens as reference and WhisperX as hypothesis:
   (substitutions + deletions + insertions) / reference tokens
@@ -46,8 +56,11 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import collections
 import csv
+import itertools
 import json
+import math
 import pathlib
 import sys
 import unicodedata
@@ -67,11 +80,14 @@ GAP_SYMBOL = "<GAP>"  # normalized forms are alphanumeric only: no collision
 EMPTY = "_"
 OUTPUT_COLUMNS = [
     "token_id", "tu_id", "speaker", "form", "tsv_begin", "tsv_end",
-    "whisper_segment", "whisper_speaker", "whisper_text",
+    "whisper_segment", "whisper_speaker", "whisper_speaker_mapped", "whisper_text",
     "whisper_begin", "whisper_end", "alignment",
 ]
 
 _ALIGN_TIME = re.compile(r"\b(Begin|End)=([0-9.]+)")
+_UNKNOWN_SPEAKER = re.compile(r"\?+")
+_COL = {name: i for i, name in enumerate(OUTPUT_COLUMNS)}
+_MAX_PERMUTATIONS = 200_000  # beyond this the assignment is greedy
 
 # l'ho -> l' ho  (split after an apostrophe followed by a letter)
 _ELISION_SPLIT = re.compile(r"(?<=\p{L}['’])(?=\p{L})")
@@ -235,7 +251,7 @@ def build_rows(pairs, whisper_words, all_tokens):
     def tsv_row(t, segment, speaker, text, begin, end, aln):
         t_begin, t_end = tsv_times(t.row.get("align", ""))
         return [t.row.get("token_id", ""), t.row.get("tu_id", ""), t.row.get("speaker", ""),
-                t.row.get("form", ""), t_begin, t_end, segment, speaker, text, begin, end, aln]
+                t.row.get("form", ""), t_begin, t_end, segment, speaker, EMPTY, text, begin, end, aln]
 
     for a, b in pairs:
         if b is not None:  # emit the skipped rows that precede this token
@@ -249,7 +265,7 @@ def build_rows(pairs, whisper_words, all_tokens):
         elif a is not None:
             w = whisper_words[a]
             aln = "whisper_only"
-            rows.append([EMPTY] * 6 + [w.segment, w.speaker or EMPTY, w.display or EMPTY,
+            rows.append([EMPTY] * 6 + [w.segment, w.speaker or EMPTY, EMPTY, w.display or EMPTY,
                                   _time(w.start), _time(w.end), aln])
         else:
             aln = "tsv_only"
@@ -258,6 +274,59 @@ def build_rows(pairs, whisper_words, all_tokens):
     for t in pending:
         rows.append(tsv_row(t, EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, "skipped"))
     return rows, stats
+
+
+def map_speakers(rows: list[list[str]]) -> tuple[dict[str, str], int, int]:
+    """Map WhisperX speaker labels to TSV speakers using the `match` rows.
+
+    Returns (mapping, agreeing_tokens, tokens_used).
+    """
+    confusion: collections.Counter = collections.Counter()
+    for r in rows:
+        w, t = r[_COL["whisper_speaker"]], r[_COL["speaker"]]
+        if (r[_COL["alignment"]] == "match" and w != EMPTY
+                and t not in (EMPTY, "") and not _UNKNOWN_SPEAKER.fullmatch(t)):
+            confusion[(w, t)] += 1
+    used = sum(confusion.values())
+    if not used:
+        return {}, 0, 0
+
+    wspk = sorted({w for w, _ in confusion})
+    tspk = sorted({t for _, t in confusion})
+    best: dict[str, str] = {}
+    if math.perm(max(len(wspk), len(tspk)), min(len(wspk), len(tspk))) <= _MAX_PERMUTATIONS:
+        best_score = -1
+        if len(wspk) <= len(tspk):
+            for perm in itertools.permutations(tspk, len(wspk)):
+                score = sum(confusion[(w, t)] for w, t in zip(wspk, perm))
+                if score > best_score:
+                    best_score, best = score, dict(zip(wspk, perm))
+        else:
+            for perm in itertools.permutations(wspk, len(tspk)):
+                score = sum(confusion[(w, t)] for w, t in zip(perm, tspk))
+                if score > best_score:
+                    best_score, best = score, {w: t for w, t in zip(perm, tspk)}
+    else:  # greedy: biggest cell first
+        taken_w, taken_t = set(), set()
+        for (w, t), _n in confusion.most_common():
+            if w not in taken_w and t not in taken_t:
+                best[w] = t
+                taken_w.add(w)
+                taken_t.add(t)
+    agreeing = sum(confusion[(w, t)] for w, t in best.items())
+    return best, agreeing, used
+
+
+def apply_speaker_mapping(rows: list[list[str]]) -> dict:
+    """Fill `whisper_speaker_mapped` in place; return the mapping summary."""
+    mapping, agreeing, used = map_speakers(rows)
+    for r in rows:
+        r[_COL["whisper_speaker_mapped"]] = mapping.get(r[_COL["whisper_speaker"]], EMPTY)
+    return {
+        "speaker_map": ";".join(f"{w}={t}" for w, t in sorted(mapping.items())),
+        "speaker_tokens": used,
+        "speaker_agreement": agreeing / used if used else None,
+    }
 
 
 def align_files(json_path: str, tsv_path: str, output: Optional[str] = None,
@@ -277,6 +346,7 @@ def align_files(json_path: str, tsv_path: str, output: Optional[str] = None,
     pairs = run_needleman_wunsch([w.norm for w in whisper_words],
                                  [t.norm for t in tsv_tokens])
     rows, stats = build_rows(pairs, whisper_words, all_tokens)
+    stats.update(apply_speaker_mapping(rows))
 
     if output:
         out_path = output
@@ -302,6 +372,12 @@ def align_files(json_path: str, tsv_path: str, output: Optional[str] = None,
         print(f"  whisper_only:  {stats['whisper_only']}  (insertions)", file=sys.stderr)
         print(f"  WER (linguistic tokens only, {stats['reference_tokens']} reference "
               f"tokens): {stats['wer']:.2%}", file=sys.stderr)
+        if stats["speaker_tokens"]:
+            print(f"  speakers: {stats['speaker_map']} "
+                  f"({stats['speaker_agreement']:.1%} of {stats['speaker_tokens']} "
+                  f"matched tokens agree)", file=sys.stderr)
+        else:
+            print("  speakers: no WhisperX speaker labels to map", file=sys.stderr)
         print(f"Output written to {out_path}", file=sys.stderr)
     return stats
 

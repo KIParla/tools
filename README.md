@@ -16,7 +16,9 @@ Standalone scripts to handle and transform KIParla data.
   `.vert.tsv` (Needleman-Wunsch on accent/punctuation-stripped forms; adapted from
   `intonation-cues-whisper/src/align_nw.py`). The output has one row per TSV row with
   `token_id`, `tu_id`, `speaker`, `form`, `tsv_begin`/`tsv_end` (the `Begin=`/`End=` of the
-  TSV's `align` column), `whisper_segment`, `whisper_speaker` (WhisperX diarization), `whisper_text`, `whisper_begin`, `whisper_end` and `alignment`
+  TSV's `align` column), `whisper_segment`, `whisper_speaker` (WhisperX diarization) and `whisper_speaker_mapped` (the same as a KIParla
+  speaker code: per conversation, the one-to-one assignment that agrees with the most `match` tokens; the
+  agreement is reported in the log and in `wer.tsv`), `whisper_text`, `whisper_begin`, `whisper_end` and `alignment`
   (`match` / `mismatch` / `tsv_only` / `skipped`, plus `whisper_only` rows for WhisperX words
   with no token); every non-linguistic row is `skipped`. It prints the WER
   (TSV as reference, linguistic tokens only).
@@ -25,7 +27,7 @@ Standalone scripts to handle and transform KIParla data.
   of every conversation of one or more modules, passing the diarizer the expected number of
   speakers from `conversations.tsv` (`participants-number`; one fewer as minimum when
   `unknown-participant` is `yes`). Models are loaded once; finished conversations are skipped, so
-  it can be restarted. `--align` also runs `whisperx_align.py` and collects the WER per
+  it can be restarted. `--align` also runs `whisperx_align.py` and collects the WER and the speaker mapping per
   conversation in `wer.tsv`; `--dry-run` prints the plan. Needs `pip install whisperx` and an
   `HF_TOKEN` for diarization.
   `python whisperx_run.py <module_dir> ... --audio-dir <dir> --output-dir <dir> [--align]`.

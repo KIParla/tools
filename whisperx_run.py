@@ -170,7 +170,7 @@ def write_json(path: Path, data: dict) -> None:
 
 
 WER_COLUMNS = ["code", "reference_tokens", "match", "mismatch", "tsv_only",
-               "whisper_only", "wer"]
+               "whisper_only", "wer", "speaker_map", "speaker_agreement"]
 
 
 def upsert_wer(path: Path, job: Job, stats: dict) -> None:
@@ -182,7 +182,10 @@ def upsert_wer(path: Path, job: Job, stats: dict) -> None:
     rows[job.code] = {"code": job.code, "reference_tokens": stats["reference_tokens"],
                       "match": stats["match"], "mismatch": stats["mismatch"],
                       "tsv_only": stats["tsv_only"], "whisper_only": stats["whisper_only"],
-                      "wer": f"{stats['wer']:.4f}"}
+                      "wer": f"{stats['wer']:.4f}",
+                      "speaker_map": stats.get("speaker_map") or "_",
+                      "speaker_agreement": (f"{stats['speaker_agreement']:.4f}"
+                                            if stats.get("speaker_agreement") is not None else "_")}
     with open(path, "w", encoding=ENCODING_WRITE, newline="") as f:
         w = csv.DictWriter(f, fieldnames=WER_COLUMNS, delimiter="\t", lineterminator="\n")
         w.writeheader()

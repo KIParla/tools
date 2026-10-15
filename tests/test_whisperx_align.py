@@ -144,3 +144,62 @@ def test_whisper_speaker_from_word_then_segment(tmp_path):
 def test_no_diarization_gives_empty_speaker(tmp_path):
     rows = _run(tmp_path, ["ciao"], ("ciao", 0, 1))
     assert rows[0]["whisper_speaker"] == "_"
+
+
+def _speaker_case(tmp_path, tsv_speakers, wx_speakers, forms=None):
+    """TSV tokens spoken by tsv_speakers, WhisperX words labelled wx_speakers."""
+    forms = forms or [f"w{i}" for i in range(len(tsv_speakers))]
+    p = tmp_path / "S.vert.tsv"
+    with open(p, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=HEADER, delimiter="\t", lineterminator="\n")
+        w.writeheader()
+        for i, (form, spk) in enumerate(zip(forms, tsv_speakers)):
+            row = _row(i, form)
+            row["speaker"] = spk
+            w.writerow(row)
+    words = [{"word": form, "start": i, "end": i + 1, "score": .9, **({"speaker": s} if s else {})}
+             for i, (form, s) in enumerate(zip(forms, wx_speakers))]
+    j = tmp_path / "s.json"
+    j.write_text(json.dumps({"segments": [{"start": 0, "end": 99, "words": words}]}))
+    out = tmp_path / "s.tsv"
+    stats = wx.align_files(str(j), str(p), str(out), verbose=False)
+    return stats, list(csv.DictReader(open(out), delimiter="\t"))
+
+
+def test_speakers_are_mapped_one_to_one(tmp_path):
+    tsv = ["BO1"] * 5 + ["BO2"] * 4
+    wxs = ["SPEAKER_01"] * 5 + ["SPEAKER_00"] * 3 + ["SPEAKER_01"]   # one wrong word
+    stats, rows = _speaker_case(tmp_path, tsv, wxs)
+    assert stats["speaker_map"] == "SPEAKER_00=BO2;SPEAKER_01=BO1"
+    assert stats["speaker_tokens"] == 9
+    assert abs(stats["speaker_agreement"] - 8 / 9) < 1e-9
+    assert [r["whisper_speaker_mapped"] for r in rows][:5] == ["BO1"] * 5
+    assert rows[5]["whisper_speaker"] == "SPEAKER_00" and rows[5]["whisper_speaker_mapped"] == "BO2"
+
+
+def test_unknown_speaker_is_ignored_and_extra_labels_stay_unmapped(tmp_path):
+    tsv = ["BO1"] * 4 + ["???"] * 3 + ["BO2"] * 4
+    wxs = ["SPEAKER_00"] * 4 + ["SPEAKER_02"] * 3 + ["SPEAKER_01"] * 4
+    stats, rows = _speaker_case(tmp_path, tsv, wxs)
+    assert stats["speaker_map"] == "SPEAKER_00=BO1;SPEAKER_01=BO2"
+    assert stats["speaker_agreement"] == 1.0
+    unknown = [r for r in rows if r["speaker"] == "???"]
+    assert all(r["whisper_speaker"] == "SPEAKER_02" and r["whisper_speaker_mapped"] == "_" for r in unknown)
+
+
+def test_mapping_handles_more_labels_than_speakers_and_no_labels(tmp_path):
+    stats, rows = _speaker_case(tmp_path, ["BO1"] * 6, ["SPEAKER_00"] * 4 + ["SPEAKER_01"] * 2)
+    assert stats["speaker_map"] == "SPEAKER_00=BO1"          # the smaller label stays unmapped
+    assert [r["whisper_speaker_mapped"] for r in rows] == ["BO1"] * 4 + ["_"] * 2
+
+    tmp2 = tmp_path / "b"
+    tmp2.mkdir()
+    stats, rows = _speaker_case(tmp2, ["BO1"] * 3, [None] * 3)   # no diarization
+    assert stats["speaker_map"] == "" and stats["speaker_agreement"] is None
+    assert {r["whisper_speaker_mapped"] for r in rows} == {"_"}
+
+
+def test_greedy_fallback_matches_exhaustive_on_clear_case(tmp_path, monkeypatch):
+    monkeypatch.setattr(wx, "_MAX_PERMUTATIONS", 0)
+    stats, _ = _speaker_case(tmp_path, ["A"] * 4 + ["B"] * 3, ["S0"] * 4 + ["S1"] * 3)
+    assert stats["speaker_map"] == "S0=A;S1=B"
