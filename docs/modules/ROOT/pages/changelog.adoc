@@ -4,6 +4,9 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* **Derived repositories are regenerated locally.** New `regenerate_local.py` rebuilds KIParla-collection and
+  KIParla-NoSketch-Data from the released modules in one pass and pushes only on request. The release-triggered
+  GitHub workflows are removed: with several modules released together their pushes were rejected.
 * **Sync from the `.eaf` keeps the ids and the tsv-only annotations.** `sync.py --from-eaf` no longer replaces
   `tsv/X.vert.tsv`: the new file is reconciled with the existing one (new `reconcile.py`). `tu_id`, `token_id`,
   overlap group numbers, `lemma`/`upos`/`xpos`/`feats`/`deprel`/`meta_label` and `Language=` survive an `.eaf` edit;
