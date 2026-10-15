@@ -478,6 +478,32 @@ The selection is kept in the URL (`#s=...&t=<tab>`), so a sub-corpus can be shar
 *Sources*, in `explorer/`: `template.html` (markup, becomes `index.html`), `explorer.css`, `app.js` (the interface) and `core.js` (filtering and statistics, no DOM). The core is tested under Node (`tests/explorer_core.test.js`, also run by `pytest` when `node` is available). Rebuild the site whenever summaries change and commit the result.
 
 [[sync]]
+== `regenerate_local.py`
+
+Rebuilds the derived repositories after one or more modules are released. It replaces the GitHub workflows that
+did it on every release (they raced when several modules were released together and their pushes were rejected):
+everything is done locally, in one pass, and nothing is pushed until you say so.
+
+[source,bash]
+----
+python regenerate_local.py                       # all modules at their latest tag, no push
+python regenerate_local.py --modules KIP ParlaBZ  # only these modules' NoSketch corpora
+python regenerate_local.py --tag KIP=v2.1.0 --push
+----
+
+. *KIParla-collection*: `tsv/` and `eaf/` of the seven modules at their release tag, linear files, merged metadata,
+  `csv-metadata.json`; the patch version in `CITATION.cff` goes up and everything is one commit and one tag. If the data
+  is already up to date nothing is committed.
+. *KIParla-NoSketch-Data*: for each module, translated metadata, `<Corpus>/vertical/source` and INFO/INFOHREF of the
+  registry; then the aggregate `KIParla` corpus from the collection just built. One commit.
+. With `--push` the two repositories are pushed, the collection tag is pushed and its GitHub Release is created with
+  `gh`. Without it the commands are printed.
+
+The modules are read with `git archive <tag>`, so their working trees are never touched. Expected layout
+(`--root`): `tools/`, `moduli/<Module>`, `KIParla-collection/`, `KIParla-NoSketch-Data/` side by side, the last two on a
+clean `main`. Still manual: recompiling the NoSketch Engine instance and the HTML/PDF pages (`generate_artifacts.py`;
+the commands are printed at the end).
+
 == `sync.py`
 
 One-shot, one-directional sync for a single edited file. Run manually after opening/saving a `.eaf` in ELAN, or hand-editing a `.vert.tsv`:
