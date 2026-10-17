@@ -336,3 +336,8 @@ class TestProsodicLinkFollowedBySpace:
 
     def test_no_empty_token_at_the_end_of_the_unit(self):
         assert [t.orig_text for t in tokenize_tu("e poi=", tu_id=0)] == ["e", "poi"]
+
+    def test_empty_annotation_keeps_its_one_empty_token(self):
+        # a unit made only of a marker has an empty annotation; the marker is written on this token
+        toks = tokenize_tu("", tu_id=0)
+        assert [(t.orig_text, t.span) for t in toks] == [("", (0, 0))]
