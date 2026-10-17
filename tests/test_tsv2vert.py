@@ -55,7 +55,7 @@ class TestConvertFileStripsAtPrefix(object):
         assert "nome\t0-0\t" in vertical
 
 
-def _vertical(tmp_path, rows):
+def _vertical(tmp_path, rows, keep=None):
     """Run convert_file on vert rows (dicts of VERT_FIELDNAMES overrides)."""
     import io
     tsv_path = tmp_path / "TEST0001.vert.tsv"
@@ -70,7 +70,7 @@ def _vertical(tmp_path, rows):
     convert_file(
         str(tsv_path), {}, {}, [], out,
         base_url="/corpus", artifacts_base_url="/artifacts",
-        artifacts_module="TEST", issues_base_url="", translations_dir=None,
+        artifacts_module="TEST", issues_base_url="", translations_dir=None, keep=keep,
     )
     return out.getvalue()
 
@@ -127,3 +127,18 @@ class TestVarietyAttributes:
     def test_nonce_alone_does_not_set_contains_variation(self, tmp_path):
         v = _vertical(tmp_path, [dict(form="forma", **{"code_variation": "ContainsVariation=No|Nonce=Yes"})])
         assert 'contains_code_variation="no"' in v
+
+
+class TestAggregateWithoutVarietyAttributes:
+    """The aggregate keeps only what every module has: without the `variety` and `nonce`
+    attributes the "#"/"#*"/"$" markers are not written in the word either."""
+
+    def test_markers_are_dropped_with_their_attributes(self, tmp_path):
+        keep = {"token": ["word", "token_id"], "transcription_unit": [], "conversation": [], "speaker": []}
+        v = _vertical(tmp_path, [
+            dict(form="hola", **{"code_variation": "ContainsVariation=Yes|Code=Other|Language=NO_ISO_CODE"}),
+            dict(form="mah", **{"code_variation": "ContainsVariation=Yes|Code=Unsure|Language=NO_ISO_CODE"}),
+            dict(form="forma", **{"code_variation": "ContainsVariation=Yes|Nonce=Yes"}),
+        ], keep=keep)
+        words = [t[0] for t in _token_lines(v) if t[1].startswith("0-")]
+        assert words == ["hola", "mah", "forma"]

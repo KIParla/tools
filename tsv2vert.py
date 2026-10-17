@@ -442,11 +442,13 @@ def convert_file(
             kind = variation_kind(row)
             nonce = is_nonce(row)
             word = form[1:] if is_anonymized(row) and form.startswith("@") else form
-            if kind == "other":
+            # The markers stand for the variety / nonce attributes: where those are left out
+            # (the aggregate corpus keeps only what every module has) the word is written bare.
+            if kind == "other" and _keeps(keep, TOKEN, "variety"):
                 word = f"#{word}"
-            elif kind == "unsure":
+            elif kind == "unsure" and _keeps(keep, TOKEN, "variety"):
                 word = f"#*{word}"
-            elif nonce:
+            elif nonce and _keeps(keep, TOKEN, "nonce"):
                 word = f"${word}"
             values = dict(
                 zip(TOKEN_ATTRS, [
