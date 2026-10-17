@@ -323,3 +323,21 @@ def test_inhalation_text_is_not_changed_and_words_are_not_affected():
     on, df = _types("va. hanno .h", {"nonverbal_tokens": {"inhalation": True}})
     assert [t for t, _ in on] == ["va.", "hanno", ".h"]
     assert [ty for _, ty in on] == [df.tokentype.linguistic, df.tokentype.linguistic, df.tokentype.nonverbalbehavior]
+
+
+class TestProsodicLinkFollowedBySpace:
+    """`word=` followed by a space (a non-verbal tag is separated by spaces) or ending the
+    unit leaves an empty string in the split: it must not become an empty token."""
+
+    def test_no_empty_token_before_a_tag(self):
+        toks = tokenize_tu("ma stai scherzan~= ((ride))", tu_id=0)
+        assert [t.orig_text for t in toks] == ["ma", "stai", "scherzan~", "((ride))"]
+        assert toks[2].prosodiclink
+
+    def test_no_empty_token_at_the_end_of_the_unit(self):
+        assert [t.orig_text for t in tokenize_tu("e poi=", tu_id=0)] == ["e", "poi"]
+
+    def test_empty_annotation_keeps_its_one_empty_token(self):
+        # a unit made only of a marker has an empty annotation; the marker is written on this token
+        toks = tokenize_tu("", tu_id=0)
+        assert [(t.orig_text, t.span) for t in toks] == [("", (0, 0))]

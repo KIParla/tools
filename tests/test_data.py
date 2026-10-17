@@ -212,6 +212,20 @@ class TestAddTokenFeatures:
         guess_tokens = [t for t in tu.tokens if t.guesses]
         assert len(guess_tokens) > 0
 
+    def test_guess_after_elisions_covers_the_whole_word(self):
+        # c'è is split into two tokens (c' + è) but is one word in the annotation: what follows
+        # must not shift by one character per elision
+        tu = self._make("quindi c'è (xxx) quindi c'è::: i:::il il (xxx) il latte")
+        tu.add_token_features()
+        assert [t.guesses for t in tu.tokens if t.orig_text == "(xxx)"] == [{0: (0, 3)}, {1: (0, 3)}]
+
+    def test_pace_after_an_elision_is_on_the_right_word(self):
+        tu = self._make("c'è >dice< tutto")
+        tu.add_token_features()
+        fast = [t for t in tu.tokens if t.fast_pace]
+        assert [t.orig_text for t in fast] == [">dice<"]
+        assert list(fast[0].fast_pace.values()) == [(0, 4)]
+
     def test_whitelisted_reduction_sets_reduced_flag(self):
         tu = TranscriptionUnit(0, "S", 0, 1, 1, "c(io)è ciao",
                                 cfg={"reduction_words": ["cioè"]})

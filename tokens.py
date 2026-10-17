@@ -356,6 +356,12 @@ def tokenize_tu(
     for part in parts:
         end_pos = char_pos + len(part)
 
+        # re.split leaves an empty string after a prosodic link that is followed by a space
+        # or ends the unit ("scherzan~= ((ride))"): it is not a token. An empty annotation (a unit
+        # made only of a "#_" / "# " marker) keeps its one empty token, which carries the marker.
+        if part == "" and annotation:
+            continue
+
         if part == " ":
             char_pos = end_pos
             continue
