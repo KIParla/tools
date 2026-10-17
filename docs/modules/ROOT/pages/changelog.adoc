@@ -7,7 +7,8 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 * **Fix — the aggregate `KIParla` corpus no longer writes the `#`, `#*` and `$` markers.** They stand for the
   `variety` and `nonce` attributes, which the aggregate leaves out (it keeps only what every module has), but
   `tsv2vert.py` still prefixed the words with them. With `--common-attrs-of` the word is now written bare when the
-  attribute is not kept.
+  attribute is not kept. A `#`/`$` that the module's config does not recognise (a `#word` typed `error` in KIPasti,
+  ParlaTO and Stra-ParlaTO: 90 tokens) is cut as well.
 * **Derived repositories are regenerated locally.** New `regenerate_local.py` rebuilds KIParla-collection and
   KIParla-NoSketch-Data from the released modules in one pass and pushes only on request. The release-triggered
   GitHub workflows are removed: with several modules released together their pushes were rejected.
