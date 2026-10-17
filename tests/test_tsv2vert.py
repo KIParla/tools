@@ -142,3 +142,9 @@ class TestAggregateWithoutVarietyAttributes:
         ], keep=keep)
         words = [t[0] for t in _token_lines(v) if t[1].startswith("0-")]
         assert words == ["hola", "mah", "forma"]
+
+    def test_unrecognised_marker_left_in_the_form_is_cut(self, tmp_path):
+        keep = {"token": ["word", "token_id"], "transcription_unit": [], "conversation": [], "speaker": []}
+        v = _vertical(tmp_path, [dict(form="#piassa"), dict(form="#*boh")], keep=keep)
+        words = [t[0] for t in _token_lines(v) if t[1].startswith("0-")]
+        assert words == ["piassa", "boh"]

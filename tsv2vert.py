@@ -450,6 +450,10 @@ def convert_file(
                 word = f"#*{word}"
             elif nonce and _keeps(keep, TOKEN, "nonce"):
                 word = f"${word}"
+            elif keep is not None and not _keeps(keep, TOKEN, "variety") and word[:1] in "#$" and len(word) > 1:
+                # A marker the module's config does not recognise stays in the form (type `error`);
+                # the aggregate has none of these symbols, so it is cut here.
+                word = word.lstrip("#*$") or word
             values = dict(
                 zip(TOKEN_ATTRS, [
                     word, token_id, *(_pos_value(row, a) for a in LINGUISTIC_ATTRS),
