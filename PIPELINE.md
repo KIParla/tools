@@ -166,16 +166,16 @@ flag and every token-level variation feature; none of them is in `jefferson_feat
 | `$word` | `Nonce=Yes` (a nonce / non-standard form; independent of `Code`) | StraParlaBO, StraParlaTO |
 | any token of a unit with at least one `Code` | `ContainsVariation=Yes`, repeated on every token row of the unit | all |
 
-`ContainsVariation=Yes|No` is always the first feature, so the column is never empty:
-`ContainsVariation=No` is the value of an ordinary Italian token. A `$` form alone does not
-make it `Yes`: it is not another variety. Pauses, non-verbal tags, anonymized names and
+`ContainsVariation=Yes` is the first feature when present; it is only written when `Yes`, so an
+ordinary Italian token has `_` (files before 2026-10 had `ContainsVariation=No`, read the same). A `$` form
+alone does not make it `Yes`: it is not another variety. Pauses, non-verbal tags, anonymized names and
 `xxx` never carry a variety. Example values:
 
-    ContainsVariation=No
+    _
     ContainsVariation=Yes
     ContainsVariation=Yes|Code=Other|Language=NO_ISO_CODE
     ContainsVariation=Yes|Code=Underspecified
-    ContainsVariation=No|Nonce=Yes
+    Nonce=Yes
 
 The dataflags enum `tokenvariety` carries `other`, `unsure`, `underspecified`; the unit-level
 `languagevariation` enum is the parser's internal record of how the unit was written.
@@ -577,7 +577,7 @@ schema file to regenerate every module's copy.
 | `deprel`        | `_` |
 | `type`          | token type flag (`linguistic`, `shortpause`, `nonverbalbehavior`, …) |
 | `meta_label`    | `_` |
-| `code_variation`     | variation features of the token and unit: `ContainsVariation=Yes\|No`, `Code=Other\|Unsure\|Underspecified`, `Language=ISO`, `Nonce=Yes` |
+| `code_variation`     | variation features of the token and unit: `ContainsVariation=Yes`, `Code=Other\|Unsure\|Underspecified`, `Language=ISO`, `Nonce=Yes` |
 | `jefferson_feats` | pipe-separated: `Intonation=X`, `Interrupted=Yes`, `Truncated=Yes`, `Reduced=Yes`, `ProsodicLink=Yes`, `SpaceAfter=No`, `PauseAfter=Yes`, `Anonymized=Yes`, `Volume=X`, `Syllables=N` |
 | `align`         | `Begin=X` / `End=X` / `Begin=X\|End=X` for first/last token of TU |
 | `prolongations` | e.g. `3x2,7x1` (char_pos × length pairs) |

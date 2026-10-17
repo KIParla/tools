@@ -252,7 +252,7 @@ class TestConversationToConll:
         t = _make_simple_transcript(["ciao", "mondo"])
         out = tmp_path / "test.vert.tsv"
         conversation_to_conll(t, out)
-        assert {r["code_variation"] for r in _read_vert(out)} == {"ContainsVariation=No"}
+        assert {r["code_variation"] for r in _read_vert(out)} == {"_"}
 
     def test_nonce_is_a_feature_not_a_variety(self, tmp_path):
         cfg = {"variation_markers": {"dollar": True}}
@@ -264,7 +264,7 @@ class TestConversationToConll:
         out = tmp_path / "test.vert.tsv"
         conversation_to_conll(t, out)
         rows = _read_vert(out)
-        assert rows[0]["code_variation"] == "ContainsVariation=No|Nonce=Yes"
+        assert rows[0]["code_variation"] == "Nonce=Yes"
         assert "Orthography" not in rows[0]["jefferson_feats"]
 
     def test_lemma_upos_xpos_feats_deprel_are_underscore(self, tmp_path):

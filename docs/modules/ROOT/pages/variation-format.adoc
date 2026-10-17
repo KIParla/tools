@@ -15,10 +15,9 @@ before; it is a *breaking change* of the vert.tsv schema.
 |===
 | Feature | Meaning
 
-| `ContainsVariation=Yes\|No`
-| Unit level, repeated on every token row of the unit. `Yes` when any token of the unit has
-  a `Code`. Always present, so the column is never empty. A `$` form alone does not make
-  it `Yes`.
+| `ContainsVariation=Yes`
+| Unit level, repeated on every token row of a unit in which any token has a `Code`. Written
+  only when `Yes`: an ordinary token has `_`. A `$` form alone does not make it `Yes`.
 
 | `Code=Other`
 | `#word`, or any token covered by a `#_` marker: from the marker to the end of the unit
@@ -44,11 +43,11 @@ before; it is a *breaking change* of the vert.tsv schema.
 Examples:
 
 ----
-ContainsVariation=No
+_
 ContainsVariation=Yes
 ContainsVariation=Yes|Code=Other|Language=NO_ISO_CODE
 ContainsVariation=Yes|Code=Underspecified
-ContainsVariation=No|Nonce=Yes
+Nonce=Yes
 ----
 
 Pauses, non-verbal behaviour, anonymized names and `xxx` never carry a code.

@@ -68,7 +68,8 @@ def test_aggregate_filter_drops_unlisted_attributes_and_columns(tmp_path):
     v = _convert(path, keep)
     assert "contains_code_variation" not in v and "full_conversation" not in v
     assert "linguistic_annotation" not in v and 'participant_code' not in v
-    assert [l for l in v.splitlines() if l.startswith("#hola")] == ["#hola\t0-0\t\t"]
+    # the aggregate has no variety attribute, so no "#" marker on the word either
+    assert [l for l in v.splitlines() if l.startswith("hola")] == ["hola\t0-0\t\t"]
 
 
 def test_no_contains_code_variation_when_the_corpus_has_none(tmp_path):
