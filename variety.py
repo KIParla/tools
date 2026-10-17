@@ -4,8 +4,8 @@ variety.py — reading the `code_variation` column of a vert.tsv.
 All variation information of a token row lives in ONE feature-list column,
 ``code_variation`` (pipe-separated ``Key=Value``, CoNLL-U style):
 
-    ContainsVariation=Yes|No   unit level, repeated on every token row of the unit:
-                               Yes when any token of the unit has a Code
+    ContainsVariation=Yes      unit level, repeated on every token row of the unit with
+                               a Code (any token of the unit has one); absent otherwise
     Code=Other                 #word, or any token covered by a "#_" marker
     Code=Unsure                #*word (assignable to more than one language)
     Code=Underspecified        token inside a unit that starts with "# "
@@ -13,8 +13,9 @@ All variation information of a token row lives in ONE feature-list column,
                                (NO_ISO_CODE when it wasn't identified)
     Nonce=Yes                  $word (a nonce form; not a code change)
 
-``ContainsVariation`` is always present, so the column is never empty. A ``$``
-form alone does not make ``ContainsVariation`` Yes: it is not a code change.
+``ContainsVariation`` is only written when Yes: an ordinary token has ``_`` (earlier
+files also had ``ContainsVariation=No``, which is read the same). A ``$`` form alone
+does not make ``ContainsVariation`` Yes: it is not a code change.
 
 Every marker can be read back from the ``span`` column: the unit-initial
 "#_ " / "# " is part of the first token's span, and a mid-unit "#_ " is part
@@ -107,7 +108,8 @@ def iter_vert_rows(fobj, source="vert.tsv", delimiter="\t"):
         if first:
             first = False
             value = row.get(COLUMN)
-            if value not in (None, "", "_") and "ContainsVariation=" not in value:
+            # an old bare label (none/yes/all...) instead of a Key=Value feature list
+            if value not in (None, "", "_") and "=" not in value:
                 raise _old_format_error(source, f"{COLUMN}='{value}'")
         yield row
 

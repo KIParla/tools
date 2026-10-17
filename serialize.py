@@ -135,16 +135,16 @@ def read_csv(
 
 def _variation_feats(tok, tu) -> str:
     """The ``code_variation`` column: every variation feature of a token, plus the
-    unit-level flag (see variety.py). Never empty: ContainsVariation is always
-    present."""
-    parts = [f"ContainsVariation={'Yes' if tu.contains_variation else 'No'}"]
+    unit-level flag (see variety.py). ``ContainsVariation`` is only written when
+    it is Yes; an ordinary token has ``_``."""
+    parts = ["ContainsVariation=Yes"] if tu.contains_variation else []
     if tok.variety != df.tokenvariety.none:
         parts.append(f"Code={tok.variety.name.capitalize()}")
     if tok.non_ita:
         parts.append(f"Language={tok.iso_code}")
     if tok.nonce:
         parts.append("Nonce=Yes")
-    return "|".join(parts)
+    return "|".join(parts) if parts else "_"
 
 
 def _jefferson_feats(tok) -> str:

@@ -4,6 +4,12 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* **`ContainsVariation` is only written when `Yes`.** The `code_variation` column of an ordinary token is `_`
+  (it was `ContainsVariation=No`, 600 000+ rows per module with nothing to say). `ContainsVariation=No` in an
+  older file is read the same. `tsv/` files of the modules have to be migrated: `ContainsVariation=No` is removed,
+  `ContainsVariation=No|Nonce=Yes` becomes `Nonce=Yes`.
+* **KIPasti: `#word` is a word of another code.** `variation_markers.hash_token` is on in `configs/KIPasti.yml`
+  (`Code=Other`, `Language=NO_ISO_CODE`), as in the Stra modules.
 * **Fix — the aggregate `KIParla` corpus no longer writes the `#`, `#*` and `$` markers.** They stand for the
   `variety` and `nonce` attributes, which the aggregate leaves out (it keeps only what every module has), but
   `tsv2vert.py` still prefixed the words with them. With `--common-attrs-of` the word is now written bare when the
