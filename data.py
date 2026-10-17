@@ -293,35 +293,37 @@ class TranscriptionUnit:
         if not self.tokens:
             return
 
-        # Build a character-level index over all token orig_text values.
-        # For annotation char position i:
+        # Build a character-level index over the annotation, from the character span
+        # each token has in it (Token.span). For annotation char position i:
         #   token_at[i] = list index of the owning token
-        #                 (-1 = colon/punctuation, -2 = bracket marker, -3 = inter-token)
+        #                 (-1 = colon/punctuation, -2 = bracket marker, -3 = between tokens)
         #   form_idx[i] = form-char index within that token (-1 for non-form chars)
-        token_at: list[int] = []
-        form_idx: list[int] = []
+        # The spans are in annotation coordinates, so a word that is split into two
+        # tokens (the elision c'è -> c' + è) does not shift what follows.
+        n = len(self.annotation)
+        token_at: list[int] = [-3] * n
+        form_idx: list[int] = [-3] * n
 
         for tok_i, tok in enumerate(self.tokens):
             fi = 0
+            pos = tok.span[0]
             # A mid-unit "#_ " marker sits in the annotation just before this
-            # token but is not part of orig_text; keep offsets aligned.
+            # token's text; its characters are part of the span.
             for _ in tok.marker_prefix:
-                token_at.append(-1)
-                form_idx.append(-1)
+                if pos < n:
+                    token_at[pos], form_idx[pos] = -1, -1
+                pos += 1
             for ch in tok.orig_text:
+                if pos >= n:
+                    break
                 if ch in ":.,?":
-                    token_at.append(-1)
-                    form_idx.append(-1)
+                    token_at[pos], form_idx[pos] = -1, -1
                 elif ch in "[]()<>°":
-                    token_at.append(-2)
-                    form_idx.append(-2)
+                    token_at[pos], form_idx[pos] = -2, -2
                 else:
-                    token_at.append(tok_i)
-                    form_idx.append(fi)
+                    token_at[pos], form_idx[pos] = tok_i, fi
                     fi += 1
-            # Sentinel between tokens.
-            token_at.append(-3)
-            form_idx.append(-3)
+                pos += 1
 
         def _char_ranges_for(a: int, b: int) -> dict[int, tuple[int, int]]:
             """Map a (start, end) char span in the annotation to per-token

@@ -4,6 +4,15 @@ This page tracks notable documentation and maintenance changes for the `tools` r
 
 == Unreleased
 
+* **Fix — pace, volume and guess spans were shifted by one character per elision.** `add_token_features` built its
+  character index by joining the tokens with one separator each, but a word split in two (`c'è` → `c'` + `è`) has no
+  separator in the annotation, so every span after an elision was read one character too early: `(xxx)` after two
+  elisions got `0-2` instead of `0-3`, `>dice<` got `Slow=2-4|Fast=0-3` instead of `Fast=0-4`. It now uses the character
+  span each token has in the annotation. Compared on the seven modules: 824 `guesses`, 754 `pace` and 77
+  `jefferson_feats` values in 313 conversations change; the committed `tsv/` files still hold the old values.
+* **Fix — no empty token after a prosodic link followed by a space.** `scherzan~= ((ride))` (a tag is separated by
+  spaces) left an empty string in the split that became a token of type `error`; this was the last round-trip
+  difference in TOD2010 (KIP, ParlaTO) and STIR011.
 * **`ContainsVariation` is only written when `Yes`.** The `code_variation` column of an ordinary token is `_`
   (it was `ContainsVariation=No`, 600 000+ rows per module with nothing to say). `ContainsVariation=No` in an
   older file is read the same. `tsv/` files of the modules have to be migrated: `ContainsVariation=No` is removed,

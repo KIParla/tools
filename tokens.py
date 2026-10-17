@@ -356,6 +356,11 @@ def tokenize_tu(
     for part in parts:
         end_pos = char_pos + len(part)
 
+        # re.split leaves an empty string after a prosodic link that is followed by a space
+        # or ends the unit ("scherzan~= ((ride))"): it is not a token.
+        if part == "":
+            continue
+
         if part == " ":
             char_pos = end_pos
             continue
