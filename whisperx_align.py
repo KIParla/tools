@@ -7,6 +7,12 @@ Adapted from intonation-cues-whisper/src/align_nw.py (same normalization,
 same output layout), extended to use WhisperX's word-level timestamps and to
 report the WER.
 
+Before aligning, the digits of the WhisperX words are written out in Italian (num2words,
+as `normalize.py` does for the TSV: `30` -> `trenta`, `3,5` -> `tre virgola cinque`, `4-5` ->
+`quattro cinque`); a number that becomes several words shares the word's time by length.
+After aligning, an interrupted TSV word (form ending in `~`, e.g. `or~`) paired with a longer
+WhisperX word that starts with it (`orale`) counts as a `match`, not a `mismatch`.
+
 Only 'linguistic' rows of the TSV are aligned. Normalization for comparison:
 lowercase, accent-strip, punctuation-strip (so `l~` matches `l`). Every other
 row (shortpause, nonverbal, unknown, ... and rows typed 'linguistic' whose form
@@ -104,6 +110,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import regex as re
+from num2words import num2words
 from sequence_align.pairwise import needleman_wunsch
 
 from textutil import ENCODING_READ, ENCODING_WRITE, nfc
@@ -157,6 +164,7 @@ class TSVToken:
     norm: str        # for NW comparison
     index: int       # position in the TSV
     alignable: bool  # linguistic, and with something to compare
+    interrupted: bool = False  # form ends in "~": the speaker broke the word off
 
 
 def normalize(text: str) -> str:
@@ -171,9 +179,36 @@ def whisper_display(raw: str) -> str:
     return re.sub(r"[^\p{L}\p{N}]", "", nfc(raw).lower())
 
 
+# 1234, 1.234 (thousands), 3,5 (decimal comma); not glued to letters or digits (w0, 20esimo, B52)
+_NUMBER = re.compile(r"(?<![\p{L}\p{N}_])\d+(?:\.\d{3})*(?:,\d+)?(?![\p{L}\p{N}_])")
+
+
+def _italian(digits: str) -> str:
+    word = num2words(int(digits), lang="it")
+    return word[:-1] + "é" if word.endswith("tre") and len(word) > 3 else word  # as normalize.py
+
+
+def numbers_to_words(raw: str) -> str:
+    """Write the numbers of a WhisperX word out in Italian, as normalize.check_numbers does."""
+    raw = re.sub(r"(?<=\d)-(?=\d)", " ", raw)  # ranges: 4-5 -> 4 5
+
+    def convert(m):
+        whole, _, frac = m.group(0).replace(".", "").partition(",")
+        try:
+            words = _italian(whole)
+            if frac:  # 3,05 -> tre virgola zero cinque (num2words drops the decimals of a string)
+                zeros = len(frac) - len(frac.lstrip("0"))
+                words += " virgola " + " ".join(["zero"] * zeros + ([_italian(frac)] if frac.strip("0") else []))
+        except (OverflowError, ValueError, NotImplementedError):
+            return m.group(0)
+        return words
+
+    return _NUMBER.sub(convert, raw)
+
+
 def _split_word(raw: str, start, end, score, speaker, segment, avg_logprob=None) -> list[WhisperWord]:
-    """One WhisperX word -> one WhisperWord per elision piece."""
-    pieces = [p for p in _ELISION_SPLIT.split(nfc(raw)) if p]
+    """One WhisperX word -> one WhisperWord per elision piece (and per word of a number)."""
+    pieces = [p for chunk in numbers_to_words(nfc(raw)).split() for p in _ELISION_SPLIT.split(chunk) if p]
     pieces = [(p, normalize(p)) for p in pieces]
     pieces = [(p, n) for p, n in pieces if n]
     total = sum(len(n) for _, n in pieces)
@@ -247,7 +282,8 @@ def load_tsv(path: str) -> list[TSVToken]:
     with open(path, encoding=ENCODING_READ, newline="") as f:
         for i, row in enumerate(csv.DictReader(f, delimiter="\t")):
             norm = normalize(row["form"]) if row["type"] == "linguistic" else ""
-            tokens.append(TSVToken(row=dict(row), norm=norm, index=i, alignable=bool(norm)))
+            tokens.append(TSVToken(row=dict(row), norm=norm, index=i, alignable=bool(norm),
+                                   interrupted=bool(norm) and row["form"].endswith("~")))
     return tokens
 
 
@@ -293,7 +329,7 @@ def build_rows(pairs, whisper_words, all_tokens):
     aligned = [t for t in all_tokens if t.alignable]
     pending = [t for t in all_tokens if not t.alignable]  # TSV order
     stats = {"match": 0, "mismatch": 0, "whisper_only": 0, "tsv_only": 0,
-             "skipped": len(pending)}
+             "skipped": len(pending), "interrupted_completed": 0}
     rows = []
 
     def score_cell(w):
@@ -314,7 +350,9 @@ def build_rows(pairs, whisper_words, all_tokens):
                 rows.append(tsv_row(pending.pop(0), EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, "skipped"))
         if a is not None and b is not None:
             w, t = whisper_words[a], aligned[b]
-            aln = "match" if w.norm == t.norm else "mismatch"
+            completes = t.interrupted and w.norm.startswith(t.norm) and w.norm != t.norm
+            aln = "match" if w.norm == t.norm or completes else "mismatch"
+            stats["interrupted_completed"] += completes
             rows.append(tsv_row(t, w.segment, w.speaker or EMPTY, w.display or EMPTY,
                                 _time(w.start), _time(w.end), aln, score_cell(w), logprob_cell(w)))
         elif a is not None:
@@ -527,7 +565,8 @@ def align_files(json_path: str, tsv_path: str, output: Optional[str] = None,
     stats["output"] = out_path
     if verbose:
         print("Alignment stats:", file=sys.stderr)
-        print(f"  matches:       {stats['match']}", file=sys.stderr)
+        print(f"  matches:       {stats['match']}  ({stats['interrupted_completed']} interrupted "
+              f"words completed by WhisperX)", file=sys.stderr)
         print(f"  mismatches:    {stats['mismatch']}  (substitutions)", file=sys.stderr)
         print(f"  tsv_only:      {stats['tsv_only']}  (deletions)", file=sys.stderr)
         print(f"  whisper_only:  {stats['whisper_only']}  (insertions)", file=sys.stderr)
