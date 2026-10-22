@@ -35,6 +35,8 @@ that matched nothing:
   whisper_begin             start (s) of the aligned WhisperX word
   whisper_end               end (s) of the aligned WhisperX word
   alignment                 match | mismatch | whisper_only | tsv_only | skipped
+  whisper_error_text        `whisper_text` on mismatch and whisper_only rows only, "_" on the
+                            others: what WhisperX heard where it disagrees with the TSV
 and, unless disabled (`--no-correction`), the columns of the timestamp correction below.
 
 Timestamp correction: the WhisperX times drift against the TSV's (shifts and stretches of
@@ -108,8 +110,9 @@ EMPTY = "_"
 OUTPUT_COLUMNS = [
     "token_id", "tu_id", "speaker", "form", "tsv_begin", "tsv_end",
     "whisper_segment", "whisper_speaker", "whisper_speaker_mapped", "whisper_text",
-    "whisper_begin", "whisper_end", "alignment",
+    "whisper_begin", "whisper_end", "alignment", "whisper_error_text",
 ]
+ERROR_ALIGNMENTS = ("mismatch", "whisper_only")
 
 CORRECTION_COLUMNS = [
     "whisper_begin_adj", "whisper_end_adj", "whisper_begin_partial", "whisper_end_partial",
@@ -286,7 +289,8 @@ def build_rows(pairs, whisper_words, all_tokens):
     def tsv_row(t, segment, speaker, text, begin, end, aln):
         t_begin, t_end = tsv_times(t.row.get("align", ""))
         return [t.row.get("token_id", ""), t.row.get("tu_id", ""), t.row.get("speaker", ""),
-                t.row.get("form", ""), t_begin, t_end, segment, speaker, EMPTY, text, begin, end, aln]
+                t.row.get("form", ""), t_begin, t_end, segment, speaker, EMPTY, text, begin, end, aln,
+                text if aln in ERROR_ALIGNMENTS else EMPTY]
 
     for a, b in pairs:
         if b is not None:  # emit the skipped rows that precede this token
@@ -301,7 +305,7 @@ def build_rows(pairs, whisper_words, all_tokens):
             w = whisper_words[a]
             aln = "whisper_only"
             rows.append([EMPTY] * 6 + [w.segment, w.speaker or EMPTY, EMPTY, w.display or EMPTY,
-                                  _time(w.start), _time(w.end), aln])
+                                  _time(w.start), _time(w.end), aln, w.display or EMPTY])
         else:
             aln = "tsv_only"
             rows.append(tsv_row(aligned[b], EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, aln))
