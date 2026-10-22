@@ -321,3 +321,17 @@ def test_whisper_score_is_the_word_score_or_empty(tmp_path):
     assert by["ciao"]["whisper_score"] == by["bella"]["whisper_score"] == "0.900"
     assert by["extra"]["alignment"] == "whisper_only" and by["extra"]["whisper_score"] == "0.900"
     assert _run(tmp_path, ["ciao", "nuovo"], ("ciao", 0.0, 1.0))[1]["whisper_score"] == "_"  # tsv_only
+
+
+def test_avg_logprob_is_the_segment_value_shared_by_its_words(tmp_path):
+    p = tmp_path / "wx.json"
+    p.write_text(json.dumps({"segments": [
+        {"start": 0, "end": 2, "avg_logprob": -0.25, "words": [
+            {"word": "ciao", "start": 0, "end": 1, "score": .9}, {"word": "bene", "start": 1, "end": 2, "score": .9}]},
+        {"start": 3, "end": 4, "words": [{"word": "extra", "start": 3, "end": 4, "score": .9}]},   # no avg_logprob
+    ]}))
+    out = tmp_path / "o.tsv"
+    wx.main([str(p), _write_tsv(tmp_path, ["ciao", "bene", "mh"]), "-o", str(out)])
+    got = {r["whisper_text"]: r for r in csv.DictReader(open(out), delimiter="\t")}
+    assert got["ciao"]["whisper_avg_logprob"] == got["bene"]["whisper_avg_logprob"] == "-0.2500"
+    assert got["extra"]["whisper_avg_logprob"] == "_"

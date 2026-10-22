@@ -40,6 +40,10 @@ that matched nothing:
   whisper_score             WhisperX confidence of the aligned word (the `score` of its forced
                             alignment, 0-1); "_" where WhisperX gave none (words timed by
                             interpolation) and on rows with no WhisperX word
+  whisper_avg_logprob       `avg_logprob` of the WhisperX segment of the aligned word: the average
+                            log-probability of the transcription (<= 0, closer to 0 is more
+                            confident). One value per segment, shared by its words; "_" if the
+                            JSON has none
 and, unless disabled (`--no-correction`), the columns of the timestamp correction below.
 
 Timestamp correction: the WhisperX times drift against the TSV's (shifts and stretches of
@@ -114,7 +118,7 @@ OUTPUT_COLUMNS = [
     "token_id", "tu_id", "speaker", "form", "tsv_begin", "tsv_end",
     "whisper_segment", "whisper_speaker", "whisper_speaker_mapped", "whisper_text",
     "whisper_begin", "whisper_end", "alignment", "whisper_error_text",
-    "whisper_score",
+    "whisper_score", "whisper_avg_logprob",
 ]
 ERROR_ALIGNMENTS = ("mismatch", "whisper_only")
 
@@ -144,6 +148,7 @@ class WhisperWord:
     end: Optional[float]
     score: Optional[float] = None
     speaker: Optional[str] = None
+    avg_logprob: Optional[float] = None
 
 
 @dataclass
@@ -166,7 +171,7 @@ def whisper_display(raw: str) -> str:
     return re.sub(r"[^\p{L}\p{N}]", "", nfc(raw).lower())
 
 
-def _split_word(raw: str, start, end, score, speaker, segment) -> list[WhisperWord]:
+def _split_word(raw: str, start, end, score, speaker, segment, avg_logprob=None) -> list[WhisperWord]:
     """One WhisperX word -> one WhisperWord per elision piece."""
     pieces = [p for p in _ELISION_SPLIT.split(nfc(raw)) if p]
     pieces = [(p, normalize(p)) for p in pieces]
@@ -181,7 +186,7 @@ def _split_word(raw: str, start, end, score, speaker, segment) -> list[WhisperWo
             p_start = p_end = None
         offset += len(norm)
         out.append(WhisperWord(whisper_display(piece), norm, segment,
-                               p_start, p_end, score, speaker))
+                               p_start, p_end, score, speaker, avg_logprob))
     return out
 
 
@@ -221,7 +226,8 @@ def load_whisper(path: str) -> list[WhisperWord]:
             for w in seg["words"]:
                 words.extend(_split_word(
                     w["word"], w.get("start"), w.get("end"),
-                    w.get("score"), w.get("speaker", seg.get("speaker")), segment))
+                    w.get("score"), w.get("speaker", seg.get("speaker")), segment,
+                    seg.get("avg_logprob")))
         else:
             # plain Whisper: spread the segment's span evenly over its words
             seg_words = seg.get("text", "").split()
@@ -231,7 +237,7 @@ def load_whisper(path: str) -> list[WhisperWord]:
                 words.extend(_split_word(
                     w, seg["start"] + i * duration / n,
                     seg["start"] + (i + 1) * duration / n,
-                    None, seg.get("speaker"), segment))
+                    None, seg.get("speaker"), segment, seg.get("avg_logprob")))
     _interpolate_untimed(words)
     return words
 
@@ -293,11 +299,14 @@ def build_rows(pairs, whisper_words, all_tokens):
     def score_cell(w):
         return f"{w.score:.3f}" if w.score is not None else EMPTY
 
-    def tsv_row(t, segment, speaker, text, begin, end, aln, score=EMPTY):
+    def logprob_cell(w):
+        return f"{w.avg_logprob:.4f}" if w.avg_logprob is not None else EMPTY
+
+    def tsv_row(t, segment, speaker, text, begin, end, aln, score=EMPTY, logprob=EMPTY):
         t_begin, t_end = tsv_times(t.row.get("align", ""))
         return [t.row.get("token_id", ""), t.row.get("tu_id", ""), t.row.get("speaker", ""),
                 t.row.get("form", ""), t_begin, t_end, segment, speaker, EMPTY, text, begin, end, aln,
-                text if aln in ERROR_ALIGNMENTS else EMPTY, score]
+                text if aln in ERROR_ALIGNMENTS else EMPTY, score, logprob]
 
     for a, b in pairs:
         if b is not None:  # emit the skipped rows that precede this token
@@ -307,12 +316,12 @@ def build_rows(pairs, whisper_words, all_tokens):
             w, t = whisper_words[a], aligned[b]
             aln = "match" if w.norm == t.norm else "mismatch"
             rows.append(tsv_row(t, w.segment, w.speaker or EMPTY, w.display or EMPTY,
-                                _time(w.start), _time(w.end), aln, score_cell(w)))
+                                _time(w.start), _time(w.end), aln, score_cell(w), logprob_cell(w)))
         elif a is not None:
             w = whisper_words[a]
             aln = "whisper_only"
             rows.append([EMPTY] * 6 + [w.segment, w.speaker or EMPTY, EMPTY, w.display or EMPTY,
-                                  _time(w.start), _time(w.end), aln, w.display or EMPTY, score_cell(w)])
+                                  _time(w.start), _time(w.end), aln, w.display or EMPTY, score_cell(w), logprob_cell(w)])
         else:
             aln = "tsv_only"
             rows.append(tsv_row(aligned[b], EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, aln))
