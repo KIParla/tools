@@ -301,3 +301,14 @@ def test_no_correction_keeps_the_plain_layout(tmp_path):
     rows = _run_custom(tmp_path, _ling(["ciao", "bene"], 1.5, 2.5),
                        ("ciao", 0.0, 0.4), ("bene", 0.5, 0.9), extra=["--no-correction"])
     assert list(rows[0]) == wx.OUTPUT_COLUMNS
+
+
+def test_error_text_only_on_mismatch_and_whisper_only(tmp_path):
+    rows = _run(tmp_path, ["l'", "ho", "visto", "mh", "casa"],
+                ("L'ho", 0.0, 0.6), ("visto,", 1.0, 1.5), ("bella", 2.0, 2.5), ("casa.", 3.0, 3.5),
+                ("extra", 4.0, 4.5))
+    by = {(r["alignment"], r["form"]): r for r in rows}
+    assert by[("mismatch", "mh")]["whisper_error_text"] == "bella"
+    assert [r["whisper_error_text"] for r in rows if r["alignment"] == "whisper_only"] == ["extra"]
+    assert all(r["whisper_error_text"] == "_" for r in rows
+               if r["alignment"] in ("match", "tsv_only", "skipped"))

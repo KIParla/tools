@@ -18,7 +18,7 @@ Standalone scripts to handle and transform KIParla data.
   `token_id`, `tu_id`, `speaker`, `form`, `tsv_begin`/`tsv_end` (the `Begin=`/`End=` of the
   TSV's `align` column), `whisper_segment`, `whisper_speaker` (WhisperX diarization) and `whisper_speaker_mapped` (the same as a KIParla
   speaker code: per conversation, the one-to-one assignment that agrees with the most `match` tokens; the
-  agreement is reported in the log and in `wer.tsv`), `whisper_text`, `whisper_begin`, `whisper_end` and `alignment`
+  agreement is reported in the log and in `wer.tsv`), `whisper_text`, `whisper_begin`, `whisper_end`, `alignment` and `whisper_error_text` (the WhisperX word on `mismatch` and `whisper_only` rows, `_` elsewhere)
   (`match` / `mismatch` / `tsv_only` / `skipped`, plus `whisper_only` rows for WhisperX words
   with no token); every non-linguistic row is `skipped`. It prints the WER
   (TSV as reference, linguistic tokens only).
