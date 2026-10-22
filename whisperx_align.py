@@ -35,6 +35,33 @@ that matched nothing:
   whisper_begin             start (s) of the aligned WhisperX word
   whisper_end               end (s) of the aligned WhisperX word
   alignment                 match | mismatch | whisper_only | tsv_only | skipped
+and, unless disabled (`--no-correction`), the columns of the timestamp correction below.
+
+Timestamp correction: the WhisperX times drift against the TSV's (shifts and stretches of
+seconds, irregularly along a recording), while the TSV times exist only at unit boundaries
+(`tsv_begin` on the first token of a unit, `tsv_end` on the last). Each unit (`tu_id`) is
+corrected locally, anchored on its boundary tokens. A boundary is reliable when the unit's first
+(last) token is a `match` with a WhisperX time and a `tsv_begin` (`tsv_end`).
+  whisper_begin_adj, whisper_end_adj
+                            rule 1: both boundaries reliable and at least MIN_MATCH_SHARE of the
+                            unit's tokens are `match`. A unit of MIN_STRETCH_TOKENS tokens or more is
+                            shifted and stretched so that begin and end equal `tsv_begin` and
+                            `tsv_end`; a shorter one is only shifted, by the mean of the two
+                            boundary offsets
+  whisper_begin_partial, whisper_end_partial
+                            rule 2: exactly one boundary reliable; the unit is only shifted by that
+                            boundary's offset
+  adj_rule                  both_stretch | both_shift | first | last | "_" (unit not corrected)
+  gap_even_begin, gap_even_end, gap_chars_begin, gap_chars_end
+                            tokens with no WhisperX time (`tsv_only`, and the `skipped` ones) of a
+                            corrected unit, placed in the gap between their corrected neighbours (at
+                            the unit's edges, bounded by its `tsv_begin` / `tsv_end` if it has one).
+                            Words (tsv_only, x, @..., truncated forms) share what is left of the
+                            gap, in equal shares (`even`) or in proportion to the length of the form
+                            (`chars`). A pause `(.)` lasts PAUSE_MIN seconds (the whole gap, at least
+                            PAUSE_MIN each, if the run holds no words). Events `((ride))` get no time
+Nothing is interpolated for the other tokens: they get "_". Tokens, the original columns and
+the WER are not affected.
 
 Speaker mapping (per conversation): the WhisperX labels (SPEAKER_00...) mean nothing
 across conversations, so each is assigned to one TSV speaker. The `match` tokens
@@ -83,6 +110,14 @@ OUTPUT_COLUMNS = [
     "whisper_segment", "whisper_speaker", "whisper_speaker_mapped", "whisper_text",
     "whisper_begin", "whisper_end", "alignment",
 ]
+
+CORRECTION_COLUMNS = [
+    "whisper_begin_adj", "whisper_end_adj", "whisper_begin_partial", "whisper_end_partial",
+    "adj_rule", "gap_even_begin", "gap_even_end", "gap_chars_begin", "gap_chars_end",
+]
+MIN_MATCH_SHARE = 0.5   # rule 1: share of `match` tokens a unit needs
+MIN_STRETCH_TOKENS = 6  # shorter units are shifted, not stretched
+PAUSE_MIN = 0.1         # seconds a `(.)` lasts at least
 
 _ALIGN_TIME = re.compile(r"\b(Begin|End)=([0-9.]+)")
 _UNKNOWN_SPEAKER = re.compile(r"\?+")
@@ -329,8 +364,112 @@ def apply_speaker_mapping(rows: list[list[str]]) -> dict:
     }
 
 
+def _gap_role(rec: dict) -> Optional[str]:
+    """How an untimed token takes part in a gap: word, pause, event (no time) or None."""
+    if rec["alignment"] == "tsv_only":
+        return "word"
+    if rec["alignment"] != "skipped":
+        return None
+    form = rec["form"]
+    if form == "(.)":
+        return "pause"
+    if form.startswith("(("):
+        return "event"  # ((ride)) etc.: duration unknown, left without a time
+    return "word"  # tsv_only-like: x, xxx, @nomeluogo, dialect or truncated forms
+
+
+def _fill_gaps(toks: list[dict]) -> None:
+    """Place the untimed tokens of one corrected unit in the gap_* columns (see module doc)."""
+    def corrected(t, which):
+        v = t[f"whisper_{which}_adj"]
+        return t[f"whisper_{which}_partial"] if v == EMPTY else v
+
+    i = 0
+    while i < len(toks):
+        if _gap_role(toks[i]) is None or corrected(toks[i], "begin") != EMPTY:
+            i += 1
+            continue
+        j = i
+        while j < len(toks) and _gap_role(toks[j]) is not None and corrected(toks[j], "begin") == EMPTY:
+            j += 1
+        lo = corrected(toks[i - 1], "end") if i else toks[0]["tsv_begin"]
+        hi = corrected(toks[j], "begin") if j < len(toks) else toks[-1]["tsv_end"]
+        run = [t for t in toks[i:j] if _gap_role(t) != "event"]
+        i = j
+        if lo == EMPTY or hi == EMPTY or not run:
+            continue
+        lo, hi = float(lo), float(hi)
+        gap = max(0.0, hi - lo)
+        words = [t for t in run if _gap_role(t) == "word"]
+        pauses = [t for t in run if _gap_role(t) == "pause"]
+        if words:
+            pause_dur = PAUSE_MIN
+            room = max(0.0, gap - PAUSE_MIN * len(pauses))
+        else:
+            pause_dur = max(gap, PAUSE_MIN * len(pauses)) / len(pauses)
+            room = 0.0
+        for name in ("even", "chars"):
+            def weight(t):
+                return 1 if name == "even" else max(1, len(t["form"]))
+            total = sum(weight(t) for t in words)
+            cursor = lo
+            for t in run:
+                dur = pause_dur if _gap_role(t) == "pause" else room * weight(t) / total
+                t[f"gap_{name}_begin"] = f"{cursor:.3f}"
+                cursor += dur
+                t[f"gap_{name}_end"] = f"{cursor:.3f}"
+
+
+def correct_timestamps(rows: list[list[str]]) -> dict:
+    """Append the CORRECTION_COLUMNS to every row (see module doc); return unit counts."""
+    recs = [dict(zip(OUTPUT_COLUMNS, r), **{c: EMPTY for c in CORRECTION_COLUMNS}) for r in rows]
+    units: dict[str, list[dict]] = {}
+    for rec in recs:
+        if rec["tu_id"] != EMPTY:  # whisper_only rows belong to no unit
+            units.setdefault(rec["tu_id"], []).append(rec)
+
+    def reliable(tok, whisper, tsv):
+        return tok["alignment"] == "match" and tok[whisper] != EMPTY and tok[tsv] != EMPTY
+
+    n_full = n_partial = 0
+    for toks in units.values():
+        first, last = toks[0], toks[-1]
+        has_first = reliable(first, "whisper_begin", "tsv_begin")
+        has_last = reliable(last, "whisper_end", "tsv_end")
+        if has_first:
+            wb, tb = float(first["whisper_begin"]), float(first["tsv_begin"])
+        if has_last:
+            we, te = float(last["whisper_end"]), float(last["tsv_end"])
+        share = sum(t["alignment"] == "match" for t in toks) / len(toks)
+        if has_first and has_last and share >= MIN_MATCH_SHARE and we > wb and te > tb:
+            stretch = len(toks) >= MIN_STRETCH_TOKENS
+            shift = (tb - wb + te - we) / 2
+            rule = "both_stretch" if stretch else "both_shift"
+            n_full += 1
+        elif has_first != has_last:  # exactly one reliable boundary
+            shift = (tb - wb) if has_first else (te - we)
+            stretch, rule = False, ("first" if has_first else "last")
+            n_partial += 1
+        else:
+            continue
+        suffix = "_adj" if rule.startswith("both") else "_partial"
+        for t in toks:
+            t["adj_rule"] = rule
+            for col in ("whisper_begin", "whisper_end"):
+                if t[col] == EMPTY:
+                    continue
+                w = float(t[col])
+                v = tb + (w - wb) * (te - tb) / (we - wb) if stretch else w + shift
+                t[col + suffix] = f"{v:.3f}"
+        _fill_gaps(toks)
+
+    for r, rec in zip(rows, recs):
+        r.extend(rec[c] for c in CORRECTION_COLUMNS)
+    return {"units": len(units), "units_corrected_full": n_full, "units_corrected_partial": n_partial}
+
+
 def align_files(json_path: str, tsv_path: str, output: Optional[str] = None,
-                verbose: bool = True) -> dict:
+                verbose: bool = True, correction: bool = True) -> dict:
     """Align one WhisperX JSON with one .vert.tsv and write the output TSV.
 
     Returns the alignment counts plus ``wer``, ``reference_tokens`` and
@@ -347,6 +486,8 @@ def align_files(json_path: str, tsv_path: str, output: Optional[str] = None,
                                  [t.norm for t in tsv_tokens])
     rows, stats = build_rows(pairs, whisper_words, all_tokens)
     stats.update(apply_speaker_mapping(rows))
+    if correction:
+        stats.update(correct_timestamps(rows))
 
     if output:
         out_path = output
@@ -357,7 +498,7 @@ def align_files(json_path: str, tsv_path: str, output: Optional[str] = None,
 
     with open(out_path, "w", encoding=ENCODING_WRITE, newline="") as f:
         writer = csv.writer(f, delimiter="\t", lineterminator="\n")
-        writer.writerow(OUTPUT_COLUMNS)
+        writer.writerow(OUTPUT_COLUMNS + (CORRECTION_COLUMNS if correction else []))
         for r in rows:
             writer.writerow([EMPTY if c == "" else c for c in r])
 
@@ -378,6 +519,9 @@ def align_files(json_path: str, tsv_path: str, output: Optional[str] = None,
                   f"matched tokens agree)", file=sys.stderr)
         else:
             print("  speakers: no WhisperX speaker labels to map", file=sys.stderr)
+        if correction:
+            print(f"  timestamp correction: {stats['units_corrected_full']} units on both boundaries, "
+                  f"{stats['units_corrected_partial']} on one, of {stats['units']}", file=sys.stderr)
         print(f"Output written to {out_path}", file=sys.stderr)
     return stats
 
@@ -391,8 +535,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("tsv_path", help="KIParla vert.tsv file")
     parser.add_argument("-o", "--output", default=None, help="Output TSV path "
                         "(default: <name>.aligned.tsv next to the input TSV)")
+    parser.add_argument("--no-correction", action="store_true",
+                        help="do not add the timestamp-correction columns")
     args = parser.parse_args(argv)
-    align_files(args.json_path, args.tsv_path, args.output)
+    align_files(args.json_path, args.tsv_path, args.output, correction=not args.no_correction)
     return 0
 
 

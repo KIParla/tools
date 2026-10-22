@@ -22,7 +22,16 @@ Standalone scripts to handle and transform KIParla data.
   (`match` / `mismatch` / `tsv_only` / `skipped`, plus `whisper_only` rows for WhisperX words
   with no token); every non-linguistic row is `skipped`. It prints the WER
   (TSV as reference, linguistic tokens only).
-  `python whisperx_align.py <whisperx.json> <X.vert.tsv> [-o out.tsv]`.
+  The WhisperX times drift against the TSV's, which exist only at unit boundaries, so each unit
+  is also corrected locally, anchored on its first and last token (columns appended after
+  `alignment`, `--no-correction` leaves them out): `whisper_begin_adj` / `whisper_end_adj` for
+  units whose two boundary tokens are reliable `match`es and that are at least half `match`
+  (shifted and stretched onto `tsv_begin` / `tsv_end`; units under 6 tokens only shifted),
+  `whisper_begin_partial` / `whisper_end_partial` for units with one reliable boundary (shifted),
+  `adj_rule` (which rule applied) and `gap_even_*` / `gap_chars_*` (times for the `tsv_only` and
+  `skipped` tokens of a corrected unit, placed between their corrected neighbours; pauses last
+  0.1 s, `((events))` get none). Details in the module docstring.
+  `python whisperx_align.py <whisperx.json> <X.vert.tsv> [-o out.tsv] [--no-correction]`.
 - `whisperx_run.py`: run WhisperX (transcription, forced alignment, speaker diarization) on the audio
   of every conversation of one or more modules, passing the diarizer the expected number of
   speakers from `conversations.tsv` (`participants-number`; one fewer as minimum when

@@ -66,7 +66,7 @@ def test_timestamps_and_alignment_labels(tmp_path):
     rows = _run(tmp_path, ["l'", "ho", "visto", "mh", "casa"],
                 ("L'ho", 0.0, 0.6), ("visto,", 1.0, 1.5), ("bella", 2.0, 2.5), ("casa.", 3.0, 3.5))
     by = {r["token_id"]: r for r in rows}
-    assert list(rows[0]) == wx.OUTPUT_COLUMNS         # only the requested columns
+    assert list(rows[0]) == wx.OUTPUT_COLUMNS + wx.CORRECTION_COLUMNS
     assert by["0-0"]["alignment"] == by["0-1"]["alignment"] == "match"
     assert by["0-0"]["whisper_begin"] == "0.000" and by["0-1"]["whisper_end"] == "0.600"
     assert (by["0-0"]["speaker"], by["0-0"]["form"], by["0-0"]["tu_id"]) == ("S1", "l'", "7")
@@ -203,3 +203,101 @@ def test_greedy_fallback_matches_exhaustive_on_clear_case(tmp_path, monkeypatch)
     monkeypatch.setattr(wx, "_MAX_PERMUTATIONS", 0)
     stats, _ = _speaker_case(tmp_path, ["A"] * 4 + ["B"] * 3, ["S0"] * 4 + ["S1"] * 3)
     assert stats["speaker_map"] == "S0=A;S1=B"
+
+
+# --- timestamp correction ---------------------------------------------------
+
+def _run_custom(tmp_path, tokens, *items, extra=()):
+    """tokens: (form, type, align) per TSV row, all in unit 7; items: WhisperX (word, start, end)."""
+    tsv = tmp_path / "C1.vert.tsv"
+    with open(tsv, "w", newline="") as f:
+        w = csv.writer(f, delimiter="\t", lineterminator="\n")
+        w.writerow(HEADER)
+        for i, (form, type_, align) in enumerate(tokens):
+            w.writerow([f"0-{i}", "S1", "7", str(i), form, form, type_, align])
+    out = tmp_path / "c.tsv"
+    wx.main([_write_json(tmp_path, *items), str(tsv), "-o", str(out), *extra])
+    return list(csv.DictReader(open(out), delimiter="\t"))
+
+
+def _ling(forms, begin, end):
+    toks = [(f, "linguistic", "_") for f in forms]
+    toks[0] = (forms[0], "linguistic", f"Begin={begin}")
+    toks[-1] = (forms[-1], "linguistic", f"End={end}")
+    return toks
+
+
+def test_long_unit_is_shifted_and_stretched_onto_the_tsv_boundaries(tmp_path):
+    forms = ["a", "b", "c", "d", "e", "f"]
+    words = [(f, float(i), i + 0.5) for i, f in enumerate(forms)]   # 0.0 .. 5.5
+    rows = _run_custom(tmp_path, _ling(forms, 10.0, 21.0), *words)
+    assert {r["adj_rule"] for r in rows} == {"both_stretch"}
+    assert rows[0]["whisper_begin_adj"] == "10.000" and rows[-1]["whisper_end_adj"] == "21.000"
+    assert rows[3]["whisper_begin_adj"] == "16.000"            # 10 + 3 * (11 / 5.5)
+    assert rows[0]["whisper_begin_partial"] == "_" and rows[0]["gap_even_begin"] == "_"
+
+
+def test_short_unit_is_only_shifted_by_the_mean_offset(tmp_path):
+    rows = _run_custom(tmp_path, _ling(["ciao", "bene"], 1.5, 2.5),
+                       ("ciao", 0.0, 0.4), ("bene", 0.5, 0.9))   # offsets 1.5 and 1.6
+    assert {r["adj_rule"] for r in rows} == {"both_shift"}
+    assert (rows[0]["whisper_begin_adj"], rows[1]["whisper_end_adj"]) == ("1.550", "2.450")
+
+
+def test_unit_below_the_match_share_is_left_alone(tmp_path):
+    forms = ["ciao", "x1", "x2", "x3", "bene"]
+    rows = _run_custom(tmp_path, _ling(forms, 1.5, 2.5),
+                       ("ciao", 0.0, 0.4), ("y", 0.5, 0.6), ("z", 0.6, 0.7), ("w", 0.7, 0.8),
+                       ("bene", 0.8, 0.9))                       # 2 of 5 tokens match
+    assert {r["adj_rule"] for r in rows} == {"_"}
+    assert {r["whisper_begin_adj"] for r in rows} == {"_"}
+
+
+def test_one_reliable_boundary_gives_a_partial_shift(tmp_path):
+    rows = _run_custom(tmp_path, _ling(["ciao", "bene"], 1.5, 2.5),
+                       ("ciao", 0.0, 0.4), ("male", 0.5, 0.9))   # last token is a mismatch
+    assert {r["adj_rule"] for r in rows} == {"first"}
+    assert (rows[0]["whisper_begin_partial"], rows[1]["whisper_end_partial"]) == ("1.500", "2.400")
+    assert rows[0]["whisper_begin_adj"] == "_"
+
+
+def test_untimed_tokens_are_placed_in_the_gap(tmp_path):
+    toks = [("ciao", "linguistic", "Begin=10.0"), ("a", "linguistic", "_"), ("b", "linguistic", "_"),
+            ("(.)", "shortpause", "_"), ("luca", "linguistic", "_"), ("((ride))", "nonverbal", "_"),
+            ("xxx", "unknown", "_"), ("bene", "linguistic", "End=14.0")]
+    rows = _run_custom(tmp_path, toks, ("ciao", 0.0, 1.0), ("a", 1.0, 2.0), ("b", 2.0, 3.0),
+                       ("bene", 7.0, 8.0))
+    by = {r["form"]: r for r in rows}
+    # 4 of 8 tokens match; stretched by 4/8: b ends at 11.5, bene starts at 13.5
+    assert (by["b"]["whisper_end_adj"], by["bene"]["whisper_begin_adj"]) == ("11.500", "13.500")
+    # the pause lasts 0.1 s; luca and xxx share the 1.9 s left
+    assert (by["(.)"]["gap_even_begin"], by["(.)"]["gap_even_end"]) == ("11.500", "11.600")
+    assert (by["luca"]["gap_even_begin"], by["luca"]["gap_even_end"]) == ("11.600", "12.550")
+    assert (by["xxx"]["gap_even_begin"], by["xxx"]["gap_even_end"]) == ("12.550", "13.500")
+    # in proportion to the form length (4 and 3 characters)
+    assert (by["luca"]["gap_chars_begin"], by["luca"]["gap_chars_end"]) == ("11.600", "12.686")
+    assert (by["xxx"]["gap_chars_begin"], by["xxx"]["gap_chars_end"]) == ("12.686", "13.500")
+    # events get no time and take no room; timed tokens have no gap_* time
+    assert by["((ride))"]["gap_even_begin"] == by["((ride))"]["gap_chars_end"] == "_"
+    assert by["ciao"]["gap_even_begin"] == "_"
+
+
+def test_pause_alone_takes_the_gap_with_a_minimum(tmp_path):
+    toks = [("ciao", "linguistic", "Begin=10.0"), ("(.)", "shortpause", "_"),
+            ("bene", "linguistic", "End=12.0")]
+    wide = _run_custom(tmp_path, toks, ("ciao", 0.0, 1.0), ("bene", 2.0, 3.0))
+    assert (wide[1]["gap_even_begin"], wide[1]["gap_even_end"]) == ("10.500", "11.500")  # whole gap (3-token unit: shifted by 9.5)
+    tight = _run_custom(tmp_path, toks, ("ciao", 0.0, 1.0), ("bene", 1.05, 3.0))
+    assert float(tight[1]["gap_even_end"]) - float(tight[1]["gap_even_begin"]) >= wx.PAUSE_MIN - 1e-9
+
+
+def test_whisper_only_rows_and_untreated_units_have_no_correction(tmp_path):
+    rows = _run(tmp_path, ["ciao"], ("ciao", 0, 1), ("extra", 1, 2))
+    extra = [r for r in rows if r["alignment"] == "whisper_only"][0]
+    assert all(extra[c] == "_" for c in wx.CORRECTION_COLUMNS)
+
+
+def test_no_correction_keeps_the_plain_layout(tmp_path):
+    rows = _run_custom(tmp_path, _ling(["ciao", "bene"], 1.5, 2.5),
+                       ("ciao", 0.0, 0.4), ("bene", 0.5, 0.9), extra=["--no-correction"])
+    assert list(rows[0]) == wx.OUTPUT_COLUMNS
