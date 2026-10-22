@@ -14,16 +14,29 @@ Standalone scripts to handle and transform KIParla data.
 - `linear2html.py`: generate publication HTML and PDF artifacts in the `KIParla-artifacts` layout.
 - `whisperx_align.py`: align a WhisperX word-level JSON with the *linguistic* tokens of a
   `.vert.tsv` (Needleman-Wunsch on accent/punctuation-stripped forms; adapted from
-  `intonation-cues-whisper/src/align_nw.py`). The output keeps the TSV columns and adds
-  `whisper_segment/text/question/begin/end/score/speaker` and `alignment`
-  (`match` / `mismatch` / `whisper_only` / `tsv_only` / `skipped`). It prints the WER
-  (TSV as reference, linguistic tokens only). The `align` column is untouched.
-  `python whisperx_align.py <whisperx.json> <X.vert.tsv> [-o out.tsv]`.
+  `intonation-cues-whisper/src/align_nw.py`). The output has one row per TSV row with
+  `token_id`, `tu_id`, `speaker`, `form`, `tsv_begin`/`tsv_end` (the `Begin=`/`End=` of the
+  TSV's `align` column), `whisper_segment`, `whisper_speaker` (WhisperX diarization) and `whisper_speaker_mapped` (the same as a KIParla
+  speaker code: per conversation, the one-to-one assignment that agrees with the most `match` tokens; the
+  agreement is reported in the log and in `wer.tsv`), `whisper_text`, `whisper_begin`, `whisper_end` and `alignment`
+  (`match` / `mismatch` / `tsv_only` / `skipped`, plus `whisper_only` rows for WhisperX words
+  with no token); every non-linguistic row is `skipped`. It prints the WER
+  (TSV as reference, linguistic tokens only).
+  The WhisperX times drift against the TSV's, which exist only at unit boundaries, so each unit
+  is also corrected locally, anchored on its first and last token (columns appended after
+  `alignment`, `--no-correction` leaves them out): `whisper_begin_adj` / `whisper_end_adj` for
+  units whose two boundary tokens are reliable `match`es and that are at least half `match`
+  (shifted and stretched onto `tsv_begin` / `tsv_end`; units under 6 tokens only shifted),
+  `whisper_begin_partial` / `whisper_end_partial` for units with one reliable boundary (shifted),
+  `adj_rule` (which rule applied) and `gap_even_*` / `gap_chars_*` (times for the `tsv_only` and
+  `skipped` tokens of a corrected unit, placed between their corrected neighbours; pauses last
+  0.1 s, `((events))` get none). Details in the module docstring.
+  `python whisperx_align.py <whisperx.json> <X.vert.tsv> [-o out.tsv] [--no-correction]`.
 - `whisperx_run.py`: run WhisperX (transcription, forced alignment, speaker diarization) on the audio
   of every conversation of one or more modules, passing the diarizer the expected number of
   speakers from `conversations.tsv` (`participants-number`; one fewer as minimum when
   `unknown-participant` is `yes`). Models are loaded once; finished conversations are skipped, so
-  it can be restarted. `--align` also runs `whisperx_align.py` and collects the WER per
+  it can be restarted. `--align` also runs `whisperx_align.py` and collects the WER and the speaker mapping per
   conversation in `wer.tsv`; `--dry-run` prints the plan. Needs `pip install whisperx` and an
   `HF_TOKEN` for diarization.
   `python whisperx_run.py <module_dir> ... --audio-dir <dir> --output-dir <dir> [--align]`.
