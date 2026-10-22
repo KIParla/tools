@@ -37,6 +37,9 @@ that matched nothing:
   alignment                 match | mismatch | whisper_only | tsv_only | skipped
   whisper_error_text        `whisper_text` on mismatch and whisper_only rows only, "_" on the
                             others: what WhisperX heard where it disagrees with the TSV
+  whisper_score             WhisperX confidence of the aligned word (the `score` of its forced
+                            alignment, 0-1); "_" where WhisperX gave none (words timed by
+                            interpolation) and on rows with no WhisperX word
 and, unless disabled (`--no-correction`), the columns of the timestamp correction below.
 
 Timestamp correction: the WhisperX times drift against the TSV's (shifts and stretches of
@@ -111,6 +114,7 @@ OUTPUT_COLUMNS = [
     "token_id", "tu_id", "speaker", "form", "tsv_begin", "tsv_end",
     "whisper_segment", "whisper_speaker", "whisper_speaker_mapped", "whisper_text",
     "whisper_begin", "whisper_end", "alignment", "whisper_error_text",
+    "whisper_score",
 ]
 ERROR_ALIGNMENTS = ("mismatch", "whisper_only")
 
@@ -286,11 +290,14 @@ def build_rows(pairs, whisper_words, all_tokens):
              "skipped": len(pending)}
     rows = []
 
-    def tsv_row(t, segment, speaker, text, begin, end, aln):
+    def score_cell(w):
+        return f"{w.score:.3f}" if w.score is not None else EMPTY
+
+    def tsv_row(t, segment, speaker, text, begin, end, aln, score=EMPTY):
         t_begin, t_end = tsv_times(t.row.get("align", ""))
         return [t.row.get("token_id", ""), t.row.get("tu_id", ""), t.row.get("speaker", ""),
                 t.row.get("form", ""), t_begin, t_end, segment, speaker, EMPTY, text, begin, end, aln,
-                text if aln in ERROR_ALIGNMENTS else EMPTY]
+                text if aln in ERROR_ALIGNMENTS else EMPTY, score]
 
     for a, b in pairs:
         if b is not None:  # emit the skipped rows that precede this token
@@ -300,12 +307,12 @@ def build_rows(pairs, whisper_words, all_tokens):
             w, t = whisper_words[a], aligned[b]
             aln = "match" if w.norm == t.norm else "mismatch"
             rows.append(tsv_row(t, w.segment, w.speaker or EMPTY, w.display or EMPTY,
-                                _time(w.start), _time(w.end), aln))
+                                _time(w.start), _time(w.end), aln, score_cell(w)))
         elif a is not None:
             w = whisper_words[a]
             aln = "whisper_only"
             rows.append([EMPTY] * 6 + [w.segment, w.speaker or EMPTY, EMPTY, w.display or EMPTY,
-                                  _time(w.start), _time(w.end), aln, w.display or EMPTY])
+                                  _time(w.start), _time(w.end), aln, w.display or EMPTY, score_cell(w)])
         else:
             aln = "tsv_only"
             rows.append(tsv_row(aligned[b], EMPTY, EMPTY, EMPTY, EMPTY, EMPTY, aln))

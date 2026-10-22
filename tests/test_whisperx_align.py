@@ -312,3 +312,12 @@ def test_error_text_only_on_mismatch_and_whisper_only(tmp_path):
     assert [r["whisper_error_text"] for r in rows if r["alignment"] == "whisper_only"] == ["extra"]
     assert all(r["whisper_error_text"] == "_" for r in rows
                if r["alignment"] in ("match", "tsv_only", "skipped"))
+
+
+def test_whisper_score_is_the_word_score_or_empty(tmp_path):
+    rows = _run(tmp_path, ["ciao", "mh", "casa"],
+                ("ciao", 0.0, 1.0), ("bella", 2.0, 2.5), ("casa", 3.0, 3.5), ("extra", 4.0, 4.5))
+    by = {r["whisper_text"]: r for r in rows}
+    assert by["ciao"]["whisper_score"] == by["bella"]["whisper_score"] == "0.900"
+    assert by["extra"]["alignment"] == "whisper_only" and by["extra"]["whisper_score"] == "0.900"
+    assert _run(tmp_path, ["ciao", "nuovo"], ("ciao", 0.0, 1.0))[1]["whisper_score"] == "_"  # tsv_only
