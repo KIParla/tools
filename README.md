@@ -21,7 +21,10 @@ Standalone scripts to handle and transform KIParla data.
   agreement is reported in the log and in `wer.tsv`), `whisper_text`, `whisper_begin`, `whisper_end`, `alignment`, `whisper_error_text` (the WhisperX word on `mismatch` and `whisper_only` rows, `_` elsewhere) `whisper_score` (WhisperX's confidence of the aligned word, `_` if none) and `whisper_avg_logprob` (the `avg_logprob` of the word's segment, the transcription confidence)
   (`match` / `mismatch` / `tsv_only` / `skipped`, plus `whisper_only` rows for WhisperX words
   with no token); every non-linguistic row is `skipped`. It prints the WER
-  (TSV as reference, linguistic tokens only).
+  (TSV as reference, linguistic tokens only). Before aligning, the numbers in the WhisperX words are
+  written out in Italian (`30` -> `trenta`, `3,5` -> `tre virgola cinque`, as `normalize.py` does for
+  the TSV); after aligning, an interrupted TSV word (`or~`) paired with a longer WhisperX word that
+  starts with it (`orale`) counts as a `match`.
   The WhisperX times drift against the TSV's, which exist only at unit boundaries, so each unit
   is also corrected locally, anchored on its first and last token (columns appended after
   `alignment`, `--no-correction` leaves them out): `whisper_begin_adj` / `whisper_end_adj` for
