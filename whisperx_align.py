@@ -107,6 +107,7 @@ import regex as re
 from sequence_align.pairwise import needleman_wunsch
 
 from textutil import ENCODING_READ, ENCODING_WRITE, nfc
+from variety import is_syntactic
 
 MATCH = 2
 MISMATCH = -1
@@ -246,6 +247,8 @@ def load_tsv(path: str) -> list[TSVToken]:
     tokens = []
     with open(path, encoding=ENCODING_READ, newline="") as f:
         for i, row in enumerate(csv.DictReader(f, delimiter="\t")):
+            if is_syntactic(row):
+                continue
             norm = normalize(row["form"]) if row["type"] == "linguistic" else ""
             tokens.append(TSVToken(row=dict(row), norm=norm, index=i, alignable=bool(norm)))
     return tokens

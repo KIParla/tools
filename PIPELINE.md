@@ -570,12 +570,12 @@ schema file to regenerate every module's copy.
 | `id`            | token's true position within its TU, `0`-based. Recomputed from row order on every patch (see `make_patch.py`), so — unlike `token_id` — always monotonic |
 | `span`          | raw enriched span (character slice of original annotation) |
 | `form`          | normalized form (lowercase, no prolongations, no punctuation) |
-| `lemma`         | `_` (filled by lemmatization step) |
-| `upos`          | `_` (filled by lemmatization step) |
+| `lemma`         | `_` until annotated (`wip2tsv.py`). A multiword token has the lemmas of its syntactic words joined by `+` (`della`: `di+il`); the lemma of a token with `Lang=und`/`Dialect=Yes` in the lemmatization CSV is not transferred |
+| `upos`          | `_` until annotated (`wip2tsv.py`). A multiword token has the tags of its syntactic words joined by `+` (`ADP+DET`) |
 | `xpos`          | `_` |
 | `feats`         | `_` |
 | `deprel`        | `_` |
-| `type`          | token type flag (`linguistic`, `shortpause`, `nonverbalbehavior`, …) |
+| `type`          | token type flag (`linguistic`, `shortpause`, `nonverbalbehavior`, …), or `syntactic` for the row of one syntactic word of a multiword token (see below) |
 | `meta_label`    | `_` |
 | `code_variation`     | variation features of the token and unit: `ContainsVariation=Yes`, `Code=Other\|Unsure\|Underspecified`, `Language=ISO`, `Nonce=Yes` |
 | `jefferson_feats` | pipe-separated: `Intonation=X`, `Interrupted=Yes`, `Truncated=Yes`, `Reduced=Yes`, `ProsodicLink=Yes`, `SpaceAfter=No`, `PauseAfter=Yes`, `Anonymized=Yes`, `Volume=X`, `Syllables=N` |
@@ -643,3 +643,19 @@ regenerated (`generate_validation_report.py`) for modules processed before this 
 | `$` non-orthographic marker | kept / stripped to flag `non_ortho` | modules without `$` convention |
 | normalization rules | all enabled | TBD per module |
 | `duration_threshold` | `0.1` | TBD per module |
+
+### `syntactic` rows (components of multiword tokens)
+
+An annotated multiword token (`della` = `di` + `la`) is followed by one row per syntactic
+word: `token_id` = the surface token's id + a letter (`5-7a`, `5-7b`), `type` = `syntactic`,
+`speaker` and `tu_id` of the surface token, `form`/`lemma`/`upos` of the word, and `_` in
+every other column (`id` and `span` included, since they are not part of the transcription).
+`wip2tsv.py` writes them from the lemmatization CSV.
+
+They are not transcription, so **nothing that rebuilds the transcription may see them**:
+`variety.iter_vert_rows` skips them unless called with `syntactic=True`, and the raw readers
+(`tsv2eaf_layered`, `tsv2chat_bak`, `whisperx_align`) skip them with `variety.is_syntactic`.
+`make_patch` and `reconcile` set them aside and put them back under their surface token (a
+token that disappears takes its syntactic rows with it). The linear files, the eaf and the
+NoSketch vertical are therefore identical with and without them (`tests/test_wip2tsv.py`).
+`tsv2tei` does not export them yet.
