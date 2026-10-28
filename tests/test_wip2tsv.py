@@ -79,17 +79,35 @@ def test_pause_is_not_annotated_and_code_variation_is_not_used(tmp_path):
     stats, rows = run(tmp_path)
     by_id = {r["token_id"]: r for r in rows}
     assert by_id["0-2"]["lemma"] == by_id["0-2"]["upos"] == "_"
-    # 0-3 is Code=Other in the tsv, but only the conllu's Lang=und withholds a lemma
+    # 0-3 is Code=Other in the tsv, but only Lang=und/Dialect=Yes in the csv withholds a lemma
     assert by_id["0-3"]["lemma"] == "mbare" and by_id["0-3"]["upos"] == "NOUN"
     assert stats["dialect_lemma_skipped"] == 0
 
 
-def test_conllu_dialect_and_lang_und_skip_the_lemma(tmp_path):
-    conllu = tmp_path / "a.conllu"
-    conllu.write_text("1\teh\teh\tINTJ\t_\t_\t0\troot\t_\tKID=0-0|Lang=und\n\n")
-    stats, rows = run(tmp_path, conllu=conllu)
-    assert rows[0]["lemma"] == "_" and rows[0]["upos"] == "INTJ"
+def test_lang_und_and_dialect_yes_in_the_csv_withhold_the_lemma_but_not_the_upos(tmp_path):
+    write_tsv(tmp_path / "a.vert.tsv", tsv_rows())
+    wip = wip_rows()
+    wip[0]["jefferson_feats"] = "Lang=und|Dialect=Yes"      # eh
+    wip[3]["jefferson_feats"] = "Lang=en"                    # mbare: another language, lemma kept
+    write_wip(tmp_path / "a.csv", wip)
+    stats = wip2tsv.annotate(tmp_path / "a.csv", tmp_path / "a.vert.tsv", tmp_path / "out.tsv")
+    with open(tmp_path / "out.tsv", newline="") as f:
+        by_id = {r["token_id"]: r for r in iter_vert_rows(f, syntactic=True)}
+    assert by_id["0-0"]["lemma"] == "_" and by_id["0-0"]["upos"] == "INTJ"
+    assert by_id["0-3"]["lemma"] == "mbare"
     assert stats["dialect_lemma_skipped"] == 1
+
+
+def test_dialect_on_a_syntactic_word_withholds_the_lemma_of_the_multiword(tmp_path):
+    write_tsv(tmp_path / "a.vert.tsv", tsv_rows())
+    wip = wip_rows()
+    wip[2]["jefferson_feats"] = "Dialect=Yes"                # della = di + la, "di" is dialect
+    write_wip(tmp_path / "a.csv", wip)
+    wip2tsv.annotate(tmp_path / "a.csv", tmp_path / "a.vert.tsv", tmp_path / "out.tsv")
+    with open(tmp_path / "out.tsv", newline="") as f:
+        by_id = {r["token_id"]: r for r in iter_vert_rows(f, syntactic=True)}
+    assert by_id["0-1"]["lemma"] == by_id["0-1a"]["lemma"] == "_"
+    assert by_id["0-1"]["upos"] == "ADP+DET"
 
 
 def test_idempotent(tmp_path):

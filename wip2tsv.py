@@ -4,7 +4,7 @@ wip2tsv.py — Put the lemma and upos of a lemmatization-project CSV into a vert
 
 Usage:
     python wip2tsv.py <wip/MODULE/CODE.csv> <MODULE/tsv/CODE.vert.tsv> [-o OUT]
-                      [--conllu <CODE.conllu>] [--force]
+                      [--force]
 
 The CSV is the lemmatization work file (one row per transcription token, plus one row per
 syntactic word of a multiword token: ``5-7`` sulla, ``5-7a`` su, ``5-7b`` la). The TSV keeps
@@ -19,10 +19,10 @@ its transcription untouched; this adds the annotation, matching rows by ``token_
     leaves them out unless asked, so the linear files, the eaf, NoSketch and the counts
     never see them (see ``is_syntactic``);
   * the lemma of a dialect token is not transferred (the Italian lemma has no column yet):
-    a token whose conllu row has ``Lang=und`` or ``Dialect=Yes`` (``--conllu``) keeps
-    ``lemma`` ``_``. Its ``upos`` is transferred. Only the conllu says this (the
+    a token whose CSV ``jefferson_feats`` has ``Lang=und`` or ``Dialect=Yes`` (on the token or
+    on one of its syntactic words) keeps ``lemma`` ``_``. Its ``upos`` is transferred. The
     transcription's ``code_variation`` is not used: the language of a token is reviewed
-    while lemmatizing), so without ``--conllu`` every lemma is transferred.
+    while lemmatizing, and the CSV is where that is kept.
 
 Running it again replaces the syntactic rows and the lemma/upos with the CSV's: it is
 idempotent. Only transcription-derived rows that exist in both files are annotated; if the
@@ -43,7 +43,7 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from textutil import ENCODING_READ, ENCODING_WRITE  # noqa: E402
-from variety import SYNTACTIC, is_syntactic  # noqa: E402
+from variety import SYNTACTIC, feats_dict, is_syntactic  # noqa: E402
 
 _SUBTOKEN = re.compile(r"(\d+-\d+)([A-Za-z])")
 MISSING = "_"
@@ -69,25 +69,14 @@ def read_wip(path: Path) -> tuple[dict[str, dict], dict[str, list[dict]]]:
     return rows, words
 
 
-def read_dialect_kids(path: Path) -> set[str]:
-    """KIDs of the conllu words marked ``Dialect=Yes`` or ``Lang=und``."""
-    kids: set[str] = set()
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            cols = line.rstrip("\n").split("\t")
-            if len(cols) != 10 or not re.fullmatch(r"\d+", cols[0]):
-                continue
-            misc = dict(p.split("=", 1) for p in cols[9].split("|") if "=" in p)
-            if misc.get("Dialect") == "Yes" or misc.get("Lang") == "und":
-                if "KID" in misc:
-                    kids.add(misc["KID"])
-    return kids
+def _dialect(row: dict) -> bool:
+    """``Lang=und`` or ``Dialect=Yes`` in the CSV ``jefferson_feats``."""
+    feats = feats_dict(row.get("jefferson_feats"))
+    return feats.get("Lang") == "und" or feats.get("Dialect") == "Yes"
 
 
-def annotate(wip_path: Path, tsv_path: Path, out_path: Path, conllu: Path | None = None,
-             force: bool = False) -> dict:
+def annotate(wip_path: Path, tsv_path: Path, out_path: Path, force: bool = False) -> dict:
     surface, words = read_wip(wip_path)
-    dialect = read_dialect_kids(conllu) if conllu else set()
 
     with open(tsv_path, encoding=ENCODING_READ, newline="") as f:
         reader = csv.DictReader(f, delimiter="\t")
@@ -119,8 +108,7 @@ def annotate(wip_path: Path, tsv_path: Path, out_path: Path, conllu: Path | None
         if c is None or r["type"] != "linguistic":
             continue
         kids = words.get(tid, [])
-        is_dialect = tid in dialect or any(
-            k["token_id"] in dialect for k in kids)
+        is_dialect = _dialect(c) or any(_dialect(k) for k in kids)
         if kids:
             stats["multiword"] += 1
             lemmas = [k["lemma"] for k in kids]
@@ -160,10 +148,9 @@ def main():
     parser.add_argument("csv", type=Path)
     parser.add_argument("tsv", type=Path)
     parser.add_argument("-o", "--output", type=Path, help="default: rewrite the tsv in place")
-    parser.add_argument("--conllu", type=Path)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
-    stats = annotate(args.csv, args.tsv, args.output or args.tsv, args.conllu, args.force)
+    stats = annotate(args.csv, args.tsv, args.output or args.tsv, args.force)
     for p in stats["problems"][:30]:
         print("  !", p)
     if len(stats["problems"]) > 30:
