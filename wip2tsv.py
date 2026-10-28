@@ -19,9 +19,10 @@ its transcription untouched; this adds the annotation, matching rows by ``token_
     leaves them out unless asked, so the linear files, the eaf, NoSketch and the counts
     never see them (see ``is_syntactic``);
   * the lemma of a dialect token is not transferred (the Italian lemma has no column yet):
-    a token whose conllu row has ``Dialect=Yes`` or ``Lang=und`` (``--conllu``), or whose
-    ``code_variation`` says it is in another variety (``Code=Other``), keeps ``lemma`` ``_``.
-    Its ``upos`` is transferred.
+    a token whose conllu row has ``Lang=und`` or ``Dialect=Yes`` (``--conllu``) keeps
+    ``lemma`` ``_``. Its ``upos`` is transferred. Only the conllu says this (the
+    transcription's ``code_variation`` is not used: the language of a token is reviewed
+    while lemmatizing), so without ``--conllu`` every lemma is transferred.
 
 Running it again replaces the syntactic rows and the lemma/upos with the CSV's: it is
 idempotent. Only transcription-derived rows that exist in both files are annotated; if the
@@ -42,7 +43,7 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from textutil import ENCODING_READ, ENCODING_WRITE  # noqa: E402
-from variety import SYNTACTIC, feats_dict, is_syntactic  # noqa: E402
+from variety import SYNTACTIC, is_syntactic  # noqa: E402
 
 _SUBTOKEN = re.compile(r"(\d+-\d+)([A-Za-z])")
 MISSING = "_"
@@ -83,10 +84,6 @@ def read_dialect_kids(path: Path) -> set[str]:
     return kids
 
 
-def _other_variety(row: dict) -> bool:
-    return feats_dict(row.get("code_variation")).get("Code") == "Other"
-
-
 def annotate(wip_path: Path, tsv_path: Path, out_path: Path, conllu: Path | None = None,
              force: bool = False) -> dict:
     surface, words = read_wip(wip_path)
@@ -122,7 +119,7 @@ def annotate(wip_path: Path, tsv_path: Path, out_path: Path, conllu: Path | None
         if c is None or r["type"] != "linguistic":
             continue
         kids = words.get(tid, [])
-        is_dialect = _other_variety(r) or tid in dialect or any(
+        is_dialect = tid in dialect or any(
             k["token_id"] in dialect for k in kids)
         if kids:
             stats["multiword"] += 1

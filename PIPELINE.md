@@ -570,7 +570,7 @@ schema file to regenerate every module's copy.
 | `id`            | token's true position within its TU, `0`-based. Recomputed from row order on every patch (see `make_patch.py`), so — unlike `token_id` — always monotonic |
 | `span`          | raw enriched span (character slice of original annotation) |
 | `form`          | normalized form (lowercase, no prolongations, no punctuation) |
-| `lemma`         | `_` until annotated (`wip2tsv.py`). A multiword token has the lemmas of its syntactic words joined by `+` (`della`: `di+il`); the lemma of a dialect token is not transferred |
+| `lemma`         | `_` until annotated (`wip2tsv.py`). A multiword token has the lemmas of its syntactic words joined by `+` (`della`: `di+il`); the lemma of a token with `Lang=und`/`Dialect=Yes` in the conllu is not transferred |
 | `upos`          | `_` until annotated (`wip2tsv.py`). A multiword token has the tags of its syntactic words joined by `+` (`ADP+DET`) |
 | `xpos`          | `_` |
 | `feats`         | `_` |

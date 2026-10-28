@@ -75,12 +75,13 @@ def test_syntactic_rows_are_invisible_by_default(tmp_path):
         assert [r["token_id"] for r in iter_vert_rows(f)] == ["0-0", "0-1", "0-2", "0-3"]
 
 
-def test_pause_is_not_annotated_and_other_variety_keeps_no_lemma(tmp_path):
+def test_pause_is_not_annotated_and_code_variation_is_not_used(tmp_path):
     stats, rows = run(tmp_path)
     by_id = {r["token_id"]: r for r in rows}
     assert by_id["0-2"]["lemma"] == by_id["0-2"]["upos"] == "_"
-    assert by_id["0-3"]["lemma"] == "_" and by_id["0-3"]["upos"] == "NOUN"
-    assert stats["dialect_lemma_skipped"] == 1
+    # 0-3 is Code=Other in the tsv, but only the conllu's Lang=und withholds a lemma
+    assert by_id["0-3"]["lemma"] == "mbare" and by_id["0-3"]["upos"] == "NOUN"
+    assert stats["dialect_lemma_skipped"] == 0
 
 
 def test_conllu_dialect_and_lang_und_skip_the_lemma(tmp_path):
@@ -88,6 +89,7 @@ def test_conllu_dialect_and_lang_und_skip_the_lemma(tmp_path):
     conllu.write_text("1\teh\teh\tINTJ\t_\t_\t0\troot\t_\tKID=0-0|Lang=und\n\n")
     stats, rows = run(tmp_path, conllu=conllu)
     assert rows[0]["lemma"] == "_" and rows[0]["upos"] == "INTJ"
+    assert stats["dialect_lemma_skipped"] == 1
 
 
 def test_idempotent(tmp_path):
