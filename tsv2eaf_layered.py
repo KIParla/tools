@@ -39,6 +39,8 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 
+from variety import is_syntactic
+
 logger = logging.getLogger(__name__)
 
 _BEGIN_RE = re.compile(r"\bBegin\s*=\s*([0-9]+(?:\.[0-9]+)?)")
@@ -98,6 +100,8 @@ def _units(fobj):
     curr_key = None
     curr_rows = []
     for row in reader:
+        if is_syntactic(row):
+            continue
         key = (row["speaker"], row["tu_id"], row["tu_id"])
         if key != curr_key:
             if curr_rows:

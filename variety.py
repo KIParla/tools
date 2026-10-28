@@ -81,9 +81,26 @@ def _old_format_error(source, why):
     )
 
 
-def iter_vert_rows(fobj, source="vert.tsv", delimiter="\t"):
+SYNTACTIC = "syntactic"
+
+
+def is_syntactic(row: dict) -> bool:
+    """True for a row of a syntactic word: one component of a multiword token.
+
+    Such a row (``token_id`` = the surface token's id + a letter, e.g. ``5-7a``) carries
+    the lemma/upos of one syntactic word and belongs to the surface token just above it.
+    It is not part of the transcription, so nothing that rebuilds the transcription
+    (linear files, eaf, NoSketch, counts) may see it.
+    """
+    return row.get("type") == SYNTACTIC
+
+
+def iter_vert_rows(fobj, source="vert.tsv", delimiter="\t", syntactic=False):
     """Yield the rows of a vert.tsv as dicts, refusing files written before the
     ``code_variation`` column held feature lists.
+
+    The ``syntactic`` rows (components of multiword tokens, see ``is_syntactic``) are
+    left out unless ``syntactic=True``: a reader must ask for them explicitly.
 
     Older files have a ``variation`` column with a bare label
     (none/yes/unspecified/all/some), or the interim ``contains_variation``
@@ -111,7 +128,8 @@ def iter_vert_rows(fobj, source="vert.tsv", delimiter="\t"):
             # an old bare label (none/yes/all...) instead of a Key=Value feature list
             if value not in (None, "", "_") and "=" not in value:
                 raise _old_format_error(source, f"{COLUMN}='{value}'")
-        yield row
+        if syntactic or not is_syntactic(row):
+            yield row
 
 
 class OrthographicMarkers:

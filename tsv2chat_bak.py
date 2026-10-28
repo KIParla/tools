@@ -11,6 +11,8 @@ import csv
 import re
 from pathlib import Path
 
+from variety import is_syntactic
+
 # CLAN timestamp delimiter (U+0015 NAK, displayed as bullet in CLAN)
 BULLET = "\x15"
 
@@ -96,6 +98,8 @@ def _units_from_vert(fobj) -> list[tuple[str, list[dict]]]:
     units: dict[str, list[dict]] = {}
     order: list[str] = []
     for row in csv.DictReader(fobj, delimiter="\t"):
+        if is_syntactic(row):
+            continue
         uid = row["tu_id"]
         if uid not in units:
             units[uid] = []

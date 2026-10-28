@@ -50,6 +50,7 @@ if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
 from textutil import ENCODING_READ, ENCODING_WRITE  # noqa: E402
+from variety import is_syntactic  # noqa: E402
 
 TOLERANCE = 0.002  # seconds: align keeps three decimals, ELAN works in milliseconds
 
@@ -423,7 +424,23 @@ def reconcile_vert(old_path: Path | None, new_path: Path, out_path: Path,
         write_vert(out_path, fieldnames, new_rows)
         return {t: t for t in group_by_tu(new_rows)}, {"tus_added": len(group_by_tu(new_rows))}
     _, old_rows = read_vert(old_path)
+    # The syntactic rows (components of multiword tokens) are not in the transcription: they
+    # are set aside, then put back under their surface token if it survives, with its new
+    # speaker and tu_id.
+    children: dict[str, list[dict]] = {}
+    for r in old_rows:
+        if is_syntactic(r):
+            children.setdefault(r["token_id"][:-1], []).append(r)
+    old_rows = [r for r in old_rows if not is_syntactic(r)]
     rows, mapping, stats = reconcile_rows(old_rows, new_rows, hints, raw_times)
+    if children:
+        rows_out = []
+        for row in rows:
+            rows_out.append(row)
+            for child in children.pop(row["token_id"], []):
+                rows_out.append({**child, "speaker": row["speaker"], "tu_id": row["tu_id"]})
+        rows = rows_out
+        stats["syntactic_removed"] = sum(len(c) for c in children.values())
     write_vert(out_path, fieldnames, rows)
     return mapping, stats
 

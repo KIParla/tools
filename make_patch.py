@@ -59,6 +59,7 @@ TOOLS_DIR = Path(__file__).resolve().parent
 if str(TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(TOOLS_DIR))
 
+from variety import is_syntactic
 from jefferson_feats import (
     SPAN_DERIVED_FEAT_KEYS,
     parse_feats,
@@ -395,7 +396,7 @@ def make_added_row(
     return row
 
 
-def build_new_rows(
+def _build_new_rows(
     csv_rows: dict[str, dict],
     tsv_header: list[str],
     tsv_rows: list[dict],
@@ -669,6 +670,46 @@ def build_new_rows(
             next_id_by_tu[tu] = int(row['id']) + 1
 
     return final_rows, change_items, drop_items, add_items
+
+
+def build_new_rows(
+    csv_rows: dict[str, dict],
+    tsv_header: list[str],
+    tsv_rows: list[dict],
+    eol: str,
+) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
+    """``_build_new_rows`` on the transcription rows, then the syntactic rows back.
+
+    The ``syntactic`` rows of the TSV (components of multiword tokens, ``5-7a``) are not
+    in the transcription and the CSV sub-token rows are skipped by ``read_csv``, so the
+    diff must not see them: they would all look like dropped tokens. They travel with
+    their surface token; those of a token that no longer exists are reported as dropped.
+    `id` is computed on the transcription rows only (a syntactic row keeps its own).
+    """
+    main_rows = [r for r in tsv_rows if not is_syntactic(r)]
+    children: dict[str, list[dict]] = {}
+    for r in tsv_rows:
+        if is_syntactic(r):
+            children.setdefault(r['token_id'][:-1], []).append(r)
+
+    final_rows, change_items, drop_items, add_items = _build_new_rows(
+        csv_rows, tsv_header, main_rows, eol)
+    if not children:
+        return final_rows, change_items, drop_items, add_items
+
+    out: list[dict] = []
+    for row in final_rows:
+        out.append(row)
+        out.extend(children.pop(row['token_id'], []))
+    for orphans in children.values():
+        for r in orphans:
+            drop_items.append({
+                'token_id': r['token_id'], 'tu_id': r.get('tu_id', '_'),
+                'span': r.get('span', '_'), 'form': r.get('form', '_'),
+                'jefferson_feats': r.get('jefferson_feats', '_'),
+                'notes': ['❌ syntactic row of a token that no longer exists'],
+            })
+    return out, change_items, drop_items, add_items
 
 
 def _mc(value: str) -> str:
