@@ -109,7 +109,8 @@ def _merge_positional_feature(prev_value: str, dropped_value: str, offset: int, 
 
     For pace/guesses/overlaps, if the shifted span picks up exactly where
     the kept token's last span of the same kind (prefix + group id) left
-    off — the normal case for a token that was itself one continuous
+    off, or starts inside it (the kept span can run past the original form,
+    e.g. `0-8` on a 7-char form) — the normal case for a token that was itself one continuous
     slow/fast/overlap span — the two are collapsed into one continuous
     span instead of two adjacent comma-separated entries (`Slow=0-4(0)` +
     `Slow=4-7(0)` → `Slow=0-7(0)`, not `Slow=0-4(0),Slow=4-7(0)`).
@@ -127,9 +128,10 @@ def _merge_positional_feature(prev_value: str, dropped_value: str, offset: int, 
     if (last and first_new
             and last.group('prefix') == first_new.group('prefix')
             and last.group('suffix') == first_new.group('suffix')
-            and int(last.group('end')) == int(first_new.group('start'))):
+            and int(first_new.group('start')) <= int(last.group('end'))):
         prev_entries[-1] = (
-            f"{last.group('prefix') or ''}{last.group('start')}-{first_new.group('end')}"
+            f"{last.group('prefix') or ''}{last.group('start')}-"
+            f"{max(int(last.group('end')), int(first_new.group('end')))}"
             f"{last.group('suffix') or ''}"
         )
         shifted_entries = shifted_entries[1:]

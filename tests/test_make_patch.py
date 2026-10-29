@@ -173,6 +173,32 @@ def test_contiguous_pace_spans_collapse_into_one(tmp_path):
     assert "Slow=0-4(0),Slow=4-7(0)" not in patch
 
 
+def test_overlapping_pace_spans_collapse_into_one(tmp_path):
+    """A kept span that runs past the original form (0-8 on a 7-char form)
+    overlaps the shifted dropped span (7-16): they fuse into 0-16, not
+    `0-8(0),7-16(0)`."""
+    tsv_path = tmp_path / "CONV001.vert.tsv"
+    csv_path = tmp_path / "wip" / "KIP" / "CONV001.csv"
+    csv_path.parent.mkdir(parents=True)
+    patch_path = tmp_path / "CONV001.vert.tsv.patch"
+
+    tsv_rows = [
+        "0-0\tSPK1\t0\tduemila\tduemila\tlinguistic\t_\t_\t_\tSlow=0-8(0)\t_\t_",
+        "0-1\tSPK1\t0\tquattordici\tquattordici\tlinguistic\t_\t_\t_\tSlow=0-9(0)\t_\t_",
+    ]
+    csv_rows = [
+        "0-0,SPK1,0,0,1,duemilaquattordici,duemilaquattordici,duemilaquattordici,NUM,_",
+    ]
+    write_crlf(tsv_path, TSV_HEADER, tsv_rows)
+    write_csv(csv_path, CSV_HEADER, csv_rows)
+
+    make_patch.make_patch(str(csv_path), str(tsv_path), str(patch_path))
+
+    patch = patch_path.read_text(encoding="utf-8")
+    assert "Slow=0-16(0)" in patch
+    assert "Slow=0-8(0),Slow=7-16(0)" not in patch
+
+
 def test_non_contiguous_pace_spans_stay_separate(tmp_path):
     """Same shape, but the kept token's existing span doesn't end where the
     shifted dropped span begins — must NOT be merged into one range."""
