@@ -1430,6 +1430,21 @@ window.addEventListener('pointermove', function(event) {
 });
 window.addEventListener('pointerup', stopTimelineDrag);
 window.addEventListener('pointercancel', stopTimelineDrag);
+
+// Release label: <module>/version.json holds the latest release of the module,
+// so a new release updates one file instead of every page. The text written
+// at generation time stays as the fallback (no JS, file://, missing file).
+(function() {
+    var link = document.getElementById('release-link');
+    if (!link || !link.dataset.versionJson || !window.fetch) return;
+    fetch(link.dataset.versionJson).then(function(r) {
+        return r.ok ? r.json() : null;
+    }).then(function(v) {
+        if (!v || !v.label) return;
+        link.textContent = v.label;
+        if (v.url) link.setAttribute('href', v.url);
+    }).catch(function() {});
+})();
 """
 
 
@@ -1761,8 +1776,9 @@ def build_html(
     release_html = ""
     if release_label:
         release_html = (
-            f'· <a href="{e(release_url)}">{e(release_label)}</a>' if release_url
-            else f"· {e(release_label)}"
+            f'· <a id="release-link" data-version-json="../version.json" href="{e(release_url)}">{e(release_label)}</a>'
+            if release_url
+            else f'· <span>{e(release_label)}</span>'
         )
 
     # colour map across all speakers from both transcripts, keyed to a CSS

@@ -21,6 +21,7 @@ Usage:
 """
 
 import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -35,6 +36,15 @@ def _codes(module_root: Path) -> list[str]:
     jeff_dir = module_root / "linear-enriched"
     src_dir = orth_dir if orth_dir.is_dir() else jeff_dir
     return sorted(p.stem for p in src_dir.glob("*.txt"))
+
+
+def write_version_json(module_dir: Path, label: str, url: str | None) -> Path:
+    """<artifacts>/<module>/version.json: the release label shown in the page footers."""
+    module_dir.mkdir(parents=True, exist_ok=True)
+    path = module_dir / "version.json"
+    path.write_text(json.dumps({"label": label, "url": url or ""}, indent=2) + "\n",
+                    encoding="utf-8")
+    return path
 
 
 def main():
@@ -52,6 +62,10 @@ def main():
                           "local/manual run.")
     ap.add_argument("--release-url",
                      help="Link target for --release-label. Forwarded to linear2html.py.")
+    ap.add_argument("--only", nargs="+", metavar="CODE",
+                     help="Regenerate only these conversation codes (e.g. after a patch release "
+                          "that touched a few files). The other pages keep their text; their "
+                          "release label follows <module>/version.json.")
     args = ap.parse_args()
 
     module_root = args.module_root
@@ -68,6 +82,15 @@ def main():
     if not codes:
         print(f"[error] no conversations found under {orth_dir} or {jeff_dir}", file=sys.stderr)
         sys.exit(1)
+    if args.only:
+        unknown = sorted(set(args.only) - set(codes))
+        if unknown:
+            print(f"[error] --only: unknown conversation code(s): {', '.join(unknown)}", file=sys.stderr)
+            sys.exit(1)
+        codes = sorted(set(args.only))
+    if args.release_label:
+        write_version_json(Path(args.artifacts_root) / module_name,
+                           args.release_label, args.release_url)
 
     failures = []
     for code in tqdm.tqdm(codes, desc=f"linear2html [{module_name}]"):

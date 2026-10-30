@@ -816,3 +816,65 @@ def test_batch_mode_processes_all_csvs_in_wip_subdir(tmp_path):
     assert failures == 0
     assert (project_root / "patches" / "KIP" / "ONE.vert.tsv.patch").exists()
     assert (project_root / "patches" / "KIP" / "TWO.vert.tsv.patch").exists()
+
+
+# --- working in the review file -------------------------------------------------
+
+def _review_setup(tmp_path):
+    tsv_path = tmp_path / "CONV001.vert.tsv"
+    csv_path = tmp_path / "wip" / "KIP" / "CONV001.csv"
+    csv_path.parent.mkdir(parents=True)
+    patch_path = tmp_path / "patches" / "KIP" / "CONV001.vert.tsv.patch"
+    write_crlf(tsv_path, TSV_HEADER, TSV_ROWS)
+    write_csv(csv_path, CSV_HEADER, CSV_ROWS)
+    assert make_patch.make_patch(str(csv_path), str(tsv_path), str(patch_path))
+    return tsv_path, csv_path, patch_path, patch_path.parent / "CONV001.review.csv"
+
+
+def _edit_review(review_p, fn):
+    lines = review_p.read_text(encoding="utf-8").splitlines()
+    review_p.write_text("\n".join(fn(lines)) + "\n", encoding="utf-8")
+
+
+def test_review_cell_edit_is_pulled_into_wip(tmp_path):
+    tsv_path, csv_path, patch_path, review_p = _review_setup(tmp_path)
+    _edit_review(review_p, lambda L: [l.replace(",NOUN,", ",ADJ,") for l in L])
+
+    assert make_patch.make_patch(str(csv_path), str(tsv_path), str(patch_path))
+
+    assert "2-0,SPK2,2,2,1,elledue.,elledue,L2,ADJ," in csv_path.read_text(encoding="utf-8")
+
+
+def test_review_added_and_removed_rows_are_pulled_into_wip(tmp_path):
+    tsv_path, csv_path, patch_path, review_p = _review_setup(tmp_path)
+
+    def edit(L):
+        out = []
+        for l in L:
+            if ",1-0," in l:
+                continue                                    # row removed
+            out.append(l)
+            if ",0-0," in l:                                # row added after 0-0
+                out.append("_,_,0-1,SPK1,0,0,2,bene,bene,bene,ADV,_")
+        return out + [""]                                   # trailing blank line
+
+    _edit_review(review_p, edit)
+    assert make_patch.make_patch(str(csv_path), str(tsv_path), str(patch_path))
+
+    wip = csv_path.read_text(encoding="utf-8")
+    assert "0-1,SPK1,0,0,2,bene,bene,bene,ADV,_" in wip
+    assert "1-0," not in wip
+    assert "0-1" in patch_path.read_text(encoding="utf-8")
+
+
+def test_review_row_change_with_wip_also_edited_is_refused_untouched(tmp_path):
+    tsv_path, csv_path, patch_path, review_p = _review_setup(tmp_path)
+    _edit_review(review_p, lambda L: [l for l in L if ",1-0," not in l])
+    review_before = review_p.read_bytes()
+    csv_path.write_text(csv_path.read_text(encoding="utf-8").replace("VERB", "AUX"), encoding="utf-8")
+    wip_before = csv_path.read_bytes()
+
+    assert make_patch.make_patch(str(csv_path), str(tsv_path), str(patch_path)) is False
+
+    assert review_p.read_bytes() == review_before
+    assert csv_path.read_bytes() == wip_before

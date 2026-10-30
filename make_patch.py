@@ -49,6 +49,7 @@ The output patch can be applied with:
 """
 
 import csv
+import io
 import sys
 import difflib
 import re
@@ -184,7 +185,13 @@ def read_csv(path: Path) -> dict[str, dict]:
         for row in csv.DictReader(f):
             tid = row['token_id'].strip()
             if not is_subtoken(tid):
-                rows[tid] = {k: v.strip() for k, v in row.items()}
+                row = {k: (v or '').strip() for k, v in row.items()}
+                # `space_after` is its own CSV column; fold it back into the
+                # feature string the rest of the script reads SpaceAfter from.
+                if row.get('space_after') == 'SpaceAfter=No':
+                    jf = [x for x in row.get('jefferson_feats', '_').split('|') if x not in ('', '_')]
+                    row['jefferson_feats'] = '|'.join(jf + ['SpaceAfter=No'])
+                rows[tid] = row
     return rows
 
 
@@ -264,6 +271,10 @@ def update_jefferson_feats(tsv_value: str, csv_value: str, span_changed: bool,
     - Non-span features (ProsodicLink, SpaceAfter, Nonce, Variety, …) are always
       preserved from the TSV.
     - Lang from CSV is merged in last, overriding any Lang already present.
+    - SpaceAfter=No from the CSV is also merged in (an elision such as "l'" is
+      glued to the next token). A token carrying SpaceAfter=No is an elision, not
+      a truncated word, so a Truncated=Yes derived only from its trailing
+      apostrophe is dropped.
     """
     tsv_feats = parse_feats(tsv_value)
 
@@ -284,6 +295,10 @@ def update_jefferson_feats(tsv_value: str, csv_value: str, span_changed: bool,
         merged = dict(tsv_feats)
 
     merged.update(lang_feats)
+    if csv_feats.get('SpaceAfter') == 'No':
+        merged['SpaceAfter'] = 'No'
+    if merged.get('SpaceAfter') == 'No':
+        merged.pop('Truncated', None)
     return format_feats(merged)
 
 
@@ -479,6 +494,28 @@ def _build_new_rows(
                         notes.append(f"✅ {col}=`{value}` → `{prev['token_id']}` (shifted +{offset})")
                         transferred.add(col)
 
+            # A pace/guess span is stored per token (`Slow=0-4(0)` on every
+            # token it covers). A dropped token that sits inside such a span,
+            # with the same span continuing on the kept tokens on both sides,
+            # takes nothing with it: the neighbours already carry the span.
+            def _span_keys(value: str) -> set[tuple]:
+                keys = set()
+                for entry in value.split(','):
+                    m = _SPAN_ENTRY_RE.match(entry)
+                    if m:
+                        keys.add((m.group('prefix'), m.group('suffix')))
+                return keys
+
+            prev_kept = new_rows[-1] if new_rows else None
+            next_kept = next((r for r in tsv_rows[idx + 1:] if r.get('token_id', '') in csv_rows), None)
+            for c in ('pace', 'guesses'):
+                if c in manual_losses and c not in transferred and prev_kept and next_kept:
+                    keys = _span_keys(manual_losses[c])
+                    if keys and keys <= _span_keys(prev_kept.get(c, '_')) \
+                            and keys <= _span_keys(next_kept.get(c, '_')):
+                        notes.append(f"✅ {c}=`{manual_losses[c]}` già coperto dai token vicini")
+                        transferred.add(c)
+
             for c, v in manual_losses.items():
                 if c not in transferred:
                     notes.append(f"⚠️ {c}=`{v}`")
@@ -491,6 +528,8 @@ def _build_new_rows(
                 'jefferson_feats': tsv_row.get('jefferson_feats', '_'),
                 'old_row': dict(tsv_row),
                 'notes': notes,
+                # CSV row that absorbed this drop (for the `merge` column)
+                'anchor': new_rows[-1]['token_id'] if new_rows else None,
             }
             drop_items.append(drop_item)
             if 'Begin' in align_d:
@@ -506,9 +545,15 @@ def _build_new_rows(
         any_content_changed = False
         span_changed = False
         form_changed = False
+        span_pending = False
         for col in PATCHABLE_COLS:
             if col in col_set and col in csv_row:
                 raw_val = csv_row[col]
+                if col == 'span' and raw_val == '_':
+                    # span still to be filled in by hand in the CSV: it is a
+                    # placeholder, never a value to write into the corpus.
+                    span_pending = True
+                    continue
                 if col == 'form' and raw_val in ('[PAUSE]', '[NVB]'):
                     # [PAUSE]/[NVB] are the lemmatization project's own
                     # CoNLL-U placeholder forms (see conllu2wip.py) — not
@@ -529,6 +574,16 @@ def _build_new_rows(
                         span_changed = True
                     elif col == 'form':
                         form_changed = True
+
+        # An `unknown` token whose span was transcribed (no longer x-only)
+        # is now an ordinary linguistic token.
+        if (
+            'type' in col_set
+            and span_changed
+            and old_row_snapshot.get('type') == 'unknown'
+            and not re.fullmatch(r'x+', new_row.get('span', ''))
+        ):
+            new_row['type'] = 'linguistic'
 
         if 'jefferson_feats' in col_set:
             old_jf = new_row.get('jefferson_feats', '_')
@@ -588,6 +643,8 @@ def _build_new_rows(
         # Snapshot deferred: new_row may still be modified by ADD section (align)
         if any_content_changed:
             change_notes: list[str] = []
+            if span_pending:
+                change_notes.append('⚠️ span `_` nel CSV: da compilare, span del TSV non toccato')
             if form_changed and not span_changed:
                 # Check whether the new form is derivable from the (unchanged) span
                 span = new_row.get('span', '_')
@@ -794,6 +851,158 @@ def _altro_cell(type_: str, old_row: dict | None, new_row: dict | None,
     return ' · '.join(parts)
 
 
+def merge_status_by_token(change_items, drop_items, add_items, csv_ids):
+    """{csv token_id: (status, note)} for every CSV row touched by the patch.
+
+    status is 'OK' (merged automatically), 'WARN' (needs a manual look) or
+    'FAIL' (a conflict the patch could not resolve). A change or an add is
+    judged by its own notes. A dropped TSV token has no CSV row, so a problem
+    with it is flagged on the CSV row that absorbed it (the previous kept
+    token, or the first row if there is none). Untouched rows are absent.
+    """
+    rank = {'OK': 0, 'WARN': 1, 'FAIL': 2}
+    status: dict[str, tuple[str, list[str]]] = {}
+
+    def clean(note):
+        return re.sub(r'^[^\w`(]+', '', note).replace('`', '').strip()
+
+    def mark(tid, icon, notes, prefix=''):
+        if tid is None:
+            return
+        st = {'✅': 'OK', '⚠️': 'WARN', '❌': 'FAIL'}[icon]
+        texts = [prefix + clean(n) for n in notes if not n.startswith('✅')]
+        old_st, old_notes = status.get(tid, ('OK', []))
+        status[tid] = (st if rank[st] > rank[old_st] else old_st, old_notes + texts)
+
+    for item in (*change_items, *add_items):
+        mark(item['token_id'], _status_icon(item.get('notes', [])), item.get('notes', []))
+    first = csv_ids[0] if csv_ids else None
+    for item in drop_items:
+        mark(item.get('anchor') or first, _status_icon(item.get('notes', [])),
+             item.get('notes', []), prefix=f"del {item['token_id']}: ")
+    return status
+
+
+def write_review_csv(csv_p: Path, out_p: Path, status: dict) -> None:
+    """Copy of the wip CSV with `merge` (OK / WARN / FAIL / _) and `note` as
+    the first two columns, for scanning the rows that need a manual look.
+    A derived file: the wip CSV itself is never touched. Sub-token rows
+    (4-7a) follow their parent."""
+    raw = csv_p.read_bytes().decode('utf-8').lstrip('\ufeff')
+    eol = '\r\n' if '\r\n' in raw else '\n'
+    rows = list(csv.reader(io.StringIO(raw, newline='')))
+    if not rows:
+        return
+    header = rows[0]
+    ti = header.index('token_id')
+    out = [['merge', 'note'] + header]
+    for r in rows[1:]:
+        tid = r[ti].strip()
+        m = re.fullmatch(r'(\d+-\d+)[A-Za-z]', tid)
+        st, notes = status.get(m.group(1) if m else tid, ('_', []))
+        out.append([st, ' | '.join(notes) or '_'] + r)
+    out_p.parent.mkdir(parents=True, exist_ok=True)
+    buf = io.StringIO()
+    csv.writer(buf, lineterminator=eol).writerows(out)
+    out_p.write_bytes(buf.getvalue().encode('utf-8'))
+    # snapshot of the wip CSV as it was when this review was generated: the
+    # common ancestor for pull_review_edits' three-way merge.
+    base_p = review_base_path(out_p)
+    base_p.parent.mkdir(parents=True, exist_ok=True)
+    base_p.write_bytes(raw.encode('utf-8'))
+
+
+def review_base_path(review_p: Path) -> Path:
+    return review_p.parent / '.review-base' / (review_p.name.removesuffix('.review.csv') + '.csv')
+
+
+def pull_review_edits(csv_p: Path, review_p: Path) -> bool:
+    """Carry edits made in <FILE>.review.csv back into the wip CSV.
+
+    The review file is a generated copy with two extra leading columns
+    (`merge`, `note`), and the place where the work is done: cells, rows
+    added, removed or moved, token merges and a/b splits are all edited
+    there. The snapshot taken at generation time is the common ancestor.
+
+    * wip unchanged since the snapshot: the review's rows become the wip
+      CSV (any edit, structural or not).
+    * wip also edited: a three-way merge per cell, possible only if the
+      review kept the same rows in the same order. A cell edited only in the
+      review is written to the wip CSV; edited only in wip is kept; edited in
+      both to different values is a conflict and wip wins (reported).
+    * wip edited AND rows changed in the review: nothing can be merged
+      safely. Returns False and leaves every file untouched (the review too,
+      so no work is lost): the caller must not regenerate.
+    """
+    base_p = review_base_path(review_p)
+    if not (review_p.exists() and base_p.exists() and csv_p.exists()):
+        return True
+
+    def load(path, skip=0, aligned=False):
+        raw = path.read_bytes().decode('utf-8').lstrip('\ufeff')
+        rows = csv.reader(io.StringIO(raw, newline=''), skipinitialspace=aligned)
+        if aligned:
+            # a CSV editor may have padded the columns to align them
+            rows = [[c.strip() for c in r][skip:] for r in rows]
+            return [r for r in rows if any(r)], raw  # and added blank lines
+        return [r[skip:] for r in rows], raw
+
+    review, _ = load(review_p, skip=2, aligned=True)
+    base, _ = load(base_p)
+    wip, wip_raw = load(csv_p)
+    base_s = [[c.strip() for c in r] for r in base]
+    if not review or review[0] != base_s[0] or wip[0] != base[0]:
+        print(f"ERRORE {review_p.name}: colonne cambiate, modifiche NON riportate in wip "
+              f"(il review non e' stato toccato)", file=sys.stderr)
+        return False
+    if review == base_s:
+        return True
+    ti = base[0].index('token_id')
+
+    def write_wip(rows):
+        eol = '\r\n' if '\r\n' in wip_raw else '\n'
+        buf = io.StringIO()
+        csv.writer(buf, lineterminator=eol).writerows(rows)
+        bom = b'\xef\xbb\xbf' if csv_p.read_bytes().startswith(b'\xef\xbb\xbf') else b''
+        csv_p.write_bytes(bom + buf.getvalue().encode('utf-8'))
+
+    if wip == base:
+        added = [r[ti] for r in review if r[ti] not in {b[ti] for b in base}]
+        removed = [b[ti] for b in base if b[ti] not in {r[ti] for r in review}]
+        write_wip(review)
+        print(f"Riportate in {csv_p.name} le modifiche di {review_p.name} "
+              f"({len(added)} righe aggiunte, {len(removed)} tolte)")
+        return True
+
+    same_rows = len(review) == len(base) == len(wip) and \
+        [r[ti] for r in review] == [r[ti] for r in base_s] == [r[ti] for r in wip]
+    if not same_rows:
+        print(f"ERRORE {review_p.name}: righe cambiate nel review E modifiche al wip dopo la "
+              f"generazione del review. Non posso unirle: modifiche NON riportate, review e wip "
+              f"non toccati. Rigenera il review dal wip (tenendone una copia) oppure sposta a "
+              f"mano le modifiche.", file=sys.stderr)
+        return False
+
+    pulled = conflicts = 0
+    for i in range(1, len(base)):
+        for j, name in enumerate(base[0]):
+            b, r, w = base[i][j], review[i][j], wip[i][j]
+            if r == b.strip():
+                continue
+            if w == b:
+                wip[i][j] = r
+                pulled += 1
+            elif w != r:
+                conflicts += 1
+                print(f"CONFLITTO {csv_p.name} {base[i][ti]} {name}: wip `{w}` vs review `{r}` (tengo wip)",
+                      file=sys.stderr)
+    if pulled:
+        write_wip(wip)
+        print(f"Riportate in {csv_p.name} {pulled} modifiche da {review_p.name}"
+              + (f" ({conflicts} conflitti)" if conflicts else ''))
+    return True
+
+
 def write_recap(
     recap_p: Path,
     tsv_name: str,
@@ -827,18 +1036,16 @@ def write_recap(
     # authoritative final id per surviving token has to come from final_rows.
     final_id_by_token = {r['token_id']: r.get('id', '_') for r in final_rows}
 
+    n_check = sum(1 for it in (*change_items, *drop_items, *add_items)
+                  if _status_icon(it.get('notes', [])) != '✅')
+    n_fail = sum(1 for it in (*change_items, *drop_items, *add_items)
+                 if _status_icon(it.get('notes', [])) == '❌')
     lines: list[str] = [
         f"# Patch recap — {tsv_name}",
-        f"Generated: {date.today()}  |  CSV: `{csv_name}`",
+        f"CSV `{csv_name}` · {date.today()} · {len(change_items)} modifiche · "
+        f"{len(drop_items)} eliminazioni · {len(add_items)} aggiunte · "
+        f"**{n_check} da verificare** ({n_fail} conflitti)",
         "",
-        "| tipo | conteggio |",
-        "|------|----------|",
-        f"| modifiche | {len(change_items)} |",
-        f"| eliminazioni | {len(drop_items)} |",
-        f"| aggiunte | {len(add_items)} |",
-        "",
-        "| token_id | id | tipo | livello | span | form | altro |",
-        "|----------|----|------|---------|------|------|-------|",
     ]
 
     # Build ordered list of (type, item) following TSV/CSV token order.
@@ -866,18 +1073,34 @@ def write_recap(
         old_row = item.get('old_row')
         new_row = item.get('new_row')
         notes = item.get('notes', [])
+        icon = _status_icon(notes)
 
-        livello = LIVELLO_LABEL[_status_icon(notes)]
-        row_id = (old_row.get('id', '_') if type_ == 'drop'
-                  else final_id_by_token.get(tid, '_'))
         span_cell = _cell(type_, 'span', old_row, new_row)
         form_cell = _cell(type_, 'form', old_row, new_row)
+        if type_ == 'change':
+            # only what changed; an unchanged value is not news
+            if old_row.get('span') == new_row.get('span'):
+                span_cell = ''
+            if old_row.get('form') == new_row.get('form'):
+                form_cell = ''
+        # span and form usually change together: show them once when equal
+        if span_cell == form_cell:
+            what = span_cell
+        else:
+            what = ' · '.join(c for c in (
+                f'span {span_cell}' if span_cell else '',
+                f'form {form_cell}' if form_cell else '') if c)
         altro_cell = _altro_cell(type_, old_row, new_row, tsv_header, notes)
 
-        lines.append(
-            f"| `{_mc(tid)}` | {_mc(row_id)} | {TIPO_LABEL[type_]} | {livello} | "
-            f"{span_cell} | {form_cell} | {altro_cell} |"
-        )
+        box = '[x]' if icon == '✅' else '[ ]'
+        tag = {'change': 'mod', 'drop': 'del', 'add': 'agg'}[type_]
+        text = f"- {box} `{_mc(tid)}` {tag} {what}".rstrip()
+        if altro_cell:
+            text += f" — {altro_cell}"
+        if type_ == 'drop' and icon != '✅' and item.get('anchor'):
+            text += f" · nel CSV vicino a `{_mc(item['anchor'])}`"
+        text = text.replace('\\|', '|')  # no table here: pipes need no escaping
+        lines.append(text)
 
     recap_p.write_text('\n'.join(lines) + '\n', encoding='utf-8')
     return True
@@ -912,6 +1135,17 @@ def infer_tsv_path(csv_path: Path, source_root: str | Path | None = None) -> Pat
     return base / corpus / 'tsv' / f'{csv_path.stem}.vert.tsv'
 
 
+def duplicate_token_ids(path: Path) -> list[str]:
+    """token_ids that appear on more than one CSV row (sub-token ids included)."""
+    with open(path, newline='', encoding='utf-8-sig') as f:
+        ids = [(r['token_id'] or '').strip() for r in csv.DictReader(f)]
+    counts = {}
+    for tid in ids:
+        if tid not in ('', '_'):
+            counts[tid] = counts.get(tid, 0) + 1
+    return [tid for tid, n in counts.items() if n > 1]
+
+
 def make_patch(csv_path: str, tsv_path: str, output_patch: str | None = None) -> bool:
     csv_p = Path(csv_path)
     tsv_p = Path(tsv_path)
@@ -923,6 +1157,8 @@ def make_patch(csv_path: str, tsv_path: str, output_patch: str | None = None) ->
     print(f"Patch: {out_p}")
     print()
 
+    if not pull_review_edits(csv_p, out_p.parent / f'{csv_p.stem}.review.csv'):
+        return False
     csv_rows = read_csv(csv_p)
     tsv_header, tsv_rows, tsv_lines, eol = read_tsv(tsv_p)
     validate_required_token_fields(csv_rows, str(csv_p))
@@ -947,6 +1183,15 @@ def make_patch(csv_path: str, tsv_path: str, output_patch: str | None = None) ->
         fromfile=f'a/{tsv_rel}',
         tofile=f'b/{tsv_rel}',
     ))
+
+    status = merge_status_by_token(change_items, drop_items, add_items, list(csv_rows))
+    for tid in duplicate_token_ids(csv_p):
+        _, notes = status.get(tid, ('OK', []))
+        status[tid] = ('FAIL', notes + ['token_id duplicato nel CSV'])
+        print(f"  ❌ token_id duplicato nel CSV: {tid}")
+    write_review_csv(
+        csv_p, out_p.parent / f'{csv_p.stem}.review.csv', status,
+    )
 
     out_p.parent.mkdir(parents=True, exist_ok=True)
 

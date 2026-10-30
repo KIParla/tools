@@ -1,11 +1,11 @@
 = Validation
 
-Generated 2026-10-17 17:33 UTC by `tools/generate_validation_report.py`. One page per module, combining `check_participants.py`'s metadata-consistency results with the pipeline's per-conversation warnings and errors (`tmp/process/json/summary.json`). Each module page has the actionable errors (an interactive, filterable table) and the diary of auto-fixed warnings.
+Generated 2026-10-30 19:27 UTC by `tools/generate_validation_report.py`. One page per module, combining `check_participants.py`'s metadata-consistency results with the pipeline's per-conversation warnings and errors (`tmp/process/json/summary.json`). Each module page has the actionable errors (an interactive, filterable table) and the diary of auto-fixed warnings.
 
 [cols="2,1,1,1"]
 |===
 |Module |Conversations |With errors / gaps |With warnings
-|xref:validation-kip.adoc[KIP] |121 |93 |119
+|xref:validation-kip.adoc[KIP] |121 |97 |119
 |xref:validation-kipasti.adoc[KIPasti] (no pipeline data) |63 |13 |0
 |xref:validation-parlabo.adoc[ParlaBO] |85 |80 |85
 |xref:validation-parlabz.adoc[ParlaBZ] |10 |9 |10

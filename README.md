@@ -129,6 +129,11 @@ python -m pytest tests/test_tsv2formats.py
   `sync.py` warns if you start again from `original/`). Re-processing rebuilt EAFs
   reproduces the TSVs except for a handful of tokens next to brackets/intonation marks
   (39 of 629,677 tokens in Stra-ParlaBO).
+- **Rebuilding the HTML/PDF pages:** `python generate_artifacts.py --module-root <module> --artifacts-root <KIParla-artifacts> --release-label KIP@vX.Y.Z --release-url <url>`
+  rebuilds every conversation. After a patch release that touched a few files use `--only BOA1001 …`:
+  only those pages and PDFs are rebuilt, and `<module>/version.json` (always rewritten when
+  `--release-label` is given) updates the release label shown in the footer of all the other pages
+  (the label written into an HTML at generation time is only the fallback; the PDFs keep their own).
 - **Validation report:** `sync.py` refreshes the synced module's page
   (`validation-<module>.adoc`) and the index; to rebuild several modules at once run
   `python generate_validation_report.py --modules <module dirs>`.
