@@ -69,11 +69,10 @@ def test_change_summary_in_recap(tmp_path):
     make_patch.make_patch(str(csv_path), str(tsv_path), str(patch_path))
 
     recap = (tmp_path / "CONV001.vert.tsv.recap.md").read_text(encoding="utf-8")
-    assert "| modifiche | 3 |" in recap
-    assert "| eliminazioni | 1 |" in recap
-    assert "| aggiunte | 0 |" in recap
-    assert "| token_id | id | tipo | livello | span | form | altro |" in recap
-    assert "| `1-0` | _ | [MOD] modifica | [OK] gestito automaticamente" in recap
+    assert "3 modifiche" in recap
+    assert "1 eliminazioni" in recap
+    assert "0 aggiunte" in recap
+    assert "- [x] `1-0` mod" in recap
     assert "`sostiuire` → `sostituire`" in recap
 
 
@@ -99,7 +98,7 @@ def test_token_drop_transfers_end_timestamp(tmp_path):
     # separate "✅ End=... → token_id" note — that's redundant with 2-0's own
     # align: `_` → `End=3.5` diff.
     recap = (tmp_path / "CONV001.vert.tsv.recap.md").read_text(encoding="utf-8")
-    assert "| `2-1` | _ | [DEL] eliminazione | [OK] gestito automaticamente" in recap
+    assert "- [x] `2-1` del" in recap
     assert "End=3.5` → `2-0`" not in recap
 
 
@@ -137,9 +136,9 @@ def test_pace_transferred_and_shifted_on_merge(tmp_path):
     # Both rows report as fully automatic; the transfer itself is visible from
     # the field diffs (kept row's own pace: `_` → `Slow=4-7(0)`), so no
     # separate "✅ pace=... → token_id (shifted)" note is expected anymore.
-    assert "| `0-0` | _ | [MOD] modifica | [OK] gestito automaticamente" in recap
+    assert "- [x] `0-0` mod" in recap
     assert "pace: `_` → `Slow=4-7(0)`" in recap
-    assert "| `0-1` | _ | [DEL] eliminazione | [OK] gestito automaticamente" in recap
+    assert "- [x] `0-1` del" in recap
     assert "shifted" not in recap
     assert "⚠️ pace" not in recap
 
@@ -455,7 +454,7 @@ def test_added_token_is_inserted_and_receives_end(tmp_path):
     # span changed from "due." to "due": Intonation=Falling is recomputed from new span → removed
     assert "+2-1\tSPK2\t2\tdue\tdue\tlinguistic\t_\t_\t_\t_\t_\t_" in patch
     assert "+2-2\tSPK2\t2\tehm\tehm\tlinguistic\t_\tEnd=3.5\t_\t_\t_\t_" in patch
-    assert "| `2-2` | _ | [ADD] aggiunta | [OK] gestito automaticamente" in recap
+    assert "- [x] `2-2` agg" in recap
     assert "End=3.5" in recap
 
 
@@ -485,7 +484,7 @@ def test_added_bis_token_id_is_not_filtered_as_subtoken(tmp_path):
 
     assert "+1bis\tSPK1\t1\tehm\tehm\tlinguistic\t_\tEnd=1.5\t_\t_\t_\t_" in patch
     assert "Begin=1.6" in patch
-    assert "| `1bis` | _ | [ADD] aggiunta | [OK] gestito automaticamente" in recap
+    assert "- [x] `1bis` agg" in recap
 
 
 def test_added_token_infers_missing_speaker_and_tu_id(tmp_path):
@@ -561,9 +560,9 @@ def test_recap_is_in_row_order_with_change_drop_and_add(tmp_path):
 
     recap = (tmp_path / "CONV001.vert.tsv.recap.md").read_text(encoding="utf-8")
 
-    pos_change = recap.index("| `1-0` | _ | [MOD] modifica |")
-    pos_drop = recap.index("| `2-1` | _ | [DEL] eliminazione |")
-    pos_add = recap.index("| `2bis` | _ | [ADD] aggiunta |")
+    pos_change = recap.index("- [x] `1-0` mod")
+    pos_drop = recap.index("- [x] `2-1` del")
+    pos_add = recap.index("- [x] `2bis` agg")
     assert pos_change < pos_drop < pos_add
 
 
@@ -697,7 +696,7 @@ def test_lang_merged_when_span_unchanged(tmp_path):
     # Both TSV feats preserved, Lang added
     assert "Intonation=weakly_rising|ProsodicLink=Yes|Lang=lat" in patch
     # recap table cells escape `|` (it's the Markdown column separator)
-    assert r"Intonation=weakly_rising\|ProsodicLink=Yes\|Lang=lat" in recap
+    assert "Intonation=weakly_rising|ProsodicLink=Yes|Lang=lat" in recap
 
 
 def test_form_not_derivable_from_span_flagged_in_recap(tmp_path):
@@ -728,7 +727,7 @@ def test_form_not_derivable_from_span_flagged_in_recap(tmp_path):
     recap = (tmp_path / "CONV001.vert.tsv.recap.md").read_text(encoding="utf-8")
     # Token 0-0: form change not derivable → flagged
     assert "⚠️ forma non derivabile dallo span" in recap
-    assert "| `0-0` | _ | [MOD] modifica | [WARN] verifica manuale" in recap
+    assert "- [ ] `0-0` mod" in recap
     # Token 1-0: no change → not in recap
     assert "`1-0`" not in recap
 
