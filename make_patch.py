@@ -256,7 +256,8 @@ def row_to_line(row: dict, header: list[str], eol: str) -> str:
 
 
 def update_jefferson_feats(tsv_value: str, csv_value: str, span_changed: bool,
-                           new_span: str, old_span: str = '') -> str:
+                           new_span: str, old_span: str = '',
+                           old_form: str = '', new_form: str = '') -> str:
     """Compute the patched jefferson_feats for a kept token.
 
     Rules:
@@ -275,6 +276,8 @@ def update_jefferson_feats(tsv_value: str, csv_value: str, span_changed: bool,
       glued to the next token). A token carrying SpaceAfter=No is an elision, not
       a truncated word, so a Truncated=Yes derived only from its trailing
       apostrophe is dropped.
+    - An elision replaced by a full word (form `c'` → `cioè`) loses the SpaceAfter=No
+      it had, unless the CSV carries it: the word is not glued to the next token.
     """
     tsv_feats = parse_feats(tsv_value)
 
@@ -297,6 +300,8 @@ def update_jefferson_feats(tsv_value: str, csv_value: str, span_changed: bool,
     merged.update(lang_feats)
     if csv_feats.get('SpaceAfter') == 'No':
         merged['SpaceAfter'] = 'No'
+    elif old_form.endswith("'") and new_form and not new_form.endswith("'"):
+        merged.pop('SpaceAfter', None)
     if merged.get('SpaceAfter') == 'No':
         merged.pop('Truncated', None)
     return format_feats(merged)
@@ -593,6 +598,8 @@ def _build_new_rows(
                 span_changed=span_changed,
                 new_span=new_row.get('span', '_'),
                 old_span=old_row_snapshot.get('span', '_'),
+                old_form=old_row_snapshot.get('form', ''),
+                new_form=new_row.get('form', ''),
             )
             if new_jf != old_jf:
                 new_row['jefferson_feats'] = new_jf

@@ -878,3 +878,25 @@ def test_review_row_change_with_wip_also_edited_is_refused_untouched(tmp_path):
 
     assert review_p.read_bytes() == review_before
     assert csv_path.read_bytes() == wip_before
+
+
+def test_elision_replaced_by_full_word_loses_space_after_no(tmp_path):
+    """c' (SpaceAfter=No) → cioè: the word must not be glued to the next token."""
+    tsv_path = tmp_path / "CONV001.vert.tsv"
+    csv_path = tmp_path / "wip" / "KIP" / "CONV001.csv"
+    csv_path.parent.mkdir(parents=True)
+    patch_path = tmp_path / "CONV001.vert.tsv.patch"
+    write_crlf(tsv_path, TSV_HEADER, [
+        "0-0\tSPK1\t0\tc'\tc'\tlinguistic\tSpaceAfter=No\t_\t_\t_\t_\t_",
+        "0-1\tSPK1\t0\tè\tè\tlinguistic\t_\t_\t_\t_\t_\t_",
+    ])
+    write_csv(csv_path, CSV_HEADER, [
+        "0-0,SPK1,0,0,1,cioè,cioè,cioè,CCONJ,_",
+        "0-1,SPK1,0,0,2,è,è,essere,AUX,_",
+    ])
+
+    make_patch.make_patch(str(csv_path), str(tsv_path), str(patch_path))
+
+    patch = patch_path.read_text(encoding="utf-8")
+    assert "+0-0\tSPK1\t0\tcioè\tcioè\tlinguistic\t_\t" in patch
+    assert "SpaceAfter" not in "".join(l for l in patch.splitlines() if l.startswith("+"))
