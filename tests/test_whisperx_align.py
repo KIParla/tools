@@ -335,3 +335,43 @@ def test_avg_logprob_is_the_segment_value_shared_by_its_words(tmp_path):
     got = {r["whisper_text"]: r for r in csv.DictReader(open(out), delimiter="\t")}
     assert got["ciao"]["whisper_avg_logprob"] == got["bene"]["whisper_avg_logprob"] == "-0.2500"
     assert got["extra"]["whisper_avg_logprob"] == "_"
+
+
+# --- numbers and interrupted words -------------------------------------------
+
+def test_numbers_are_written_out_in_italian():
+    f = wx.numbers_to_words
+    assert (f("30"), f("23"), f("2019")) == ("trenta", "ventitré", "duemiladiciannove")
+    assert f("3,5") == "tre virgola cinque" and f("3,05") == "tre virgola zero cinque"
+    assert f("1.000") == "mille" and f("4-5") == "quattro cinque"
+    assert f("70,") == "settanta," and f("l'8") == "l'otto"
+    assert f("1,5%") == "uno virgola cinque%"
+    assert (f("w0"), f("20esimo"), f("ciao")) == ("w0", "20esimo", "ciao")  # not glued numbers only
+
+
+def test_a_number_matches_the_word_the_tsv_spells_out(tmp_path):
+    rows = _run(tmp_path, ["ho", "trenta", "anni"], ("ho", 0, 1), ("30", 1, 2), ("anni", 2, 3))
+    assert [r["alignment"] for r in rows] == ["match"] * 3
+    assert rows[1]["whisper_text"] == "trenta" and rows[1]["whisper_end"] == "2.000"
+
+
+def test_a_number_of_several_words_shares_the_time_by_length(tmp_path):
+    rows = _run(tmp_path, ["tre", "virgola", "cinque"], ("3,5", 0.0, 1.6))
+    assert [r["alignment"] for r in rows] == ["match"] * 3
+    assert [r["whisper_begin"] for r in rows] == ["0.000", "0.300", "1.000"]   # 3, 7 and 6 of 16 letters
+
+
+def test_interrupted_word_completed_by_whisper_is_a_match(tmp_path):
+    out = tmp_path / "o.tsv"
+    stats = wx.align_files(_write_json(tmp_path, ("orale", 0, 1), ("casa", 1, 2)),
+                           _write_tsv(tmp_path, ["or~", "casa"]), str(out), verbose=False)
+    rows = list(csv.DictReader(open(out), delimiter="\t"))
+    assert [r["alignment"] for r in rows] == ["match", "match"]
+    assert rows[0]["whisper_text"] == "orale" and stats["interrupted_completed"] == 1 and stats["mismatch"] == 0
+
+
+def test_interrupted_word_is_a_mismatch_unless_whisper_starts_with_it(tmp_path):
+    assert _run(tmp_path, ["or~"], ("casa", 0, 1))[0]["alignment"] == "mismatch"     # other word
+    assert _run(tmp_path, ["ora~"], ("or", 0, 1))[0]["alignment"] == "mismatch"      # shorter than the fragment
+    assert _run(tmp_path, ["or"], ("orale", 0, 1))[0]["alignment"] == "mismatch"     # not interrupted
+    assert _run(tmp_path, ["or~"], ("or", 0, 1))[0]["alignment"] == "match"          # same, no completion
