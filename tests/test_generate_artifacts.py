@@ -20,3 +20,11 @@ def test_footer_label_is_overridable_from_version_json():
     # the generated label is only a fallback: the script reads ../version.json
     assert "version.json" in l2h.JS
     assert "release-link" in l2h.JS
+
+
+def test_participant_table_follows_module_columns():
+    participants = {"A": {"code": "A", "study-level": "phd", "conversations": "C1",
+                          "years-in-italy": "0-1", "new-field": "x"}}
+    headers, rows = l2h.participant_table(participants, ["A", "???"])
+    assert headers == ["Codice", "Titolo di studio", "Anni in Italia", "new-field"]
+    assert rows == [["A", "phd", "0-1", "x"], ["???", "", "", ""]]

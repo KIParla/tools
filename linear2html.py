@@ -110,6 +110,48 @@ def tr(value, mapping):
     return mapping.get(value, value)
 
 
+# ── participant table columns ─────────────────────────────────────────────────
+# Column sets differ across modules (see csvw/participants-schema.json), so the
+# table follows the header of each module's participants.tsv. A column with no
+# label here is still shown, under its own name.
+PARTICIPANT_LABELS = {
+    "occupation":           "Occupazione",
+    "gender":               "Genere",
+    "birth-region":         "Regione",
+    "school-region":        "Regione",
+    "age-range":            "Età",
+    "study-level":          "Titolo di studio",
+    "L1":                   "L1",
+    "mothertongue":         "Lingua madre",
+    "age-of-arrival-italy": "Età di arrivo in Italia",
+    "years-in-italy":       "Anni in Italia",
+}
+PARTICIPANT_VALUE_LABELS = {
+    "occupation":  OCCUPATION_LABELS,
+    "study-level": STUDY_LABELS,
+}
+# "code" is always the first column; "conversations" is bookkeeping, not a
+# property of the speaker.
+PARTICIPANT_HIDDEN_COLUMNS = {"code", "conversations"}
+
+
+def participant_table(participants_map, speaker_order):
+    """Return (headers, rows) for the speakers; each row starts with the code."""
+    columns = [
+        col for col in next(iter(participants_map.values()), {})
+        if col and col not in PARTICIPANT_HIDDEN_COLUMNS
+    ]
+    headers = ["Codice"] + [PARTICIPANT_LABELS.get(col, col) for col in columns]
+    rows = []
+    for spk in speaker_order:
+        p = participants_map.get(spk, {})
+        rows.append([spk] + [
+            tr(p.get(col) or "", PARTICIPANT_VALUE_LABELS.get(col, {}))
+            for col in columns
+        ])
+    return headers, rows
+
+
 # ── loaders ───────────────────────────────────────────────────────────────────
 
 def load_tsv(path):
@@ -650,11 +692,11 @@ body.timeline-collapsed {
 .sidebar-toggle.active { background: var(--brand); color: #fff; border-color: var(--brand); }
 
 /* ── participant table ── */
+.table-scroll { overflow-x: auto; }
 table {
     width: 100%;
     border-collapse: collapse;
     font-size: .76rem;
-    table-layout: fixed;
 }
 thead th {
     text-align: left;
@@ -663,16 +705,14 @@ thead th {
     font-weight: 600;
     color: #444;
     border-bottom: 2px solid #ddd;
-    overflow-wrap: anywhere;
 }
 tbody tr:nth-child(odd) { background: #fafafa; }
 tbody td {
     padding: .28rem .5rem;
     border-bottom: 1px solid #e8e8e8;
     vertical-align: middle;
-    overflow-wrap: anywhere;
-    word-break: break-word;
 }
+tbody td { white-space: nowrap; }
 .dot {
     display: inline-block;
     width: 9px; height: 9px;
@@ -1539,20 +1579,25 @@ def _latex_key_value_table(rows):
 """
 
 
-def _latex_participants_table(rows):
+def _latex_participants_table(headers, rows):
+    # equal-width columns filling the page, whatever their number
+    column = (r">{\RaggedRight\arraybackslash}p{\dimexpr "
+              + f"{1 / len(headers):.4f}" + r"\textwidth-2\tabcolsep\relax}")
+    header = " & ".join(rf"\textbf{{\hspace{{0pt}}{_latex_escape(h)}}}" for h in headers) + r" \\"
     body = "\n".join(
         " & ".join(_latex_cell(cell) for cell in row) + r" \\"
         for row in rows
     )
+    size = r"\footnotesize" if len(headers) > 6 else r"\small"
     return rf"""
-\small
-\setlength{{\tabcolsep}}{{4pt}}
-\begin{{longtable}}{{>{{\RaggedRight\arraybackslash}}p{{0.11\textwidth}} >{{\RaggedRight\arraybackslash}}p{{0.16\textwidth}} >{{\RaggedRight\arraybackslash}}p{{0.11\textwidth}} >{{\RaggedRight\arraybackslash}}p{{0.18\textwidth}} >{{\RaggedRight\arraybackslash}}p{{0.11\textwidth}} >{{\RaggedRight\arraybackslash}}p{{0.22\textwidth}}}}
+{size}
+\setlength{{\tabcolsep}}{{3pt}}
+\begin{{longtable}}{{{column * len(headers)}}}
 \rowcolor{{kiparlaSand}}
-\textbf{{Codice}} & \textbf{{Occupazione}} & \textbf{{Genere}} & \textbf{{Regione}} & \textbf{{Età}} & \textbf{{Titolo di studio}} \\
+{header}
 \endfirsthead
 \rowcolor{{kiparlaSand}}
-\textbf{{Codice}} & \textbf{{Occupazione}} & \textbf{{Genere}} & \textbf{{Regione}} & \textbf{{Età}} & \textbf{{Titolo di studio}} \\
+{header}
 \endhead
 {body}
 \end{{longtable}}
@@ -1617,17 +1662,7 @@ def build_pdf_markdown(code, label, turns, timings, conv, participants_map, spea
         # "N/A") when generated outside the release pipeline, e.g. local dev.
         ("Release", f"{release_label} — {release_url}" if release_label and release_url else (release_label or "")),
     ]
-    participant_rows = []
-    for spk in speaker_order:
-        p = participants_map.get(spk, {})
-        participant_rows.append([
-            spk,
-            tr(p.get("occupation", ""), OCCUPATION_LABELS),
-            p.get("gender", ""),
-            p.get("birth-region", p.get("school-region", "")),
-            p.get("age-range", ""),
-            tr(p.get("study-level", ""), STUDY_LABELS),
-        ])
+    participant_headers, participant_rows = participant_table(participants_map, speaker_order)
 
     lines = [
         "---",
@@ -1658,7 +1693,7 @@ def build_pdf_markdown(code, label, turns, timings, conv, participants_map, spea
         "",
         "## Partecipanti",
         "",
-        _latex_participants_table(participant_rows),
+        _latex_participants_table(participant_headers, participant_rows),
         "",
         "## Trascrizione",
         "",
@@ -1812,26 +1847,20 @@ def build_html(
 
     # ── participant table ──
     speaker_list = list(colour_map.keys())
+    headers, participant_rows = participant_table(participants_map, speaker_list)
     rows = []
-    for spk in speaker_list:
-        p = participants_map.get(spk, {})
-        colour = colour_map[spk]
+    for spk, *values in participant_rows:
         rows.append(
             f'<tr>'
-            f'<td><span class="dot {colour}"></span><strong>{e(spk)}</strong></td>'
-            f'<td>{e(tr(p.get("occupation",""), OCCUPATION_LABELS))}</td>'
-            f'<td>{e(p.get("gender",""))}</td>'
-            f'<td>{e(p.get("birth-region", p.get("school-region","")))}</td>'
-            f'<td>{e(p.get("age-range",""))}</td>'
-            f'<td>{e(tr(p.get("study-level",""), STUDY_LABELS))}</td>'
-            f'</tr>'
+            f'<td><span class="dot {colour_map[spk]}"></span><strong>{e(spk)}</strong></td>'
+            + "".join(f'<td>{e(value)}</td>' for value in values)
+            + '</tr>'
         )
     table_html = (
-        '<table><thead><tr>'
-        '<th>Codice</th><th>Occupazione</th><th>Genere</th>'
-        '<th>Regione</th><th>Età</th><th>Titolo di studio</th>'
-        '</tr></thead>'
-        f'<tbody>{"".join(rows)}</tbody></table>'
+        '<div class="table-scroll"><table><thead><tr>'
+        + "".join(f'<th>{e(h)}</th>' for h in headers)
+        + '</tr></thead>'
+        f'<tbody>{"".join(rows)}</tbody></table></div>'
     ) if rows else ""
 
     pdf_links = pdf_links or {}
