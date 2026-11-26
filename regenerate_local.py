@@ -10,7 +10,7 @@ nothing races and the result can be inspected before it is pushed:
    the linear files, merges the metadata, regenerates `csv-metadata.json`, bumps the patch
    version in `CITATION.cff` and commits (one commit for all the modules).
 2. **KIParla-NoSketch-Data**: for each module, translates the metadata, regenerates
-   `<Corpus>/vertical/source` and updates INFO/INFOHREF in the registry; then the aggregate
+   `<Corpus>/vertical/conversations/<CODE>.vert` and updates INFO/INFOHREF in the registry; then the aggregate
    `KIParla` corpus from the collection just built. One commit.
 3. With `--push`: pushes both repositories, tags the collection and creates its GitHub Release
    (`gh`). Without `--push` nothing leaves the machine: the commands are printed.
@@ -143,13 +143,12 @@ def nosketch_module(data: Path, module: str, src: Path, tag: str) -> None:
     meta = data / "metadata" / corpus
     py(TOOLS / "translate_metadata.py", "--input-dir", src / "metadata", "--output-dir", meta,
        "--translations", data / "translations.tsv")
-    (data / corpus / "vertical").mkdir(parents=True, exist_ok=True)
-    with open(data / corpus / "vertical" / "source", "w", encoding="utf-8") as out:
-        py(TOOLS / "tsv2vert.py", "--artifacts-base-url", ARTIFACTS_URL, "--artifacts-module", module,
-           meta / "conversations.tsv", meta / "participants.tsv", *sorted((src / "tsv").glob("*.vert.tsv")),
-           stdout=out)
+    vertical = f"{corpus}/vertical/conversations"
+    py(TOOLS / "tsv2vert.py", "--artifacts-base-url", ARTIFACTS_URL, "--artifacts-module", module,
+       "--output-dir", data / vertical,
+       meta / "conversations.tsv", meta / "participants.tsv", *sorted((src / "tsv").glob("*.vert.tsv")))
     update_info(data / "registry" / corpus, tag)
-    git(data, "add", f"metadata/{corpus}", f"{corpus}/vertical/source", f"registry/{corpus}")
+    git(data, "add", f"metadata/{corpus}", vertical, f"registry/{corpus}")
 
 
 def nosketch_aggregate(data: Path, coll: Path, version: str) -> None:
@@ -158,16 +157,15 @@ def nosketch_aggregate(data: Path, coll: Path, version: str) -> None:
        "--translations", data / "translations.tsv")
     registries = [data / "registry" / corpus_name(m) for m in MODULES]
     common = [arg for r in registries for arg in ("--common-attrs-of", r)]
-    (data / "KIParla" / "vertical").mkdir(parents=True, exist_ok=True)
-    with open(data / "KIParla" / "vertical" / "source", "w", encoding="utf-8") as out:
-        py(TOOLS / "tsv2vert.py", "--artifacts-base-url", ARTIFACTS_URL, "--artifacts-module", "KIParla",
-           *common, meta / "conversations.tsv", meta / "participants.tsv",
-           *sorted((coll / "tsv").glob("*.vert.tsv")), stdout=out)
+    py(TOOLS / "tsv2vert.py", "--artifacts-base-url", ARTIFACTS_URL, "--artifacts-module", "KIParla",
+       *common, "--output-dir", data / "KIParla" / "vertical" / "conversations",
+       meta / "conversations.tsv", meta / "participants.tsv",
+       *sorted((coll / "tsv").glob("*.vert.tsv")))
     aggregate = data / "registry" / "KIParla"
     py(TOOLS / "registry_attrs.py", "prune", "--modules", *[str(r) for r in registries],
        "--registry", aggregate)
     update_info(aggregate, f"v{version}")
-    git(data, "add", "metadata/KIParla", "KIParla/vertical/source", "registry/KIParla")
+    git(data, "add", "metadata/KIParla", "KIParla/vertical/conversations", "registry/KIParla")
 
 
 # -- main ---------------------------------------------------------------------------------
@@ -216,6 +214,8 @@ def main() -> None:
             print(f"KIParla-NoSketch-Data: {corpus_name(module)} regenerated")
         nosketch_aggregate(data, coll, version)
         print("KIParla-NoSketch-Data: KIParla aggregate regenerated")
+
+    run([data / "build-sources.sh"])   # the local vertical/source files, not tracked
 
     if subprocess.run(["git", "-C", str(data), "diff", "--cached", "--quiet"]).returncode != 0:
         label = ", ".join(f"{m}@{tags[m]}" for m in args.modules)

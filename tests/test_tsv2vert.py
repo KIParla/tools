@@ -3,6 +3,7 @@
 import csv
 from pathlib import Path
 
+import tsv2vert
 from serialize import VERT_FIELDNAMES
 from tsv2vert import build_report_url, convert_file, is_anonymized
 
@@ -148,3 +149,11 @@ class TestAggregateWithoutVarietyAttributes:
         v = _vertical(tmp_path, [dict(form="#piassa"), dict(form="#*boh")], keep=keep)
         words = [t[0] for t in _token_lines(v) if t[1].startswith("0-")]
         assert words == ["piassa", "boh"]
+
+
+def test_write_conversation_files(tmp_path):
+    (tmp_path / "GONE.vert").write_text("old")
+    tsv2vert.write_conversation_files(
+        {"A": "a.tsv", "B": "b.tsv"}, tmp_path, lambda path, out: out.write(path))
+    assert {f.name: f.read_text() for f in tmp_path.glob("*.vert")} == {
+        "A.vert": "a.tsv", "B.vert": "b.tsv"}

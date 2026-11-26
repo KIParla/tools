@@ -9,7 +9,7 @@ Italian via translate_metadata.py before being passed to this script.
 Usage:
     python tools/tsv2vert.py [--base-url BASE_URL] [--artifacts-base-url ARTIFACTS_BASE_URL]
     [--artifacts-module ARTIFACTS_MODULE] [--issues-base-url ISSUES_BASE_URL]
-    [--translations-dir TRANSLATIONS_DIR]
+    [--translations-dir TRANSLATIONS_DIR] [--output-dir DIR]
     CONVERSATIONS_TSV PARTICIPANTS_TSV INPUT_TSV [INPUT_TSV ...]
 """
 
@@ -470,6 +470,22 @@ def convert_file(
     print("</conversation>", file=out)
 
 
+def write_conversation_files(paths_by_code, output_dir, convert):
+    """Write one <CODE>.vert per conversation into `output_dir`.
+
+    Concatenated in byte order of their names (`LC_ALL=C cat *.vert`) they give
+    the whole corpus. Files of conversations no longer in the input are removed.
+    """
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for code, tsv_path in paths_by_code.items():
+        with open(output_dir / f"{code}.vert", "w", encoding=ENCODING_WRITE) as out:
+            convert(tsv_path, out)
+    for stale in output_dir.glob("*.vert"):
+        if stale.stem not in paths_by_code:
+            stale.unlink()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description=(
@@ -533,6 +549,15 @@ def main():
             "Without it, every attribute is written."
         ),
     )
+    parser.add_argument(
+        "--output-dir",
+        default=None,
+        help=(
+            "Write one <CODE>.vert file per conversation into this directory, "
+            "removing the other .vert files in it. Without it, the whole corpus "
+            "is written to standard output."
+        ),
+    )
     parser.add_argument("conversations", help="Path to conversations.tsv metadata file")
     parser.add_argument("participants", help="Path to participants.tsv metadata file")
     parser.add_argument("input", nargs="+", help="Input vert.tsv file(s)")
@@ -548,19 +573,21 @@ def main():
     # the first input file wins, so list the preferred module first.
     keep = common_attributes(args.common_attrs_of) if args.common_attrs_of else None
     has_variation = corpus_has_variation(args.input)
-    seen_codes = set()
+    paths_by_code = {}
     for tsv_path in args.input:
         code = Path(tsv_path).stem.split(".")[0]
-        if code in seen_codes:
+        if code in paths_by_code:
             print(f"skipping duplicate conversation {code}: {tsv_path}", file=sys.stderr)
             continue
-        seen_codes.add(code)
+        paths_by_code[code] = tsv_path
+
+    def convert(tsv_path, out):
         convert_file(
             tsv_path,
             conversations,
             participants_data,
             participant_attr_keys,
-            sys.stdout,
+            out,
             args.base_url,
             artifacts_base_url,
             artifacts_module,
@@ -569,6 +596,12 @@ def main():
             keep,
             has_variation,
         )
+
+    if args.output_dir:
+        write_conversation_files(paths_by_code, args.output_dir, convert)
+    else:
+        for tsv_path in paths_by_code.values():
+            convert(tsv_path, sys.stdout)
 
 
 if __name__ == "__main__":
