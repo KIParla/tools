@@ -4,9 +4,12 @@ build_index.py - Generate the index page of KIParla-artifacts (index.html).
 
 The page lists the HTML/PDF transcriptions of every module and lets the reader
 filter the conversations by their metadata (module, type, year, collection point,
-community, languages, unidentified speakers) and by code. The metadata are read from
-each module's `metadata/conversations.tsv` and embedded in the page, so it works as a
-static file; the links point to the pages that exist under `<module>/html/`.
+community, languages, unidentified speakers), by the metadata of their participants
+(gender, age, region, ...) and by code. The metadata are read from each module's
+`metadata/conversations.tsv` and `metadata/participants.tsv` and embedded in the page,
+so it works as a static file; the links point to the pages that exist under
+`<module>/html/`. When several participant filters are set, a conversation is listed
+only if one same participant matches all of them.
 
 Usage:
     python3 tools/build_index.py \\
@@ -21,6 +24,8 @@ import csv
 import json
 from html import escape
 from pathlib import Path
+
+from linear2html import PARTICIPANT_VALUE_LABELS, tr
 
 MODULES = ["KIP", "KIPasti", "ParlaBO", "ParlaTO", "ParlaBZ", "Stra-ParlaBO", "Stra-ParlaTO"]
 
@@ -37,11 +42,60 @@ FIELDS = {
 }
 MISSING = {"", "_"}
 
+# key in the embedded JSON -> participants.tsv columns (the first one present is read).
+# Modules have different columns; KIP and ParlaBZ record the school region, which is
+# used as the region, as in KIParla-collection.
+PARTICIPANT_FIELDS = {
+    "gender": ("gender",),
+    "age": ("age-range",),
+    "region": ("birth-region", "school-region"),
+    "study": ("study-level",),
+    "occupation": ("occupation",),
+    "l1": ("L1",),
+    "mothertongue": ("mothertongue",),
+    "arrival": ("age-of-arrival-italy",),
+    "years": ("years-in-italy",),
+}
+
+
+def participant_values(row: dict) -> dict:
+    """{key: [values]} of one participants.tsv row; missing values are left out."""
+    out = {}
+    for key, columns in PARTICIPANT_FIELDS.items():
+        column = next((c for c in columns if c in row), None)
+        values = []
+        for value in (row.get(column) or "").split(";"):
+            value = value.strip()
+            if key == "region":
+                value = value.partition(":")[0]   # "estero:colombia" -> "estero"
+            if value not in MISSING | {"N/A"}:
+                values.append(tr(value, PARTICIPANT_VALUE_LABELS.get(column, {})))
+        if values:
+            out[key] = values
+    return out
+
+
+def read_participants(modules_root: Path, module: str) -> dict[str, list[dict]]:
+    """{conversation code: [participant_values, ...]}.
+
+    The link comes from the `conversations` column of participants.tsv: the
+    `participants` column of conversations.tsv does not list every speaker.
+    """
+    path = modules_root / module / "metadata" / "participants.tsv"
+    by_conversation: dict[str, list[dict]] = {}
+    with path.open(newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f, delimiter="\t"):
+            values = participant_values(row)
+            for code in (row.get("conversations") or "").split(";"):
+                by_conversation.setdefault(code.strip(), []).append(values)
+    return by_conversation
+
 
 def read_module(modules_root: Path, artifacts_root: Path, module: str) -> list[dict]:
     path = modules_root / module / "metadata" / "conversations.tsv"
     html_dir = artifacts_root / module / "html"
     pdf_dir = artifacts_root / module / "pdf"
+    participants = read_participants(modules_root, module)
     rows = []
     with path.open(newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f, delimiter="\t"):
@@ -58,6 +112,7 @@ def read_module(modules_root: Path, artifacts_root: Path, module: str) -> list[d
                 kind for kind in ("orthographic", "enriched")
                 if (pdf_dir / f"{code}-{kind}.pdf").is_file()
             ]
+            conv["people"] = participants.get(code, [])
             rows.append(conv)
     return sorted(rows, key=lambda c: c["code"])
 
@@ -95,6 +150,19 @@ PAGE = """<!DOCTYPE html>
         <label class="filter">Comunit&agrave;<select id="f-community"></select></label>
         <label class="filter">Lingue<select id="f-languages"></select></label>
         <label class="filter">Parlanti non identificati<select id="f-unknown"></select></label>
+        <fieldset class="participant-filters">
+          <legend>Partecipanti</legend>
+          <p>Con pi&ugrave; filtri, almeno un partecipante deve soddisfarli tutti.</p>
+          <label class="filter">Genere<select id="f-gender"></select></label>
+          <label class="filter">Et&agrave;<select id="f-age"></select></label>
+          <label class="filter">Regione<select id="f-region"></select></label>
+          <label class="filter">Titolo di studio<select id="f-study"></select></label>
+          <label class="filter">Occupazione<select id="f-occupation"></select></label>
+          <label class="filter">L1<select id="f-l1"></select></label>
+          <label class="filter">Lingua madre<select id="f-mothertongue"></select></label>
+          <label class="filter">Et&agrave; di arrivo in Italia<select id="f-arrival"></select></label>
+          <label class="filter">Anni in Italia<select id="f-years"></select></label>
+        </fieldset>
         <button type="reset" id="reset">Azzera i filtri</button>
       </form>
       <p class="result" id="result" role="status" aria-live="polite"></p>
@@ -120,6 +188,11 @@ PAGE = """<!DOCTYPE html>
         {id: "year", label: "tutti"}, {id: "point", label: "tutti"}, {id: "community", label: "tutte"},
         {id: "languages", label: "tutte"}, {id: "unknown", label: "tutti"}
       ];
+      var PARTICIPANT_FACETS = [
+        {id: "gender", label: "tutti"}, {id: "age", label: "tutte"}, {id: "region", label: "tutte"},
+        {id: "study", label: "tutti"}, {id: "occupation", label: "tutte"}, {id: "l1", label: "tutte"},
+        {id: "mothertongue", label: "tutte"}, {id: "arrival", label: "tutte"}, {id: "years", label: "tutti"}
+      ];
       var UNKNOWN = {yes: "presenti", no: "assenti"};
       var all = [];
       modules.forEach(function (m) {
@@ -139,6 +212,22 @@ PAGE = """<!DOCTYPE html>
         return Object.keys(seen).sort();
       }
 
+      function participantValues(id) {
+        var seen = {};
+        all.forEach(function (c) {
+          c.people.forEach(function (p) { (p[id] || []).forEach(function (x) { seen[x] = true; }); });
+        });
+        return Object.keys(seen).sort(function (a, b) { return a.localeCompare(b, "it", {numeric: true}); });
+      }
+
+      PARTICIPANT_FACETS.forEach(function (f) {
+        var sel = document.getElementById("f-" + f.id);
+        var opts = participantValues(f.id);
+        if (opts.length === 0) { sel.parentNode.hidden = true; return; }
+        sel.appendChild(new Option(f.label, ""));
+        opts.forEach(function (v) { sel.appendChild(new Option(v, v)); });
+      });
+
       FACETS.forEach(function (f) {
         var sel = document.getElementById("f-" + f.id);
         var opts = values(f.id);
@@ -155,7 +244,7 @@ PAGE = """<!DOCTYPE html>
 
       function state() {
         var s = {code: codeInput.value.trim().toLowerCase()};
-        FACETS.forEach(function (f) { s[f.id] = document.getElementById("f-" + f.id).value; });
+        FACETS.concat(PARTICIPANT_FACETS).forEach(function (f) { s[f.id] = document.getElementById("f-" + f.id).value; });
         return s;
       }
 
@@ -167,7 +256,11 @@ PAGE = """<!DOCTYPE html>
           if (id === "languages") { if (c.langList.indexOf(s[id]) === -1) return false; }
           else if (c[id] !== s[id]) return false;
         }
-        return true;
+        var wanted = PARTICIPANT_FACETS.filter(function (f) { return s[f.id]; });
+        // one same participant has to match every participant filter
+        return !wanted.length || c.people.some(function (p) {
+          return wanted.every(function (f) { return (p[f.id] || []).indexOf(s[f.id]) !== -1; });
+        });
       }
 
       function link(href, text) {
